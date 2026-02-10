@@ -284,52 +284,41 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
 
     const prompt = `
   You are the "Lead Data Architect & AI Logic Validator" for a Hotel CMS.
-  Your goal is NOT just to check if fields are empty. Your goal is to ensure this data is **Semantic, Logical, and Hallucination-Proof** for an LLM (Large Language Model).
-
+  
   INPUT CONTEXT:
   This data is a hierarchical tree representing a hotel (Rooms, Dining, Events).
   It will be fed into a RAG (Retrieval-Augmented Generation) system for a Chatbot.
 
   CRITICAL AUDIT RULES (You must check for these):
-
-  1. **SEMANTIC AMBIGUITY (Context Killers):**
-     - Issue: Nodes named just "Bar", "Pool", or "Menu" without parent context are dangerous.
-     - Rule: If a node name is generic, verify if it has a 'description' or 'tags' that clarify it.
-     - Example: A node named "Garden" under "Rooms" vs "Garden" under "Dining".
-  
-  2. **LOGICAL FALLACIES (Time & Math):**
-     - Issue: 'endTime' is before 'startTime'.
-     - Issue: 'minAge' is greater than 'maxAge'.
-     - Issue: 'recurrenceType' is 'weekly' but 'days' array is empty.
-     - Issue: 'isPaid' is true, but 'price' is missing or 0.
-
-  3. **ORPHANED DATA:**
-     - Issue: A 'menu_item' that is NOT inside a 'menu' or 'category' type node.
-     - Issue: A 'qa_pair' where the answer references a specific time (e.g., "Open at 10:00") instead of pointing to a dynamic field. (Hardcoded data in text is bad practice).
-
-  4. **AI READABILITY:**
-     - Issue: Descriptions that are too short (< 10 chars) or meaningless (e.g., "Desc").
-     - Issue: Missing 'tags' on items that are clearly searchable (e.g., A "Burger" node without "Food", "Meat", "Lunch" tags).
+  1. **SEMANTIC AMBIGUITY:** Nodes named generically (e.g. "Bar", "Pool") without descriptions.
+  2. **LOGICAL FALLACIES:** End time before start time, minAge > maxAge, weekly recurrence without days.
+  3. **ORPHANED DATA:** Menu items outside menus, QA pairs with hardcoded time answers.
+  4. **AI READABILITY:** Short descriptions, missing searchable tags.
 
   TASK:
   Analyze the provided JSON structure and return a JSON report.
 
+  IMPORTANT CONSTRAINTS:
+  - **LIMIT REPORT TO TOP 50 ISSUES MAX.** This is critical to prevent output truncation.
+  - Prioritize "Critical" and "Warning" severity over "Optimization".
+  - Return STRICT JSON.
+
   OUTPUT SCHEMA (Strict JSON):
   {
-    "score": number, // 0-100. Penalize heavily for Logical Fallacies.
-    "summary": "A concise technical summary of the data health for RAG suitability.",
+    "score": number, // 0-100.
+    "summary": "A concise technical summary.",
     "issues": [
       {
         "id": "unique_issue_id",
         "nodeId": "id_of_node",
         "nodeName": "name_of_node",
         "severity": "critical" | "warning" | "optimization",
-        "message": "Precise explanation of why this confuses an AI.",
+        "message": "Explanation.",
         "fix": {
           "targetId": "id_of_node",
           "action": "update",
-          "data": { "key": "suggested_value" },
-          "description": "Button label, e.g., 'Fix Time Logic' or 'Add Semantic Tags'"
+          "data": { "key": "value" },
+          "description": "Fix Label"
         }
       }
     ]
@@ -349,12 +338,18 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
       }
     });
 
-    const text = response.text || "{}";
+    let text = response.text || "{}";
+    
+    // Safety cleanup: Ensure no markdown backticks pollute the JSON parsing
+    if (text.includes("```")) {
+       text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    }
+
     return JSON.parse(text) as HealthReport;
 
   } catch (error) {
     console.error("Health Audit Error:", error);
-    throw new Error("Failed to generate health report.");
+    throw new Error("Failed to generate health report. The dataset might be too large.");
   }
 };
 

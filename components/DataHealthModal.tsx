@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { HotelNode, HealthReport, HealthIssue } from '../types';
 import { generateHealthReport } from '../services/geminiService';
-import { X, Activity, CheckCircle, AlertTriangle, AlertCircle, Sparkles, ArrowRight, Loader2, RefreshCw } from 'lucide-react';
+import { X, Activity, CheckCircle, AlertTriangle, AlertCircle, Sparkles, Loader2, RefreshCw } from 'lucide-react';
 
 interface DataHealthModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface DataHealthModalProps {
 const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data, onApplyFix }) => {
   const [report, setReport] = useState<HealthReport | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'critical' | 'warning' | 'optimization'>('critical');
   const [fixedIssueIds, setFixedIssueIds] = useState<Set<string>>(new Set());
 
@@ -25,12 +26,14 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
 
   const runScan = async () => {
     setIsScanning(true);
+    setError(null);
     try {
       const result = await generateHealthReport(data);
       setReport(result);
       setFixedIssueIds(new Set()); // Reset fixed state
     } catch (error) {
       console.error("Scan failed", error);
+      setError("Analysis failed. The data structure might be too large for a single pass, or the AI service timed out.");
     } finally {
       setIsScanning(false);
     }
@@ -69,7 +72,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden min-h-[400px]">
         
         {/* Header */}
         <div className="bg-white border-b border-slate-200 p-6 flex justify-between items-center shrink-0">
@@ -87,19 +90,43 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+        {/* Content Body */}
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-slate-50 relative">
            
-           {/* Sidebar / Score Panel */}
-           <div className="w-full md:w-1/3 bg-slate-50 border-r border-slate-200 p-6 flex flex-col items-center text-center overflow-y-auto">
-              
-              {isScanning ? (
-                <div className="flex flex-col items-center justify-center py-10 space-y-4">
-                   <Loader2 size={48} className="animate-spin text-blue-500" />
-                   <p className="text-slate-500 font-medium">Scanning data structure...</p>
-                </div>
-              ) : report ? (
-                <>
+           {/* Fallback States (Scanning / Error) */}
+           {!report && (
+             <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-50">
+               {isScanning && (
+                 <div className="flex flex-col items-center justify-center space-y-4">
+                    <Loader2 size={48} className="animate-spin text-emerald-500" />
+                    <p className="text-slate-600 font-medium">Scanning data structure...</p>
+                    <p className="text-slate-400 text-sm">This may take a moment for large hotels.</p>
+                 </div>
+               )}
+
+               {error && !isScanning && (
+                 <div className="flex flex-col items-center justify-center space-y-4 text-center max-w-md px-4">
+                    <div className="bg-red-100 p-3 rounded-full text-red-600 mb-2">
+                       <AlertTriangle size={32} />
+                    </div>
+                    <p className="text-slate-800 font-bold text-lg">Analysis Failed</p>
+                    <p className="text-slate-600 text-sm">{error}</p>
+                    <button 
+                       onClick={runScan}
+                       className="mt-4 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-100 font-medium shadow-sm transition-colors flex items-center gap-2"
+                    >
+                       <RefreshCw size={16} /> Try Again
+                    </button>
+                 </div>
+               )}
+             </div>
+           )}
+
+           {/* Results Layout (Only shown when report exists) */}
+           {report && (
+             <>
+               {/* Sidebar / Score Panel */}
+               <div className="w-full md:w-1/3 bg-slate-50 md:border-r border-b md:border-b-0 border-slate-200 p-6 flex flex-col items-center text-center overflow-y-auto shrink-0">
                   <div className="relative mb-6">
                      <svg className="w-40 h-40 transform -rotate-90">
                         <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="10" fill="transparent" className="text-slate-200" />
@@ -138,16 +165,12 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                   >
                      <RefreshCw size={14} /> Re-scan Data
                   </button>
-                </>
-              ) : null}
-           </div>
+               </div>
 
-           {/* Issues Panel */}
-           <div className="flex-1 bg-white flex flex-col overflow-hidden">
-              {report && (
-                 <>
+               {/* Issues Panel */}
+               <div className="flex-1 bg-white flex flex-col overflow-hidden">
                     {/* Tabs */}
-                    <div className="flex border-b border-slate-100 px-6 pt-4 gap-6">
+                    <div className="flex border-b border-slate-100 px-6 pt-4 gap-6 shrink-0">
                        <button 
                           onClick={() => setActiveTab('critical')}
                           className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'critical' ? 'border-red-500 text-red-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
@@ -204,7 +227,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                     </div>
 
                     {/* Footer Actions */}
-                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
                         <button 
                            onClick={handleFixAll}
                            disabled={getFilteredIssues().filter(i => !fixedIssueIds.has(i.id)).length === 0}
@@ -213,9 +236,9 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                            <Sparkles size={16} /> Fix All {activeTab === 'optimization' ? 'Suggestions' : 'Issues'}
                         </button>
                     </div>
-                 </>
-              )}
-           </div>
+               </div>
+             </>
+           )}
         </div>
       </div>
     </div>
