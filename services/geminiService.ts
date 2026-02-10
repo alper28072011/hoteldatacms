@@ -346,6 +346,7 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
 export const generateNodeContext = async (node: HotelNode): Promise<NodeContextPrediction> => {
   try {
     // For single node context, we just strip basic fields manually as it's small enough.
+    // NOTE: We don't need cleanJSON for a single node metadata generation, keeps latency lower.
     const nodePreview = {
       type: node.type,
       name: node.name,

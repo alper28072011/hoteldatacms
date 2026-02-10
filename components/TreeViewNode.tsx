@@ -148,27 +148,25 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
 };
 
 // --- PERFORMANCE OPTIMIZATION ---
-// Only re-render if data changes, selection changes FOR THIS node, or force expand changes.
+// This function determines if the component needs to re-render.
+// Returns TRUE if props are equal (skip render), FALSE if they differ (re-render).
 const arePropsEqual = (prevProps: TreeViewNodeProps, nextProps: TreeViewNodeProps) => {
-  // 1. Data Check (Reference Equality is sufficient due to Structural Sharing)
-  if (prevProps.node !== nextProps.node) {
-    return false;
-  }
+  // 1. Data Reference Check
+  // Since we use immutable patterns in treeUtils, if the reference matches, the data hasn't changed.
+  const isSameNode = prevProps.node === nextProps.node;
 
-  // 2. Selection Check (Only re-render if selection status OF THIS NODE changed)
-  const wasSelected = prevProps.selectedId === prevProps.node.id;
-  const isSelected = nextProps.selectedId === nextProps.node.id;
-  
-  if (wasSelected !== isSelected) {
-    return false;
-  }
+  // 2. Selection Check
+  // We only care if the selection state OF THIS SPECIFIC NODE has changed.
+  // If selectedId changed from "A" to "B", and this node is "C", it shouldn't re-render.
+  const prevSelected = prevProps.selectedId === prevProps.node.id;
+  const nextSelected = nextProps.selectedId === nextProps.node.id;
+  const isSelectionChanged = prevSelected !== nextSelected;
 
   // 3. Force Expand Check
-  if (prevProps.forceExpand !== nextProps.forceExpand) {
-    return false;
-  }
+  const isExpandChanged = prevProps.forceExpand !== nextProps.forceExpand;
   
-  return true;
+  // RENDER only if: Node changed OR Selection Changed for this node OR Expand forced
+  return isSameNode && !isSelectionChanged && !isExpandChanged;
 };
 
 export default memo(TreeViewNode, arePropsEqual);
