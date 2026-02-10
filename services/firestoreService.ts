@@ -15,10 +15,10 @@ import {
 import { HotelNode, HotelSummary, HotelTemplate } from '../types';
 
 const HOTELS_COLLECTION = 'hotels';
-const CATEGORIES_SUBCOLLECTION = 'categories';
+const STRUCTURE_SUBCOLLECTION = 'structure'; // The sub-collection for sharded data
 const TEMPLATES_COLLECTION = 'templates';
 
-// --- LOCAL STORAGE HELPERS (OFFLINE FALLBACK) ---
+// --- LOCAL STORAGE HELPERS (OFFLINE FALLBACK & HYBRID SYNC) ---
 const LS_KEYS = {
   HOTELS_LIST: 'cms_hotels_list',
   TEMPLATES_LIST: 'cms_templates_list',
@@ -43,6 +43,7 @@ const getLocalHotelData = (id: string): HotelNode | null => {
   } catch (e) { return null; }
 };
 
+// LocalStorage saves the MONOLITHIC tree as a backup
 const saveLocalHotelData = (id: string, data: HotelNode) => {
   localStorage.setItem(LS_KEYS.HOTEL_PREFIX + id, JSON.stringify(data));
 };
@@ -58,16 +59,15 @@ const saveLocalTemplates = (list: HotelTemplate[]) => {
   localStorage.setItem(LS_KEYS.TEMPLATES_LIST, JSON.stringify(list));
 };
 
-// --- SCALABLE FIRESTORE ARCHITECTURE ---
+// --- SCALABLE FIRESTORE ARCHITECTURE (SHARDING) ---
 
 /**
  * Creates a new hotel using the Sharding Strategy.
- * 1. Creates the Root Metadata Document.
- * 2. Uses updateHotelData logic to shard the children into sub-collections.
+ * Generates an ID and calls the sharded update logic.
  */
 export const createNewHotel = async (initialData: HotelNode): Promise<string> => {
   try {
-    // 1. Create a reference to generate an ID automatically
+    // 1. Create a reference to generate an auto-ID
     const newHotelRef = doc(collection(db, HOTELS_COLLECTION));
     const newId = newHotelRef.id;
 
@@ -81,6 +81,7 @@ export const createNewHotel = async (initialData: HotelNode): Promise<string> =>
   } catch (error) {
     console.warn("Firestore unavailable (Offline Mode). Creating in LocalStorage.", error);
     
+    // Offline Fallback
     const newId = 'local_' + Date.now();
     const newHotelData = { ...initialData, id: newId };
     
@@ -95,10 +96,11 @@ export const createNewHotel = async (initialData: HotelNode): Promise<string> =>
 };
 
 /**
- * SHARDING SAVE STRATEGY:
- * Instead of saving one huge JSON, we split the root node and its children.
- * - Root Doc: Contains metadata (id, name, type='root').
- * - Sub-Collection 'categories': Each direct child of root is saved as a separate document.
+ * SHARDING UPDATE STRATEGY:
+ * - Root Document: Contains metadata (id, name, type='root'). NO CHILDREN.
+ * - Sub-Collection 'structure': Each direct child of root is a separate document.
+ * 
+ * Used 'writeBatch' for atomicity. All or nothing.
  */
 export const updateHotelData = async (hotelId: string, data: HotelNode): Promise<void> => {
   try {
@@ -106,60 +108,61 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
     if (!data) throw new Error("No data provided to save");
 
     const hotelRef = doc(db, HOTELS_COLLECTION, hotelId);
+    const structureRef = collection(hotelRef, STRUCTURE_SUBCOLLECTION);
 
-    // 1. Prepare Root Data (Strip children to keep it light)
-    // We clone the object to avoid mutating the state in the UI
-    const { children, ...rootData } = data;
+    // 1. SEPARATION: Split Root Data from Children
+    // We remove 'children' from the root object to keep the main doc light.
+    const { children, ...rootMetadata } = data;
     
-    // 2. Prepare Children (Categories) for Sub-Collection
-    const categories = children || [];
+    const childrenToSave = children || [];
 
-    // 3. START BATCH OPERATION
-    // Firestore Batch ensures all writes happen together or fail together.
+    // 2. BATCH INIT
     const batch = writeBatch(db);
 
-    // Step A: Update the Root Document
-    batch.set(hotelRef, rootData);
+    // 3. ROOT UPDATE
+    // Save only metadata to the main document
+    batch.set(hotelRef, rootMetadata);
 
-    // Step B: Manage Sub-Collection (Add/Update)
-    const categoriesRef = collection(hotelRef, CATEGORIES_SUBCOLLECTION);
-    
-    // Track IDs we are saving to handle deletions later
-    const currentCategoryIds = new Set<string>();
+    // 4. CHILDREN UPDATE (Sub-Collection)
+    const currentChildIds = new Set<string>();
 
-    categories.forEach((category) => {
-        // Ensure category has an ID (it should from the UI, but safety first)
-        const catId = category.id || `cat_${Date.now()}_${Math.random()}`;
-        const catRef = doc(categoriesRef, catId);
+    childrenToSave.forEach((child) => {
+        // Ensure child has an ID. If not, generate one.
+        const childId = child.id || `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // Fix ID in object if it was missing
+        if (!child.id) child.id = childId;
+
+        const childRef = doc(structureRef, childId);
         
-        currentCategoryIds.add(catId);
-        batch.set(catRef, category);
+        // Add to batch
+        batch.set(childRef, child);
+        currentChildIds.add(childId);
     });
 
-    // Step C: Handle Deletions (Clean up orphaned categories in DB)
-    // We need to fetch existing docs to know what to delete. 
-    // Optimization: We only fetch IDs, not full data.
-    const existingDocsSnapshot = await getDocs(categoriesRef);
+    // 5. CLEANUP ORPHANS
+    // We need to delete documents in the sub-collection that are no longer in the current tree.
+    // Fetch existing docs to identify what to delete.
+    const existingDocsSnapshot = await getDocs(structureRef);
     
     existingDocsSnapshot.forEach((doc) => {
-        if (!currentCategoryIds.has(doc.id)) {
-            // This document exists in DB but is not in our new data -> DELETE IT
+        if (!currentChildIds.has(doc.id)) {
+            // This doc exists in DB but not in our new data -> Delete it
             batch.delete(doc.ref);
         }
     });
 
-    // 4. Commit the Batch
+    // 6. COMMIT
     await batch.commit();
-    console.log("Hotel data successfully sharded and saved to Cloud!");
+    console.log("Hotel data successfully sharded and saved via Batch Write!");
 
   } catch (error) {
-    console.warn("Firestore unavailable (Offline Mode). Saving to LocalStorage.", error);
+    console.warn("Firestore save failed. Falling back to LocalStorage.", error);
     if (!hotelId) throw new Error("No hotel ID provided");
     
-    // Fallback: Save monolithic JSON to LocalStorage
+    // Fallback: Save the entire Monolithic JSON to LocalStorage
     saveLocalHotelData(hotelId, data);
     
-    // Update Index
+    // Update Local Index if name changed
     const list = getLocalHotelsList();
     const index = list.findIndex(h => h.id === hotelId);
     if (index !== -1) {
@@ -176,20 +179,20 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
 
 /**
  * REASSEMBLY FETCH STRATEGY:
- * 1. Fetch Root Document.
- * 2. Fetch all documents from 'categories' sub-collection.
- * 3. Stitch them back together into a single HotelNode tree.
+ * 1. Fetch Root Document (Metadata).
+ * 2. Fetch all documents from 'structure' sub-collection.
+ * 3. Stitch them back together into a single HotelNode tree for the App.
  */
 export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null> => {
   try {
     if (!hotelId) return null;
     const hotelRef = doc(db, HOTELS_COLLECTION, hotelId);
     
-    // 1. Fetch Root
+    // 1. Fetch Root Metadata
     const rootSnap = await getDoc(hotelRef);
 
     if (!rootSnap.exists()) {
-      // Fallback check for LocalStorage
+      // Check LocalStorage if Cloud fails/empty
       const local = getLocalHotelData(hotelId);
       if (local) return local;
       return null;
@@ -197,18 +200,20 @@ export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null>
 
     const rootData = rootSnap.data() as HotelNode;
 
-    // 2. Fetch Children (Shards)
-    const categoriesRef = collection(hotelRef, CATEGORIES_SUBCOLLECTION);
-    const categoriesSnap = await getDocs(categoriesRef);
+    // 2. Fetch Sharded Children
+    const structureRef = collection(hotelRef, STRUCTURE_SUBCOLLECTION);
+    const structureSnap = await getDocs(structureRef);
 
     const assembledChildren: HotelNode[] = [];
-    categoriesSnap.forEach((doc) => {
+    structureSnap.forEach((doc) => {
         assembledChildren.push(doc.data() as HotelNode);
     });
 
     // 3. Reassemble Tree
-    // Note: We might want to sort them if order is maintained via an index property, 
-    // but for now, Firestore order is sufficient or UI handles sorting.
+    // Note: Firestore does not guarantee order. 
+    // Ideally, we should have an 'order' field, but for now we rely on the array fetch.
+    // If strict ordering is needed, sort by an 'orderIndex' field here.
+    
     const fullTree: HotelNode = {
         ...rootData,
         children: assembledChildren
@@ -217,14 +222,14 @@ export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null>
     return fullTree;
 
   } catch (error) {
-    console.warn("Firestore unavailable (Offline Mode). Fetching from LocalStorage.", error);
+    console.warn("Firestore fetch failed. Using LocalStorage.", error);
     return getLocalHotelData(hotelId);
   }
 };
 
 /**
  * Fetches list of hotels.
- * Since Root doc is now small, this is very fast.
+ * Improved Performance: Since root docs are now small (no children), this list loads instantly.
  */
 export const getHotelsList = async (): Promise<HotelSummary[]> => {
   try {
@@ -239,19 +244,20 @@ export const getHotelsList = async (): Promise<HotelSummary[]> => {
     });
     return hotels;
   } catch (error) {
-    console.warn("Firestore unavailable (Offline Mode). Using LocalStorage.", error);
+    console.warn("Firestore list failed. Using LocalStorage.", error);
     return getLocalHotelsList();
   }
 };
 
-// --- TEMPLATE SERVICES (Templates are usually smaller, kept monolithic for simplicity) ---
+// --- TEMPLATE SERVICES (Kept Monolithic for Simplicity) ---
+// Templates are usually read-only and static, so 1MB limit is less of an issue.
 
 export const saveTemplate = async (template: Omit<HotelTemplate, 'id'>): Promise<string> => {
   try {
     const docRef = await addDoc(collection(db, TEMPLATES_COLLECTION), template);
     return docRef.id;
   } catch (error) {
-    console.warn("Firestore unavailable (Offline Mode). Saving Template locally.", error);
+    console.warn("Saving Template locally.", error);
     const newId = 'template_' + Date.now();
     const newTemplate = { ...template, id: newId };
     const list = getLocalTemplates();
@@ -274,7 +280,7 @@ export const getTemplatesList = async (): Promise<HotelTemplate[]> => {
     });
     return templates;
   } catch (error) {
-    console.warn("Firestore unavailable (Offline Mode). Fetching local templates.", error);
+    console.warn("Fetching local templates.", error);
     return getLocalTemplates();
   }
 };
@@ -283,7 +289,7 @@ export const deleteTemplate = async (templateId: string): Promise<void> => {
   try {
     await deleteDoc(doc(db, TEMPLATES_COLLECTION, templateId));
   } catch (error) {
-    console.warn("Firestore unavailable (Offline Mode). Deleting local template.", error);
+    console.warn("Deleting local template.", error);
     const list = getLocalTemplates();
     const filtered = list.filter(t => t.id !== templateId);
     saveLocalTemplates(filtered);
