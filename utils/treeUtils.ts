@@ -6,17 +6,22 @@ export const generateId = (prefix: string = 'node'): string => {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 };
 
-// Deep clone to avoid mutating state directly
+// Modern, fast deep clone using native browser API
+// Note: For state updates, prefer using the immutable functions below instead of cloning the whole tree.
 export const deepClone = <T>(obj: T): T => {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(obj);
+  }
   return JSON.parse(JSON.stringify(obj));
 };
 
-// Find a node by ID
+// Find a node by ID - Optimized for read-only access
 export const findNodeById = (root: HotelNode, id: string): HotelNode | null => {
   if (String(root.id) === String(id)) return root;
   if (root.children) {
-    for (const child of root.children) {
-      const found = findNodeById(child, id);
+    // Standard iterative loop is slightly faster than for...of in V8 for hot paths
+    for (let i = 0; i < root.children.length; i++) {
+      const found = findNodeById(root.children[i], id);
       if (found) return found;
     }
   }
@@ -30,8 +35,8 @@ export const findPathToNode = (root: HotelNode, targetId: string): HotelNode[] |
   }
   
   if (root.children) {
-    for (const child of root.children) {
-      const path = findPathToNode(child, targetId);
+    for (let i = 0; i < root.children.length; i++) {
+      const path = findPathToNode(root.children[i], targetId);
       if (path) {
         return [root, ...path];
       }
@@ -41,73 +46,112 @@ export const findPathToNode = (root: HotelNode, targetId: string): HotelNode[] |
   return null;
 };
 
-// Find a node and update it
+/**
+ * OPTIMIZED: UPDATE NODE (Structural Sharing)
+ * Instead of deep cloning the whole tree, we recursively traverse.
+ * We only create new object references for the nodes on the path to the target.
+ * Unchanged branches retain their original references.
+ */
 export const updateNodeInTree = (root: HotelNode, targetId: string, updates: Partial<HotelNode>): HotelNode => {
-  const newRoot = deepClone(root);
-  
-  const findAndUpdate = (node: HotelNode): boolean => {
-    if (String(node.id) === String(targetId)) {
-      Object.assign(node, updates);
-      return true;
-    }
-    if (node.children) {
-      for (const child of node.children) {
-        if (findAndUpdate(child)) return true;
-      }
-    }
-    return false;
-  };
+  // 1. Check if this is the target
+  if (String(root.id) === String(targetId)) {
+    // Create new reference with updates
+    return { ...root, ...updates };
+  }
 
-  findAndUpdate(newRoot);
-  return newRoot;
+  // 2. If leaf node, return original reference (no changes here)
+  if (!root.children) {
+    return root;
+  }
+
+  // 3. Traverse children
+  let hasChanges = false;
+  const newChildren = root.children.map(child => {
+    const updatedChild = updateNodeInTree(child, targetId, updates);
+    
+    // Reference check: If child returned a new reference, something changed down there
+    if (updatedChild !== child) {
+      hasChanges = true;
+      return updatedChild;
+    }
+    return child;
+  });
+
+  // 4. If nothing changed in children, return original root reference (Prevents re-renders)
+  if (!hasChanges) {
+    return root;
+  }
+
+  // 5. If something changed, return new root with new children array
+  return { ...root, children: newChildren };
 };
 
-// Find a parent and add a child to it
+/**
+ * OPTIMIZED: ADD CHILD (Structural Sharing)
+ */
 export const addChildToNode = (root: HotelNode, parentId: string, newChild: HotelNode): HotelNode => {
-  const newRoot = deepClone(root);
+  // 1. Found the parent
+  if (String(root.id) === String(parentId)) {
+    return {
+      ...root,
+      children: root.children ? [...root.children, newChild] : [newChild]
+    };
+  }
 
-  const findAndAdd = (node: HotelNode): boolean => {
-    if (String(node.id) === String(parentId)) {
-      if (!node.children) node.children = [];
-      node.children.push(newChild);
-      return true;
-    }
-    if (node.children) {
-      for (const child of node.children) {
-        if (findAndAdd(child)) return true;
-      }
-    }
-    return false;
-  };
+  // 2. Leaf node check
+  if (!root.children) {
+    return root;
+  }
 
-  findAndAdd(newRoot);
-  return newRoot;
+  // 3. Recursive traversal
+  let hasChanges = false;
+  const newChildren = root.children.map(child => {
+    const updatedChild = addChildToNode(child, parentId, newChild);
+    if (updatedChild !== child) {
+      hasChanges = true;
+      return updatedChild;
+    }
+    return child;
+  });
+
+  return hasChanges ? { ...root, children: newChildren } : root;
 };
 
-// Find parent and remove a specific child - Robust Recursive Implementation
+/**
+ * OPTIMIZED: DELETE NODE (Structural Sharing)
+ */
 export const deleteNodeFromTree = (root: HotelNode, nodeIdToDelete: string): HotelNode => {
+  // 1. Edge case: Trying to delete root (usually handled by UI, but good for safety)
   if (String(root.id) === String(nodeIdToDelete)) {
+    // Depending on logic, might return null or throw. 
+    // Here we return root to prevent crash, assuming root deletion is blocked at UI level.
     return root; 
   }
 
-  const rebuildTree = (node: HotelNode): HotelNode | null => {
-    if (String(node.id) === String(nodeIdToDelete)) {
-      return null;
-    }
-    
-    if (node.children) {
-      const newChildren = node.children
-        .map(child => rebuildTree(child))
-        .filter((child): child is HotelNode => child !== null);
-        
-      return { ...node, children: newChildren };
-    }
-    
-    return { ...node };
-  };
+  if (!root.children) return root;
 
-  const newRoot = rebuildTree(root);
-  return newRoot || root; 
+  // 2. Check if direct child needs to be deleted
+  const childIndex = root.children.findIndex(c => String(c.id) === String(nodeIdToDelete));
+  
+  if (childIndex !== -1) {
+    // Found it: Remove it and return new node
+    const newChildren = [...root.children];
+    newChildren.splice(childIndex, 1);
+    return { ...root, children: newChildren };
+  }
+
+  // 3. Deep traversal
+  let hasChanges = false;
+  const newChildren = root.children.map(child => {
+    const updatedChild = deleteNodeFromTree(child, nodeIdToDelete);
+    if (updatedChild !== child) {
+      hasChanges = true;
+      return updatedChild;
+    }
+    return child;
+  });
+
+  return hasChanges ? { ...root, children: newChildren } : root;
 };
 
 export const getInitialData = (): HotelNode => ({
@@ -134,6 +178,7 @@ export const getInitialData = (): HotelNode => ({
 // --- TEMPLATE ALGORITHMS ---
 
 export const regenerateIds = (node: HotelNode): HotelNode => {
+  // This operation inherently creates a new tree, so deep mapping is required.
   const newNode = { ...node, id: generateId(node.type.substring(0, 3)) };
   if (node.children) {
     newNode.children = node.children.map(child => regenerateIds(child));
