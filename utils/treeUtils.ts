@@ -244,11 +244,12 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
 // --- EXPORT ALGORITHMS ---
 
 /**
- * GENERATE OPTIMIZED CSV
+ * Helper to flatten tree for export with full path tracking.
  */
 const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[], depth: number }[] => {
   const result: { node: HotelNode, path: string[], depth: number }[] = [];
   const traverse = (node: HotelNode, path: string[], depth: number) => {
+    // Current path includes the node name to form the full breadcrumb
     const currentPath = [...path, node.name || 'Untitled'];
     result.push({ node, path: currentPath, depth });
     if (node.children) {
@@ -259,22 +260,45 @@ const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[
   return result;
 };
 
+/**
+ * Standardize logic rules into a JSON string for AI parsing.
+ */
+const generateAvailabilityRule = (node: HotelNode): string => {
+  const rule: any = {};
+  if (node.recurrenceType) rule.recurrence = node.recurrenceType;
+  if (node.startTime) rule.start = node.startTime;
+  if (node.endTime) rule.end = node.endTime;
+  if (node.days && node.days.length > 0) rule.days = node.days;
+  if (node.validFrom) rule.validFrom = node.validFrom;
+  if (node.validUntil) rule.validUntil = node.validUntil;
+  if (node.eventStatus) rule.status = node.eventStatus;
+  
+  return Object.keys(rule).length > 0 ? JSON.stringify(rule) : '';
+};
+
+/**
+ * Explicitly label attributes for CSV export.
+ */
 const generateRichAttributes = (node: HotelNode): string => {
   const parts: string[] = [];
+  
   if (node.price) parts.push(`Price: $${node.price}`);
-  if (node.calories) parts.push(`Calories: ${node.calories}kcal`);
-  if (node.type === 'event') {
-      if (node.startTime && node.endTime) parts.push(`Time: ${node.startTime}-${node.endTime}`);
-      if (node.recurrenceType) parts.push(`Recurrence: ${node.recurrenceType}`);
-      if (node.days && node.days.length > 0) parts.push(`Days: ${node.days.join('/')}`);
-      if (node.targetAudience) parts.push(`Audience: ${node.targetAudience}`);
-      if (node.eventStatus) parts.push(`Status: ${node.eventStatus}`);
-  }
-  if (node.isPaid) parts.push('Requires Payment');
-  if (node.isMandatory) parts.push('Mandatory');
+  if (node.isPaid) parts.push(`isPaid: true`);
+  if (node.calories) parts.push(`Calories: ${node.calories}`);
+  if (node.targetAudience) parts.push(`Audience: ${node.targetAudience}`);
+  if (node.minAge) parts.push(`MinAge: ${node.minAge}`);
+  if (node.maxAge) parts.push(`MaxAge: ${node.maxAge}`);
+  if (node.location) parts.push(`Location: ${node.location}`);
+  if (node.isMandatory) parts.push('Mandatory: true');
+  if (node.requiresReservation) parts.push('Reservation: Required');
+  
   return parts.join(' | ');
 };
 
+/**
+ * GENERATE OPTIMIZED CSV
+ * RAG-Ready: Includes full context path and JSON rules.
+ */
 export const generateOptimizedCSV = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
@@ -283,8 +307,16 @@ export const generateOptimizedCSV = async (
   const totalNodes = flatNodes.length;
   
   const headers = [
-    'System_ID', 'Semantic_Path', 'Node_Type', 'Name', 
-    'Primary_Content', 'Rich_Attributes', 'Tags', 'AI_Description'
+    'System_ID', 
+    'Context_Path', 
+    'Parent_Context', 
+    'Node_Type', 
+    'Name', 
+    'Primary_Content', 
+    'Availability_Rule', 
+    'Rich_Attributes', 
+    'Tags', 
+    'AI_Description'
   ];
 
   const rows: string[] = [];
@@ -303,12 +335,20 @@ export const generateOptimizedCSV = async (
   for (let i = 0; i < totalNodes; i += CHUNK_SIZE) {
     const chunk = flatNodes.slice(i, i + CHUNK_SIZE);
     chunk.forEach(({ node, path }) => {
+       const fullPath = path.join(' > ');
+       // Parent path is everything except the last item
+       const parentPath = path.slice(0, -1).join(' > ') || 'ROOT';
+       
+       const content = node.value || node.answer || node.question || '';
+
        const rowData = [
          safeCSV(node.id),
-         safeCSV(path.join(' > ')), 
+         safeCSV(fullPath),
+         safeCSV(parentPath), 
          safeCSV(node.type),
          safeCSV(node.name),
-         safeCSV(node.value || node.answer || node.question), 
+         safeCSV(content),
+         safeCSV(generateAvailabilityRule(node)),
          safeCSV(generateRichAttributes(node)), 
          safeCSV((node.tags || []).join(', ')),
          safeCSV(node.description)
@@ -325,17 +365,24 @@ export const generateOptimizedCSV = async (
 /**
  * GENERATE CLEAN AI JSON
  * Removes noise (IDs, UI flags) and keeps only semantic structure.
+ * Adds _path context to every node so AI doesn't lose hierarchy when chunking.
  */
-export const generateCleanAIJSON = (node: HotelNode): any => {
+export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): any => {
   // Fields to EXCLUDE to reduce token usage and noise for AI
   const { 
     id, 
     lastSaved, 
     uiState, 
-    isExpanded, // hypothetical UI state
+    isExpanded, 
     children,
     ...semanticData 
   } = node as any;
+
+  // Construct current path for context injection
+  const currentPath = parentPath ? `${parentPath} > ${node.name || 'Untitled'}` : (node.name || 'Untitled');
+  
+  // Inject path context
+  semanticData._path = currentPath;
 
   // Clean empty fields
   Object.keys(semanticData).forEach(key => {
@@ -350,66 +397,61 @@ export const generateCleanAIJSON = (node: HotelNode): any => {
 
   // Recursively clean children
   if (children && children.length > 0) {
-    semanticData.contains = children.map((child: HotelNode) => generateCleanAIJSON(child));
+    semanticData.contains = children.map((child: HotelNode) => generateCleanAIJSON(child, currentPath));
   }
 
   return semanticData;
 };
 
 /**
- * GENERATE AI-OPTIMIZED TEXT (MARKDOWN)
- * Creates a structured, indented textual representation perfect for RAG context windows.
+ * GENERATE AI-OPTIMIZED TEXT (MARKDOWN/TXT)
+ * Creates a structured representation where every line is self-contained.
+ * Good for vector embeddings that split by newlines.
  */
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
 ): Promise<string> => {
   const lines: string[] = [];
-  const flatNodes = flattenTreeForExport(root); // Reuse flattener for progress tracking
+  const flatNodes = flattenTreeForExport(root);
   const totalNodes = flatNodes.length;
-  let processedCount = 0;
+  
+  const CHUNK_SIZE = 50;
 
-  const processNode = (node: HotelNode, depth: number) => {
-    const indent = "  ".repeat(depth);
-    let marker = "-";
-    
-    // Use Headers for high-level categories to give structure
-    if (depth === 0) marker = "#";
-    else if (depth === 1 && node.type === 'category') marker = "##";
-    else if (depth === 2 && node.type === 'category') marker = "###";
+  for (let i = 0; i < totalNodes; i += CHUNK_SIZE) {
+      const chunk = flatNodes.slice(i, i + CHUNK_SIZE);
+      
+      chunk.forEach(({ node, path }) => {
+          // Construct Context String: [Hotel > Dining > Menu]
+          const contextPath = `[${path.join(' > ')}]`;
+          
+          let content = `${contextPath} ${node.type.toUpperCase()}: ${node.name || 'Untitled'}`;
 
-    // Construct the line
-    let content = `${indent}${marker} ${node.name || 'Untitled'}`;
+          // Primary Value
+          if (node.value) content += ` | Value: ${node.value}`;
+          if (node.question) content += ` | Question: ${node.question}`;
+          if (node.answer) content += ` | Answer: ${node.answer}`;
 
-    // Add Primary Value
-    if (node.value) content += `: ${node.value}`;
-    if (node.question) content += ` (Q: ${node.question})`;
-    if (node.answer) content += ` (A: ${node.answer})`;
+          // Attributes
+          if (node.price) content += ` | Price: $${node.price}`;
+          if (node.calories) content += ` | Calories: ${node.calories}`;
+          if (node.eventStatus) content += ` | Status: ${node.eventStatus}`;
+          
+          // Availability Logic
+          const availability = generateAvailabilityRule(node);
+          if (availability) content += ` | Rules: ${availability}`;
+          
+          // Tags & Description
+          if (node.tags && node.tags.length > 0) content += ` | Tags: ${node.tags.join(', ')}`;
+          if (node.description) content += ` | Note: ${node.description}`;
 
-    // Add Attributes in a compact [Key: Value] format
-    const attrs = [];
-    if (node.price) attrs.push(`$${node.price}`);
-    if (node.startTime && node.endTime) attrs.push(`${node.startTime}-${node.endTime}`);
-    if (node.eventStatus) attrs.push(`${node.eventStatus}`);
-    if (node.tags && node.tags.length > 0) attrs.push(`Tags: ${node.tags.join(',')}`);
-    if (node.description) attrs.push(`Note: ${node.description}`);
-    
-    if (attrs.length > 0) {
-      content += ` [${attrs.join(' | ')}]`;
-    }
+          lines.push(content);
+      });
 
-    lines.push(content);
-    processedCount++;
-
-    // Recursion
-    if (node.children) {
-      node.children.forEach(child => processNode(child, depth + 1));
-    }
-  };
-
-  // Run synchronously but chunked if needed (Text generation is usually fast, but keeping pattern)
-  processNode(root, 0);
-  onProgress(100);
+      const progress = Math.round(((i + chunk.length) / totalNodes) * 100);
+      onProgress(progress);
+      await new Promise(resolve => setTimeout(resolve, 5));
+  }
 
   return lines.join('\n');
 };

@@ -283,45 +283,63 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
     const jsonContext = JSON.stringify(data, null, 2).substring(0, 300000);
 
     const prompt = `
-      You are a Senior Data Health Auditor for a generic Hotel CMS.
-      Analyze the provided JSON data structure for Semantic Health, Completeness, and AI-Readiness.
+  You are the "Lead Data Architect & AI Logic Validator" for a Hotel CMS.
+  Your goal is NOT just to check if fields are empty. Your goal is to ensure this data is **Semantic, Logical, and Hallucination-Proof** for an LLM (Large Language Model).
 
-      Audit Rules:
-      1. CRITICAL: Identify nodes that need specific boolean flags but lack them (e.g., a "Wine" item without 'isPaid': true).
-      2. WARNING: Identify nodes with ambiguous names (e.g. "Pool" -> better is "Outdoor Pool" or "Kids Pool").
-      3. WARNING: Identify 'Category' nodes that are missing 'description'. Descriptions help the AI traverse the tree.
-      4. OPTIMIZATION: Suggest 'tags' for items that lack them but have obvious categories (e.g., A 'Burger' item should have tags ['Food', 'Lunch', 'Dinner']).
-      5. CRITICAL: Check for missing critical values in 'menu_item' (price) or 'event' (startTime).
+  INPUT CONTEXT:
+  This data is a hierarchical tree representing a hotel (Rooms, Dining, Events).
+  It will be fed into a RAG (Retrieval-Augmented Generation) system for a Chatbot.
 
-      Task:
-      Generate a Health Report in JSON format strictly adhering to the schema below.
+  CRITICAL AUDIT RULES (You must check for these):
 
-      Schema:
+  1. **SEMANTIC AMBIGUITY (Context Killers):**
+     - Issue: Nodes named just "Bar", "Pool", or "Menu" without parent context are dangerous.
+     - Rule: If a node name is generic, verify if it has a 'description' or 'tags' that clarify it.
+     - Example: A node named "Garden" under "Rooms" vs "Garden" under "Dining".
+  
+  2. **LOGICAL FALLACIES (Time & Math):**
+     - Issue: 'endTime' is before 'startTime'.
+     - Issue: 'minAge' is greater than 'maxAge'.
+     - Issue: 'recurrenceType' is 'weekly' but 'days' array is empty.
+     - Issue: 'isPaid' is true, but 'price' is missing or 0.
+
+  3. **ORPHANED DATA:**
+     - Issue: A 'menu_item' that is NOT inside a 'menu' or 'category' type node.
+     - Issue: A 'qa_pair' where the answer references a specific time (e.g., "Open at 10:00") instead of pointing to a dynamic field. (Hardcoded data in text is bad practice).
+
+  4. **AI READABILITY:**
+     - Issue: Descriptions that are too short (< 10 chars) or meaningless (e.g., "Desc").
+     - Issue: Missing 'tags' on items that are clearly searchable (e.g., A "Burger" node without "Food", "Meat", "Lunch" tags).
+
+  TASK:
+  Analyze the provided JSON structure and return a JSON report.
+
+  OUTPUT SCHEMA (Strict JSON):
+  {
+    "score": number, // 0-100. Penalize heavily for Logical Fallacies.
+    "summary": "A concise technical summary of the data health for RAG suitability.",
+    "issues": [
       {
-        "score": number, // 0 to 100 integer. 100 is perfect.
-        "summary": "A 1-sentence summary of the data health.",
-        "issues": [
-          {
-            "id": "unique_issue_id",
-            "nodeId": "id_of_node",
-            "nodeName": "name_of_node",
-            "severity": "critical" | "warning" | "optimization",
-            "message": "Short explanation of the issue",
-            "fix": {
-              "targetId": "id_of_node",
-              "action": "update",
-              "data": { "fieldToUpdate": "newValue" }, // Only include the fields that need changing. e.g. { "tags": ["Food"] }
-              "description": "Short label for the button, e.g. 'Add Tags'"
-            }
-          }
-        ]
+        "id": "unique_issue_id",
+        "nodeId": "id_of_node",
+        "nodeName": "name_of_node",
+        "severity": "critical" | "warning" | "optimization",
+        "message": "Precise explanation of why this confuses an AI.",
+        "fix": {
+          "targetId": "id_of_node",
+          "action": "update",
+          "data": { "key": "suggested_value" },
+          "description": "Button label, e.g., 'Fix Time Logic' or 'Add Semantic Tags'"
+        }
       }
+    ]
+  }
 
-      Data:
-      \`\`\`json
-      ${jsonContext}
-      \`\`\`
-    `;
+  DATA TO AUDIT:
+  \`\`\`json
+  ${jsonContext}
+  \`\`\`
+`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
