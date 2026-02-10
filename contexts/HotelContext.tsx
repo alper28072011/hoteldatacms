@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { HotelNode } from '../types';
-import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId } from '../utils/treeUtils';
+import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree } from '../utils/treeUtils';
 import { updateHotelData } from '../services/firestoreService';
 
 interface HotelContextType {
@@ -16,6 +16,7 @@ interface HotelContextType {
   updateNode: (nodeId: string, updates: Partial<HotelNode>) => void;
   addChild: (parentId: string, type?: string) => void;
   deleteNode: (nodeId: string) => void;
+  moveNode: (sourceId: string, targetId: string, position: 'inside' | 'before' | 'after') => void;
   forceSave: () => Promise<void>;
 }
 
@@ -74,6 +75,12 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const deleteNode = useCallback((nodeId: string) => {
     if (nodeId === 'root') return; // Protect root
     setHotelDataState((prev) => deleteNodeFromTree(prev, nodeId));
+    setHasUnsavedChanges(true);
+    setSaveStatus('idle');
+  }, []);
+
+  const moveNode = useCallback((sourceId: string, targetId: string, position: 'inside' | 'before' | 'after') => {
+    setHotelDataState((prev) => moveNodeInTree(prev, sourceId, targetId, position));
     setHasUnsavedChanges(true);
     setSaveStatus('idle');
   }, []);
@@ -150,6 +157,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       updateNode,
       addChild,
       deleteNode,
+      moveNode,
       saveStatus,
       lastSavedAt,
       forceSave

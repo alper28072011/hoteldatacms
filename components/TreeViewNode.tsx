@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { HotelNode } from '../types';
-import { ChevronRight, Folder, FileText, Plus, List, Calendar, HelpCircle, Shield } from 'lucide-react';
+import { ChevronRight, Folder, FileText, Plus, List, Calendar, HelpCircle, Shield, GripVertical } from 'lucide-react';
+import { useHotel } from '../contexts/HotelContext';
 
 interface TreeViewNodeProps {
   node: HotelNode;
@@ -24,7 +26,6 @@ const getNodeIcon = (type: string) => {
   }
 };
 
-// React.memo ile sarmalanmış optimize bileşen
 const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({ 
   node, 
   selectedId, 
@@ -33,14 +34,20 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   level = 0,
   forceExpand = false
 }) => {
+  // Use Context hook inside component to avoid prop drilling for moveNode
+  const { moveNode } = useHotel();
+
   const [isExpanded, setIsExpanded] = useState(level === 0);
-  // Performans: Eğer çocuklar hiç açılmadıysa DOM'a render etme (Virtualization benzeri etki)
   const [hasRenderedChildren, setHasRenderedChildren] = useState(level === 0 || forceExpand);
+
+  // Drag State
+  const [isDragging, setIsDragging] = useState(false);
+  const [dropPosition, setDropPosition] = useState<'none' | 'inside' | 'before' | 'after'>('none');
 
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === node.id;
+  const isRoot = node.id === 'root';
 
-  // Dışarıdan zorla genişletme gelirse (örn: arama yapıldığında)
   useEffect(() => {
     if (forceExpand && hasChildren) {
       setIsExpanded(true);
@@ -48,7 +55,6 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     }
   }, [forceExpand, hasChildren]);
 
-  // Kullanıcı manuel açarsa render izni ver
   useEffect(() => {
     if (isExpanded) {
       setHasRenderedChildren(true);
@@ -65,24 +71,112 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
       onSelect(node.id);
   }
 
+  // --- DRAG HANDLERS ---
+  const handleDragStart = (e: React.DragEvent) => {
+    if (isRoot) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData('text/plain', node.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setIsDragging(true);
+    
+    // Create a ghost image if needed, or browser default is fine
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+    setDropPosition('none');
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // Necessary to allow dropping
+    e.stopPropagation();
+
+    if (isDragging) return; // Don't drop on self
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    // Logic: Top 25% = Before, Bottom 25% = After, Middle 50% = Inside
+    // Exception: Root can only accept 'inside'
+    if (isRoot) {
+       setDropPosition('inside');
+       return;
+    }
+
+    if (y < height * 0.25) {
+      setDropPosition('before');
+    } else if (y > height * 0.75) {
+      setDropPosition('after');
+    } else {
+      setDropPosition('inside');
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+     e.preventDefault();
+     setDropPosition('none');
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDropPosition('none');
+
+    const sourceId = e.dataTransfer.getData('text/plain');
+    if (sourceId && sourceId !== node.id) {
+       moveNode(sourceId, node.id, dropPosition === 'none' ? 'inside' : dropPosition);
+       // Auto expand if dropped inside
+       if (dropPosition === 'inside' || isRoot) {
+         setIsExpanded(true);
+         setHasRenderedChildren(true);
+       }
+    }
+  };
+
+  // Styles for Drop Targets
+  const getDropStyles = () => {
+    switch (dropPosition) {
+      case 'inside': return 'bg-blue-100 ring-1 ring-blue-300';
+      case 'before': return 'border-t-2 border-blue-500';
+      case 'after': return 'border-b-2 border-blue-500';
+      default: return isSelected ? 'bg-blue-50 border-blue-500' : 'hover:bg-slate-50 border-transparent';
+    }
+  };
+
   return (
-    <div className="select-none">
-      {/* Satır Görünümü */}
+    <div className={`select-none ${isDragging ? 'opacity-50' : ''}`}>
+      {/* Node Header Row */}
       <div 
+        draggable={!isRoot}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={`
-          group relative flex items-center py-1.5 pr-4 cursor-pointer transition-colors duration-200 border-l-2
-          ${isSelected ? 'bg-blue-50 border-blue-500' : 'hover:bg-slate-50 border-transparent'}
+          group relative flex items-center py-1.5 pr-4 cursor-pointer transition-all duration-150 border-l-2
+          ${getDropStyles()}
         `}
         style={{ paddingLeft: `${(level * 12) + 8}px` }}
         onClick={handleSelect}
       >
         <div className="flex items-center flex-1 overflow-hidden">
-          {/* Aç/Kapa Oku */}
+          {/* Drag Handle (Hover Only) */}
+          {!isRoot && (
+             <span className="opacity-0 group-hover:opacity-30 cursor-grab mr-1 -ml-1 hover:opacity-100 transition-opacity">
+                <GripVertical size={10} />
+             </span>
+          )}
+
+          {/* Animated Toggle Button */}
           <button 
             type="button"
             onClick={handleExpand}
             className={`
-                p-0.5 rounded mr-1 text-slate-400 shrink-0 transition-transform duration-300
+                p-0.5 rounded mr-1 text-slate-400 shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)]
                 ${hasChildren ? 'opacity-100 hover:bg-slate-200 hover:text-slate-600' : 'opacity-0 cursor-default'}
                 ${isExpanded ? 'rotate-90' : 'rotate-0'}
             `}
@@ -99,7 +193,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
           </span>
         </div>
 
-        {/* Hover ile Gelen Ekle Butonu */}
+        {/* Quick Actions (Hover) */}
         <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 backdrop-blur-[2px] rounded p-0.5 z-10 shadow-sm">
           <button 
             type="button"
@@ -118,10 +212,12 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
         </div>
       </div>
 
-      {/* Çocuklar (Recursive Render) */}
+      {/* 
+         PERFORMANCE WRAPPER (Lazy Rendering + Grid Animation)
+      */}
       <div 
         className={`
-            grid transition-[grid-template-rows] duration-300 ease-out contain-content
+            grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] contain-content
             ${isExpanded && hasChildren ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}
         `}
       >
@@ -145,22 +241,13 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     </div>
   );
 }, (prev, next) => {
-  // --- PERFORMANS SİHRİ BURADA ---
-  
-  // 1. Veri Referansı Kontrolü (TreeUtils sayesinde çok hızlı)
+  // --- PERFORMANCE OPTIMIZATION ---
   const isSameNode = prev.node === next.node;
-  
-  // 2. Seçim Durumu Kontrolü
-  // Sadece eğer "ben seçildim" veya "seçim benden gitti" durumu varsa render et.
-  // Başka bir node seçildiyse beni ilgilendirmez.
   const wasSelected = prev.selectedId === prev.node.id;
   const isNowSelected = next.selectedId === next.node.id;
   const isSelectionChanged = wasSelected !== isNowSelected;
-  
-  // 3. Genişleme (Expand) Kontrolü
   const isExpandChanged = prev.forceExpand !== next.forceExpand;
-
-  // Eğer her şey aynıysa TRUE dön (Render Etme!)
+  
   return isSameNode && !isSelectionChanged && !isExpandChanged;
 });
 
