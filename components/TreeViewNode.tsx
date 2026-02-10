@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { HotelNode } from '../types';
 import { ChevronRight, Folder, FileText, Plus, List, Calendar, HelpCircle, Shield, ChevronDown } from 'lucide-react';
 
@@ -159,4 +159,41 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
   );
 };
 
-export default TreeViewNode;
+// --- PERFORMANCE OPTIMIZATION ---
+// This comparison function ensures that we ONLY re-render a node if:
+// 1. The node data itself has changed (Reference check is fast due to structural sharing)
+// 2. The selection state FOR THIS SPECIFIC NODE has changed.
+// 3. The expand force state has changed.
+// Without this, selecting one item would re-render the entire 1000+ item tree.
+const arePropsEqual = (prevProps: TreeViewNodeProps, nextProps: TreeViewNodeProps) => {
+  // 1. Check Node Reference (Fastest Check)
+  // Since we use immutable updates in treeUtils, if the reference is the same, 
+  // the data content (name, value, children refs) is guaranteed to be the same.
+  if (prevProps.node !== nextProps.node) {
+    return false; // Data changed, must re-render
+  }
+
+  // 2. Check Selection State
+  // We don't care if selectedId changed globally, only if it affects THIS node.
+  const wasSelected = prevProps.selectedId === prevProps.node.id;
+  const isSelected = nextProps.selectedId === nextProps.node.id;
+  
+  if (wasSelected !== isSelected) {
+    return false; // Highlight status changed, must re-render
+  }
+
+  // 3. Check Force Expand
+  if (prevProps.forceExpand !== nextProps.forceExpand) {
+    return false;
+  }
+  
+  // 4. Check Level (Should represent structural integrity)
+  if (prevProps.level !== nextProps.level) {
+      return false;
+  }
+
+  // If we got here, the visual output will be identical. Skip render.
+  return true;
+};
+
+export default memo(TreeViewNode, arePropsEqual);
