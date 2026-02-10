@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, memo } from 'react';
 import { HotelNode } from '../types';
-import { ChevronRight, Folder, FileText, Plus, List, Calendar, HelpCircle, Shield, ChevronDown } from 'lucide-react';
+import { ChevronRight, Folder, FileText, Plus, List, Calendar, HelpCircle, Shield } from 'lucide-react';
 
 interface TreeViewNodeProps {
   node: HotelNode;
@@ -34,9 +34,6 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
   forceExpand = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(level === 0);
-  // OPTIMIZATION: Track if the node has ever been expanded.
-  // If false, we do NOT render the children in the DOM at all.
-  // This prevents the browser from calculating layout for thousands of hidden items.
   const [hasRenderedChildren, setHasRenderedChildren] = useState(level === 0 || forceExpand);
 
   const hasChildren = node.children && node.children.length > 0;
@@ -122,10 +119,6 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
 
       {/* 
          PERFORMANCE WRAPPER (Lazy Rendering + Grid Animation)
-         
-         1. `contain-content`: Tells browser this subtree is isolated. Huge performance boost during layout recalcs.
-         2. `will-change-[grid-template-rows]`: Hints the compositor thread.
-         3. `hasRenderedChildren`: If false, children don't exist in DOM. Zero cost.
       */}
       <div 
         className={`
@@ -137,11 +130,6 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
             overflow-hidden min-h-0 transition-opacity duration-300
             ${isExpanded && hasChildren ? 'opacity-100' : 'opacity-0'}
         `}>
-            {/* 
-               CRITICAL OPTIMIZATION: 
-               Only map and render recursive children if they have been requested at least once.
-               If user never opens "System Logs" folder, we never render its 5000 children.
-            */}
             {hasChildren && hasRenderedChildren && node.children!.map((child) => (
                 <TreeViewNode 
                   key={child.id} 
@@ -160,44 +148,26 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
 };
 
 // --- PERFORMANCE OPTIMIZATION ---
-// This comparison function ensures that we ONLY re-render a node if:
-// 1. The node data itself has changed (Reference check is fast due to structural sharing)
-// 2. The selection state FOR THIS SPECIFIC NODE has changed.
-// 3. The expand force state has changed.
-// Without this, selecting one item would re-render the entire 1000+ item tree.
+// Only re-render if data changes, selection changes FOR THIS node, or force expand changes.
 const arePropsEqual = (prevProps: TreeViewNodeProps, nextProps: TreeViewNodeProps) => {
-  // 1. Check Node Reference (Fastest Check - Structural Sharing)
-  // If the reference is the same, the data content (name, value, children refs) is guaranteed to be the same.
+  // 1. Data Check (Reference Equality is sufficient due to Structural Sharing)
   if (prevProps.node !== nextProps.node) {
-    return false; // Data changed (or parent changed children array ref), must re-render
+    return false;
   }
 
-  // 2. Check Selection State
-  // We don't care if 'selectedId' changed globally (e.g. from 'A' to 'B').
-  // We only care if IT AFFECTS US. 
-  // i.e., Was I selected before? Am I selected now? Did that status change?
+  // 2. Selection Check (Only re-render if selection status OF THIS NODE changed)
   const wasSelected = prevProps.selectedId === prevProps.node.id;
   const isSelected = nextProps.selectedId === nextProps.node.id;
   
   if (wasSelected !== isSelected) {
-    return false; // Highlight status changed, must re-render
+    return false;
   }
 
-  // 3. Check Force Expand
+  // 3. Force Expand Check
   if (prevProps.forceExpand !== nextProps.forceExpand) {
     return false;
   }
   
-  // 4. Check Level (Structural integrity check, though rare to change without node change)
-  if (prevProps.level !== nextProps.level) {
-      return false;
-  }
-
-  // If we got here:
-  // - My data is the same.
-  // - My selection status is the same (either stayed selected or stayed unselected).
-  // - My expansion force is the same.
-  // -> SKIP RENDER.
   return true;
 };
 

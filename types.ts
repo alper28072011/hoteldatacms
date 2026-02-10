@@ -140,3 +140,8 @@ export interface DataComparisonReport {
   sourceUrl?: string;
   items: ComparisonItem[];
 }
+
+export interface NodeContextPrediction {
+  tags: string[];
+  description: string;
+}
