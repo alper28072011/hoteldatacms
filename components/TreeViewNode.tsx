@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HotelNode } from '../types';
 import { ChevronRight, Folder, FileText, Plus, List, Calendar, HelpCircle, Shield } from 'lucide-react';
 
@@ -25,7 +24,8 @@ const getNodeIcon = (type: string) => {
   }
 };
 
-const TreeViewNode: React.FC<TreeViewNodeProps> = ({ 
+// React.memo ile sarmalanmış optimize bileşen
+const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({ 
   node, 
   selectedId, 
   onSelect, 
@@ -34,12 +34,13 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
   forceExpand = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(level === 0);
+  // Performans: Eğer çocuklar hiç açılmadıysa DOM'a render etme (Virtualization benzeri etki)
   const [hasRenderedChildren, setHasRenderedChildren] = useState(level === 0 || forceExpand);
 
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === node.id;
 
-  // Sync with forceExpand prop
+  // Dışarıdan zorla genişletme gelirse (örn: arama yapıldığında)
   useEffect(() => {
     if (forceExpand && hasChildren) {
       setIsExpanded(true);
@@ -47,7 +48,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
     }
   }, [forceExpand, hasChildren]);
 
-  // When expanding manually, ensure children are rendered
+  // Kullanıcı manuel açarsa render izni ver
   useEffect(() => {
     if (isExpanded) {
       setHasRenderedChildren(true);
@@ -66,7 +67,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
 
   return (
     <div className="select-none">
-      {/* Node Header Row */}
+      {/* Satır Görünümü */}
       <div 
         className={`
           group relative flex items-center py-1.5 pr-4 cursor-pointer transition-colors duration-200 border-l-2
@@ -76,12 +77,12 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
         onClick={handleSelect}
       >
         <div className="flex items-center flex-1 overflow-hidden">
-          {/* Animated Toggle Button */}
+          {/* Aç/Kapa Oku */}
           <button 
             type="button"
             onClick={handleExpand}
             className={`
-                p-0.5 rounded mr-1 text-slate-400 shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)]
+                p-0.5 rounded mr-1 text-slate-400 shrink-0 transition-transform duration-300
                 ${hasChildren ? 'opacity-100 hover:bg-slate-200 hover:text-slate-600' : 'opacity-0 cursor-default'}
                 ${isExpanded ? 'rotate-90' : 'rotate-0'}
             `}
@@ -98,7 +99,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
           </span>
         </div>
 
-        {/* Quick Actions (Hover) */}
+        {/* Hover ile Gelen Ekle Butonu */}
         <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 backdrop-blur-[2px] rounded p-0.5 z-10 shadow-sm">
           <button 
             type="button"
@@ -117,12 +118,10 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
         </div>
       </div>
 
-      {/* 
-         PERFORMANCE WRAPPER (Lazy Rendering + Grid Animation)
-      */}
+      {/* Çocuklar (Recursive Render) */}
       <div 
         className={`
-            grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] contain-content
+            grid transition-[grid-template-rows] duration-300 ease-out contain-content
             ${isExpanded && hasChildren ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}
         `}
       >
@@ -145,28 +144,24 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
       </div>
     </div>
   );
-};
-
-// --- PERFORMANCE OPTIMIZATION ---
-// This function determines if the component needs to re-render.
-// Returns TRUE if props are equal (skip render), FALSE if they differ (re-render).
-const arePropsEqual = (prevProps: TreeViewNodeProps, nextProps: TreeViewNodeProps) => {
-  // 1. Data Reference Check
-  // Since we use immutable patterns in treeUtils, if the reference matches, the data hasn't changed.
-  const isSameNode = prevProps.node === nextProps.node;
-
-  // 2. Selection Check
-  // We only care if the selection state OF THIS SPECIFIC NODE has changed.
-  // If selectedId changed from "A" to "B", and this node is "C", it shouldn't re-render.
-  const prevSelected = prevProps.selectedId === prevProps.node.id;
-  const nextSelected = nextProps.selectedId === nextProps.node.id;
-  const isSelectionChanged = prevSelected !== nextSelected;
-
-  // 3. Force Expand Check
-  const isExpandChanged = prevProps.forceExpand !== nextProps.forceExpand;
+}, (prev, next) => {
+  // --- PERFORMANS SİHRİ BURADA ---
   
-  // RENDER only if: Node changed OR Selection Changed for this node OR Expand forced
-  return isSameNode && !isSelectionChanged && !isExpandChanged;
-};
+  // 1. Veri Referansı Kontrolü (TreeUtils sayesinde çok hızlı)
+  const isSameNode = prev.node === next.node;
+  
+  // 2. Seçim Durumu Kontrolü
+  // Sadece eğer "ben seçildim" veya "seçim benden gitti" durumu varsa render et.
+  // Başka bir node seçildiyse beni ilgilendirmez.
+  const wasSelected = prev.selectedId === prev.node.id;
+  const isNowSelected = next.selectedId === next.node.id;
+  const isSelectionChanged = wasSelected !== isNowSelected;
+  
+  // 3. Genişleme (Expand) Kontrolü
+  const isExpandChanged = prev.forceExpand !== next.forceExpand;
 
-export default memo(TreeViewNode, arePropsEqual);
+  // Eğer her şey aynıysa TRUE dön (Render Etme!)
+  return isSameNode && !isSelectionChanged && !isExpandChanged;
+});
+
+export default TreeViewNode;
