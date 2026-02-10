@@ -166,15 +166,16 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = ({
 // 3. The expand force state has changed.
 // Without this, selecting one item would re-render the entire 1000+ item tree.
 const arePropsEqual = (prevProps: TreeViewNodeProps, nextProps: TreeViewNodeProps) => {
-  // 1. Check Node Reference (Fastest Check)
-  // Since we use immutable updates in treeUtils, if the reference is the same, 
-  // the data content (name, value, children refs) is guaranteed to be the same.
+  // 1. Check Node Reference (Fastest Check - Structural Sharing)
+  // If the reference is the same, the data content (name, value, children refs) is guaranteed to be the same.
   if (prevProps.node !== nextProps.node) {
-    return false; // Data changed, must re-render
+    return false; // Data changed (or parent changed children array ref), must re-render
   }
 
   // 2. Check Selection State
-  // We don't care if selectedId changed globally, only if it affects THIS node.
+  // We don't care if 'selectedId' changed globally (e.g. from 'A' to 'B').
+  // We only care if IT AFFECTS US. 
+  // i.e., Was I selected before? Am I selected now? Did that status change?
   const wasSelected = prevProps.selectedId === prevProps.node.id;
   const isSelected = nextProps.selectedId === nextProps.node.id;
   
@@ -187,12 +188,16 @@ const arePropsEqual = (prevProps: TreeViewNodeProps, nextProps: TreeViewNodeProp
     return false;
   }
   
-  // 4. Check Level (Should represent structural integrity)
+  // 4. Check Level (Structural integrity check, though rare to change without node change)
   if (prevProps.level !== nextProps.level) {
       return false;
   }
 
-  // If we got here, the visual output will be identical. Skip render.
+  // If we got here:
+  // - My data is the same.
+  // - My selection status is the same (either stayed selected or stayed unselected).
+  // - My expansion force is the same.
+  // -> SKIP RENDER.
   return true;
 };
 
