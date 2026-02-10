@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { HotelNode, ArchitectAction, HotelSummary } from './types';
+import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from './types';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
   analyzeHotelStats, filterHotelTree, generateOptimizedCSV, generateCleanAIJSON, 
@@ -313,7 +314,15 @@ const App: React.FC = () => {
 
       {/* DIALOGS */}
       <AIArchitectModal isOpen={isArchitectOpen} onClose={() => setIsArchitectOpen(false)} data={hotelData} onApplyActions={handleArchitectActions} />
-      <DataHealthModal isOpen={isHealthModalOpen} onClose={() => setIsHealthModalOpen(false)} data={hotelData} onApplyFix={updateNode} />
+      
+      <DataHealthModal 
+        isOpen={isHealthModalOpen} 
+        onClose={() => setIsHealthModalOpen(false)} 
+        data={hotelData} 
+        onApplyFix={updateNode} 
+        onLocate={(id) => setSelectedNodeId(id)}
+      />
+      
       <DataCheckModal isOpen={isDataCheckOpen} onClose={() => setIsDataCheckOpen(false)} data={hotelData} onApplyAction={(action) => {
             if (action.type === 'add') {
                 setHotelData(prev => {

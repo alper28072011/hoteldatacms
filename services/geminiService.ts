@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport } from "../types";
 import { generateCleanAIJSON } from "../utils/treeUtils";
@@ -170,13 +171,44 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, 300000);
     
-    const prompt = `Analyze this hotel data for "Completeness" and "Quality".
-    Return JSON: { score: number, issues: string[], suggestions: string[] }
+    const prompt = `
+    You are the "Semantic Logic Auditor" for a Hotel Database.
     
-    Data:
+    YOUR TASK:
+    Analyze the data for LOGICAL and SEMANTIC inconsistencies ONLY.
+    Ignore structural issues (like empty names/ids) as we check those locally.
+    
+    LOOK FOR:
+    1. Contradictions (e.g., "No Alcohol Policy" but Menu contains "Wine").
+    2. Ambiguous Content (e.g., "Open all day" instead of "08:00 - 22:00").
+    3. Spelling/Typos in public facing names.
+    4. Price logic (e.g., A luxury steak for $1).
+    
+    INPUT DATA:
     \`\`\`json
     ${jsonContext}
     \`\`\`
+    
+    OUTPUT SCHEMA (JSON):
+    {
+      "score": number (0-100, purely based on semantic quality),
+      "summary": "Short analysis summary.",
+      "issues": [
+        {
+          "id": "ai_issue_x",
+          "nodeId": "id from json",
+          "nodeName": "name from json",
+          "severity": "critical" | "warning" | "optimization",
+          "message": "Description of logical flaw",
+          "fix": { // OPTIONAL
+             "targetId": "id from json",
+             "action": "update",
+             "data": { "key": "value" },
+             "description": "Suggestion"
+          }
+        }
+      ]
+    }
     `;
 
     const response = await ai.models.generateContent({
@@ -187,8 +219,8 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
 
     return JSON.parse(response.text || "{}") as HealthReport;
   } catch (error) {
-    console.error(error);
-    throw new Error("Health audit error.");
+    console.error("Health Audit Error:", error);
+    throw new Error("Failed to generate semantic health report.");
   }
 };
 
