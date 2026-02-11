@@ -97,10 +97,8 @@ export const createNewHotel = async (initialData: HotelNode): Promise<string> =>
 
 /**
  * SHARDING UPDATE STRATEGY:
- * - Root Document: Contains metadata (id, name, type='root'). NO CHILDREN.
+ * - Root Document: Contains metadata (id, name, type='root') AND categoryOrder.
  * - Sub-Collection 'structure': Each direct child of root is a separate document.
- * 
- * Used 'writeBatch' for atomicity. All or nothing.
  */
 export const updateHotelData = async (hotelId: string, data: HotelNode): Promise<void> => {
   try {
@@ -111,19 +109,22 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
     const structureRef = collection(hotelRef, STRUCTURE_SUBCOLLECTION);
 
     // 1. SEPARATION: Split Root Data from Children
-    // We remove 'children' from the root object to keep the main doc light.
     const { children, ...rootMetadata } = data;
     
     const childrenToSave = children || [];
 
-    // 2. BATCH INIT
+    // 2. ORDERING LOGIC
+    // We save the IDs of the children in order, so we can reconstruct the sort later.
+    const categoryOrder = childrenToSave.map(child => child.id);
+
+    // 3. BATCH INIT
     const batch = writeBatch(db);
 
-    // 3. ROOT UPDATE
-    // Save only metadata to the main document
-    batch.set(hotelRef, rootMetadata);
+    // 4. ROOT UPDATE
+    // Save metadata + order to the main document
+    batch.set(hotelRef, { ...rootMetadata, categoryOrder });
 
-    // 4. CHILDREN UPDATE (Sub-Collection)
+    // 5. CHILDREN UPDATE (Sub-Collection)
     const currentChildIds = new Set<string>();
 
     childrenToSave.forEach((child) => {
@@ -139,8 +140,7 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
         currentChildIds.add(childId);
     });
 
-    // 5. CLEANUP ORPHANS
-    // We need to delete documents in the sub-collection that are no longer in the current tree.
+    // 6. CLEANUP ORPHANS
     // Fetch existing docs to identify what to delete.
     const existingDocsSnapshot = await getDocs(structureRef);
     
@@ -151,7 +151,7 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
         }
     });
 
-    // 6. COMMIT
+    // 7. COMMIT
     await batch.commit();
     console.log("Hotel data successfully sharded and saved via Batch Write!");
 
@@ -179,9 +179,9 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
 
 /**
  * REASSEMBLY FETCH STRATEGY:
- * 1. Fetch Root Document (Metadata).
+ * 1. Fetch Root Document (Metadata & Order).
  * 2. Fetch all documents from 'structure' sub-collection.
- * 3. Stitch them back together into a single HotelNode tree for the App.
+ * 3. Sort children based on root's 'categoryOrder'.
  */
 export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null> => {
   try {
@@ -198,7 +198,7 @@ export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null>
       return null;
     }
 
-    const rootData = rootSnap.data() as HotelNode;
+    const rootData = rootSnap.data() as HotelNode & { categoryOrder?: string[] };
 
     // 2. Fetch Sharded Children
     const structureRef = collection(hotelRef, STRUCTURE_SUBCOLLECTION);
@@ -209,14 +209,31 @@ export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null>
         assembledChildren.push(doc.data() as HotelNode);
     });
 
-    // 3. Reassemble Tree
-    // Note: Firestore does not guarantee order. 
-    // Ideally, we should have an 'order' field, but for now we rely on the array fetch.
-    // If strict ordering is needed, sort by an 'orderIndex' field here.
+    // 3. Reassemble & Sort Tree
+    const categoryOrder = rootData.categoryOrder || [];
+    
+    // Create a map for O(1) lookup
+    const childrenMap = new Map<string, HotelNode>();
+    assembledChildren.forEach(child => childrenMap.set(child.id, child));
+
+    const sortedChildren: HotelNode[] = [];
+
+    // Add items in specific order
+    categoryOrder.forEach(id => {
+      if (childrenMap.has(id)) {
+        sortedChildren.push(childrenMap.get(id)!);
+        childrenMap.delete(id); // Remove so we know what's left
+      }
+    });
+
+    // Add any remaining items (newly created or orphans not in order list)
+    childrenMap.forEach(child => {
+      sortedChildren.push(child);
+    });
     
     const fullTree: HotelNode = {
         ...rootData,
-        children: assembledChildren
+        children: sortedChildren
     };
 
     return fullTree;
@@ -229,7 +246,6 @@ export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null>
 
 /**
  * Fetches list of hotels.
- * Improved Performance: Since root docs are now small (no children), this list loads instantly.
  */
 export const getHotelsList = async (): Promise<HotelSummary[]> => {
   try {
@@ -249,8 +265,7 @@ export const getHotelsList = async (): Promise<HotelSummary[]> => {
   }
 };
 
-// --- TEMPLATE SERVICES (Kept Monolithic for Simplicity) ---
-// Templates are usually read-only and static, so 1MB limit is less of an issue.
+// --- TEMPLATE SERVICES ---
 
 export const saveTemplate = async (template: Omit<HotelTemplate, 'id'>): Promise<string> => {
   try {

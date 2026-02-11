@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { HotelNode } from '../types';
 import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree } from '../utils/treeUtils';
 import { updateHotelData } from '../services/firestoreService';
@@ -9,6 +9,7 @@ interface HotelContextType {
   hotelId: string | null;
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   lastSavedAt: number | null;
+  hasUnsavedChanges: boolean; // Exposed for UI
   
   // Actions
   setHotelData: (data: HotelNode | ((prev: HotelNode) => HotelNode)) => void;
@@ -29,11 +30,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   
-  // Tracks if data has changed since last save to prevent loops
+  // Tracks if data has changed since last save
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  
-  // Ref for Debounce Timer
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- ACTIONS (Wrapped in useCallback to prevent re-renders) ---
 
@@ -48,16 +46,17 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // If functional update, assume modification (unsaved changes). If object, assume load (no unsaved changes).
     if (typeof data === 'function') {
       setHasUnsavedChanges(true);
+      setSaveStatus('idle'); // Changes happened, status is idle (waiting for save)
     } else {
       setHasUnsavedChanges(false);
+      setSaveStatus('saved'); // Loaded data is technically saved
     }
-    setSaveStatus('idle');
   }, []);
 
   const updateNode = useCallback((nodeId: string, updates: Partial<HotelNode>) => {
     setHotelDataState((prev) => updateNodeInTree(prev, nodeId, updates));
     setHasUnsavedChanges(true);
-    setSaveStatus('idle'); // Reset to idle to indicate change happened
+    setSaveStatus('idle');
   }, []);
 
   const addChild = useCallback((parentId: string, type: string = 'item') => {
@@ -85,59 +84,19 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSaveStatus('idle');
   }, []);
 
-  // --- AUTO-SAVE LOGIC (DEBOUNCED) ---
-  useEffect(() => {
-    // Only save if we have a valid ID and actual changes
-    if (!hotelId || !hasUnsavedChanges) return;
+  // Removed aggressive useEffect auto-save.
+  // Saving is now strictly manual or triggered by specific events if needed.
 
-    // Clear previous timer if exists (Debounce pattern)
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    setSaveStatus('saving');
-
-    // Set new timer for 2 seconds
-    saveTimeoutRef.current = setTimeout(async () => {
-      try {
-        console.log(`[AutoSave] Saving hotel ${hotelId}...`);
-        
-        // Add timestamp to data before saving
-        const now = Date.now();
-        const dataToSave = { ...hotelData, lastSaved: now };
-        
-        await updateHotelData(hotelId, dataToSave);
-        
-        // Update local state to reflect successful save
-        setLastSavedAt(now);
-        setSaveStatus('saved');
-        setHasUnsavedChanges(false);
-        
-        // Update the lastSaved field in UI without triggering another save
-        setHotelDataState(prev => ({ ...prev, lastSaved: now }));
-
-      } catch (error) {
-        console.error("[AutoSave] Failed:", error);
-        setSaveStatus('error');
-      }
-    }, 2000); // 2000ms delay
-
-    // Cleanup on unmount
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    };
-  }, [hotelData, hotelId, hasUnsavedChanges]);
-
-  // Manual Save (Bypasses debounce)
+  // Manual Save
   const forceSave = async () => {
     if (!hotelId) return;
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     
     setSaveStatus('saving');
     try {
         const now = Date.now();
         const dataToSave = { ...hotelData, lastSaved: now };
         await updateHotelData(hotelId, dataToSave);
+        
         setLastSavedAt(now);
         setSaveStatus('saved');
         setHasUnsavedChanges(false);
@@ -160,6 +119,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       moveNode,
       saveStatus,
       lastSavedAt,
+      hasUnsavedChanges,
       forceSave
     }}>
       {children}

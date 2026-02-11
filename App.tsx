@@ -50,6 +50,7 @@ const App: React.FC = () => {
     addChild, 
     deleteNode, 
     saveStatus, 
+    hasUnsavedChanges,
     forceSave 
   } = useHotel();
 
@@ -380,12 +381,25 @@ const App: React.FC = () => {
                  <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${hotelId ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                     {hotelId ? <Wifi size={10} /> : <WifiOff size={10} />} {hotelId ? 'Online' : 'Offline'}
                  </div>
-                 {/* OTO-KAYIT DURUMU */}
+                 
+                 {/* MANUEL KAYIT UYARISI */}
                  {hotelId && (
-                     <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-300">
-                         {saveStatus === 'saving' && <span className="text-blue-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin"/> Kaydediliyor...</span>}
-                         {saveStatus === 'saved' && <span className="text-slate-400 flex items-center gap-1"><CheckCircle size={10}/> Kaydedildi</span>}
-                         {saveStatus === 'error' && <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10}/> Kayıt Hatası</span>}
+                     <div className="flex items-center gap-2 transition-all duration-300">
+                         {saveStatus === 'saving' ? (
+                             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin"/> Kaydediliyor...</span>
+                         ) : hasUnsavedChanges ? (
+                             <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1"><AlertCircle size={10}/> Kaydedilmemiş Değişiklikler</span>
+                                <button 
+                                  onClick={handleManualSave}
+                                  className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded hover:bg-amber-200 transition-colors"
+                                >
+                                  Şimdi Kaydet
+                                </button>
+                             </div>
+                         ) : (
+                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1"><CheckCircle size={10}/> Güncel</span>
+                         )}
                      </div>
                  )}
              </div>
@@ -400,7 +414,12 @@ const App: React.FC = () => {
               <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded hover:shadow-md mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
               
               <div className="w-px h-6 bg-slate-200 mx-2"></div>
-              <button onClick={handleManualSave} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Kaydet"><Save size={18} /></button>
+              
+              {/* Force Save Button (Redundant but good for UX) */}
+              <button onClick={handleManualSave} className={`p-2 rounded transition-colors ${hasUnsavedChanges ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100'}`} title="Kaydet">
+                  <Save size={18} />
+              </button>
+
               <button onClick={handleImportClick} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="İçe Aktar"><Upload size={18} /></button>
               <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="Dışa Aktar"><Download size={18} /></button>
               
