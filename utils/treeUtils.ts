@@ -201,6 +201,7 @@ export const getInitialData = (): HotelNode => ({
   id: "root",
   type: "root",
   name: "New Hotel",
+  attributes: [],
   children: [
     {
       id: "gen-info",
@@ -211,7 +212,10 @@ export const getInitialData = (): HotelNode => ({
           id: "g1",
           type: "field",
           name: "Hotel Name",
-          value: "Grand React Hotel"
+          value: "Grand React Hotel",
+          attributes: [
+            { id: 'attr-1', key: 'Stars', value: '5', type: 'number' }
+          ]
         }
       ]
     }
@@ -237,6 +241,11 @@ export const cleanTreeValues = (node: HotelNode): HotelNode => {
   delete newNode.answer;
   delete newNode.calories;
   delete newNode.description;
+  // Attributes should probably be kept in structure mode, but values cleared? 
+  // For now, let's keep attributes as they are often structural (e.g. "Is Paid")
+  if (newNode.attributes) {
+      newNode.attributes = newNode.attributes.map(attr => ({ ...attr, value: '' }));
+  }
 
   if (node.children) {
     newNode.children = node.children.map(child => cleanTreeValues(child));
@@ -359,15 +368,16 @@ const generateAvailabilityRule = (node: HotelNode): string => {
 const generateRichAttributes = (node: HotelNode): string => {
   const parts: string[] = [];
   
+  // Legacy
   if (node.price) parts.push(`Price: $${node.price}`);
   if (node.isPaid) parts.push(`isPaid: true`);
-  if (node.calories) parts.push(`Calories: ${node.calories}`);
-  if (node.targetAudience) parts.push(`Audience: ${node.targetAudience}`);
-  if (node.minAge) parts.push(`MinAge: ${node.minAge}`);
-  if (node.maxAge) parts.push(`MaxAge: ${node.maxAge}`);
-  if (node.location) parts.push(`Location: ${node.location}`);
-  if (node.isMandatory) parts.push('Mandatory: true');
-  if (node.requiresReservation) parts.push('Reservation: Required');
+  
+  // New Attributes
+  if (node.attributes) {
+      node.attributes.forEach(attr => {
+          parts.push(`${attr.key}: ${attr.value}`);
+      });
+  }
   
   return parts.join(' | ');
 };
@@ -447,6 +457,14 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   const currentPath = parentPath ? `${parentPath} > ${node.name || 'Untitled'}` : (node.name || 'Untitled');
   semanticData._path = currentPath;
 
+  // Flatten attributes into the semantic object for AI
+  if (node.attributes) {
+      node.attributes.forEach((attr: any) => {
+          semanticData[attr.key] = attr.value;
+      });
+      delete semanticData.attributes; // Remove raw array
+  }
+
   Object.keys(semanticData).forEach(key => {
     if (semanticData[key] === null || semanticData[key] === undefined || semanticData[key] === '') {
       delete semanticData[key];
@@ -485,12 +503,9 @@ export const generateAIText = async (
           if (node.question) content += ` | Question: ${node.question}`;
           if (node.answer) content += ` | Answer: ${node.answer}`;
 
-          if (node.price) content += ` | Price: $${node.price}`;
-          if (node.calories) content += ` | Calories: ${node.calories}`;
-          if (node.eventStatus) content += ` | Status: ${node.eventStatus}`;
-          
-          const availability = generateAvailabilityRule(node);
-          if (availability) content += ` | Rules: ${availability}`;
+          if (node.attributes) {
+              content += " | " + node.attributes.map(a => `${a.key}: ${a.value}`).join(', ');
+          }
           
           if (node.tags && node.tags.length > 0) content += ` | Tags: ${node.tags.join(', ')}`;
           if (node.description) content += ` | Note: ${node.description}`;

@@ -1,51 +1,53 @@
 
-export type NodeType = 'root' | 'category' | 'item' | 'field' | 'list' | 'menu' | 'menu_item' | 'event' | 'qa_pair' | 'policy';
+export type NodeType = 'root' | 'category' | 'item' | 'field' | 'list' | 'menu' | 'menu_item' | 'event' | 'qa_pair' | 'policy' | 'note';
+
+export interface NodeAttribute {
+  id: string;
+  key: string; // e.g., "Price", "Working Hours"
+  value: string; // e.g., "100$", "09:00 - 18:00"
+  type: 'text' | 'boolean' | 'number' | 'select';
+  options?: string[]; // For select type
+}
 
 export interface HotelNode {
   id: string;
   type: NodeType | string;
   name?: string;
-  value?: string;
-  description?: string;
+  
+  // PRIMARY CONTENT
+  value?: string; // Main description or value
+  description?: string; // Internal AI notes / Context
+  
+  // DYNAMIC ATTRIBUTES (The new flexible structure)
+  attributes?: NodeAttribute[];
+  
+  // HIERARCHY
   children?: HotelNode[];
   
-  // --- EVENT & ACTIVITY SPECIFIC FIELDS ---
-  
-  // Timing & Recurrence
+  // LEGACY / SPECIFIC FIELDS (Kept for backward compatibility but mapped to attributes in UI)
   recurrenceType?: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'specific_date';
-  validFrom?: string; // YYYY-MM-DD (Start of the season/schedule)
-  validUntil?: string; // YYYY-MM-DD (End of the season)
-  specificDate?: string; // YYYY-MM-DD (For one-time events)
-  startTime?: string; // HH:mm
-  endTime?: string; // HH:mm
-  days?: string[]; // ["Mon", "Tue"] for weekly/biweekly
-  
-  // Status & Management
+  validFrom?: string; 
+  validUntil?: string; 
+  startTime?: string; 
+  endTime?: string; 
+  days?: string[]; 
   eventStatus?: 'active' | 'cancelled' | 'postponed' | 'full';
-  location?: string; // e.g., "Show Center", "Main Pool"
-  
-  // Audience & Restrictions
+  location?: string; 
   targetAudience?: 'all' | 'adults' | 'kids' | 'teens' | 'couples' | 'family';
   minAge?: number;
   maxAge?: number;
   isExternalAllowed?: boolean;
   requiresReservation?: boolean;
-
-  // Existing fields
   price?: string | number | null;
   calories?: string;
   isPaid?: boolean | null;
   isMandatory?: boolean | null;
   tags?: string[];
-  eventType?: string;
-  severity?: 'info' | 'warning' | 'error' | null;
   question?: string;
   answer?: string;
   
   // Metadata fields
-  lastSaved?: number; // Timestamp (ms)
-  
-  // Allow flexibility
+  lastSaved?: number; 
   [key: string]: any;
 }
 
