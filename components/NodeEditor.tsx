@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { HotelNode, NodeType } from '../types';
 import { analyzeHotelStats, findPathToNode } from '../utils/treeUtils';
@@ -434,7 +435,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                             type="text" 
                             value={node.name || ''}
                             onChange={(e) => handleChange('name', e.target.value)}
-                            className="w-full text-lg font-medium text-slate-900 border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300"
+                            className="w-full bg-white text-lg font-medium text-slate-900 border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-300"
                             placeholder={node.type === 'event' ? "e.g. Morning Yoga, Live Jazz Night" : "e.g. WiFi Password"}
                         />
                     </div>
@@ -487,7 +488,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                         type="date" 
                                         value={node.validFrom || ''} 
                                         onChange={(e) => handleChange('validFrom', e.target.value)}
-                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700"
+                                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700"
                                     />
                                     {node.recurrenceType === 'biweekly' && <p className="text-[10px] text-indigo-500 mt-1">Anchor date for even/odd week calculation.</p>}
                                 </div>
@@ -497,7 +498,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                         type="date" 
                                         value={node.validUntil || ''} 
                                         onChange={(e) => handleChange('validUntil', e.target.value)}
-                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700"
+                                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700"
                                     />
                                 </div>
                             </div>
@@ -534,7 +535,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                         type="time" 
                                         value={node.startTime || ''} 
                                         onChange={(e) => handleChange('startTime', e.target.value)}
-                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm"
                                     />
                                 </div>
                                 <div>
@@ -543,7 +544,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                         type="time" 
                                         value={node.endTime || ''} 
                                         onChange={(e) => handleChange('endTime', e.target.value)}
-                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm"
                                     />
                                 </div>
                             </div>
@@ -579,7 +580,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                         value={node.location || ''} 
                                         onChange={(e) => handleChange('location', e.target.value)}
                                         placeholder="e.g. Amphitheater, Kids Club"
-                                        className="w-full pl-9 border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                                        className="w-full bg-white pl-9 border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
                                     />
                                 </div>
                              </div>
@@ -589,7 +590,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 <select
                                     value={node.targetAudience || 'all'}
                                     onChange={(e) => handleChange('targetAudience', e.target.value)}
-                                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500"
                                 >
                                     <option value="all">Everyone / Family</option>
                                     <option value="adults">Adults Only (18+)</option>
@@ -602,11 +603,11 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                              <div className="grid grid-cols-2 gap-4">
                                  <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Min Age</label>
-                                    <input type="number" value={node.minAge || ''} onChange={(e) => handleChange('minAge', parseInt(e.target.value))} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"/>
+                                    <input type="number" value={node.minAge || ''} onChange={(e) => handleChange('minAge', parseInt(e.target.value))} className="w-full bg-white border border-slate-300 rounded px-2 py-1.5 text-sm"/>
                                  </div>
                                  <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Max Age</label>
-                                    <input type="number" value={node.maxAge || ''} onChange={(e) => handleChange('maxAge', parseInt(e.target.value))} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"/>
+                                    <input type="number" value={node.maxAge || ''} onChange={(e) => handleChange('maxAge', parseInt(e.target.value))} className="w-full bg-white border border-slate-300 rounded px-2 py-1.5 text-sm"/>
                                  </div>
                              </div>
                              
