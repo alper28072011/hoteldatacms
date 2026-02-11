@@ -7,8 +7,8 @@ import { useHotel } from '../contexts/HotelContext';
 import { 
   LayoutDashboard, Box, BrainCircuit, Sparkles, Loader2, 
   MapPin, Clock, ChevronRight, Database, Copy, Check, Plus, 
-  Settings, List, FileText, HelpCircle, X, Calendar, DollarSign, 
-  Users, Ticket, AlertCircle, Info, Trash2, Edit3, Save
+  Settings, List, FileText, CircleHelp, X, Calendar, DollarSign, 
+  Ticket, CircleAlert, Info, Trash2, Pencil, Save
 } from 'lucide-react';
 
 interface NodeEditorProps {
@@ -215,7 +215,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
                 <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                        {subNode.type === 'qa_pair' ? <HelpCircle size={16} className="text-blue-500"/> : <FileText size={16} className="text-amber-500"/>}
+                        {subNode.type === 'qa_pair' ? <CircleHelp size={16} className="text-blue-500"/> : <FileText size={16} className="text-amber-500"/>}
                         {subNode.type === 'qa_pair' ? 'Edit FAQ' : 'Edit Note'}
                     </h3>
                     <button onClick={() => setEditingSubNodeId(null)} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>
@@ -510,7 +510,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col xl:col-span-2">
                  <div className="bg-slate-50/80 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <HelpCircle size={16} className="text-violet-500" />
+                        <CircleHelp size={16} className="text-violet-500" />
                         <h3 className="text-sm font-bold text-slate-700">Detailed Information & FAQs</h3>
                     </div>
                     <div className="flex gap-2">
@@ -536,14 +536,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     className="group flex items-start gap-3 p-3 bg-white border border-slate-100 hover:border-blue-300 hover:shadow-md rounded-lg cursor-pointer transition-all"
                                  >
                                      <div className={`mt-0.5 ${sub.type === 'qa_pair' ? 'text-violet-500' : 'text-amber-500'}`}>
-                                         {sub.type === 'qa_pair' ? <HelpCircle size={16}/> : <FileText size={16}/>}
+                                         {sub.type === 'qa_pair' ? <CircleHelp size={16}/> : <FileText size={16}/>}
                                      </div>
                                      <div className="flex-1 min-w-0">
                                          <div className="flex justify-between">
                                             <span className="text-xs font-bold text-slate-700 truncate block pr-2">
                                                 {sub.type === 'qa_pair' ? (sub.name || 'New Question') : (sub.name || 'New Note')}
                                             </span>
-                                            <Edit3 size={12} className="text-slate-300 opacity-0 group-hover:opacity-100"/>
+                                            <Pencil size={12} className="text-slate-300 opacity-0 group-hover:opacity-100"/>
                                          </div>
                                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">
                                              {sub.type === 'qa_pair' ? (sub.answer || 'No answer set...') : (sub.value || 'No content...')}

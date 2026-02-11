@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { HotelNode, DataComparisonReport, SuggestedAction } from '../types';
 import { runDataCheck } from '../services/geminiService';
-import { X, Scale, Globe, FileText, Type, ArrowRight, Loader2, CheckCircle, AlertTriangle, AlertCircle, PlusCircle, MinusCircle, ChevronDown, ChevronUp, Download, RefreshCw } from 'lucide-react';
+import { X, Scale, Globe, FileText, Type, ArrowRight, Loader2, CircleCheck, TriangleAlert, CircleAlert, CirclePlus, CircleMinus, ChevronDown, ChevronUp, Download, RefreshCw } from 'lucide-react';
 
 interface DataCheckModalProps {
   isOpen: boolean;
@@ -88,11 +88,11 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
 
   const getCategoryIcon = (cat: string) => {
     switch (cat) {
-      case 'match': return <CheckCircle size={16} className="text-emerald-500" />;
-      case 'conflict': return <AlertTriangle size={16} className="text-red-500" />;
-      case 'missing_internal': return <PlusCircle size={16} className="text-blue-500" />;
-      case 'missing_external': return <MinusCircle size={16} className="text-slate-400" />;
-      default: return <AlertCircle size={16} />;
+      case 'match': return <CircleCheck size={16} className="text-emerald-500" />;
+      case 'conflict': return <TriangleAlert size={16} className="text-red-500" />;
+      case 'missing_internal': return <CirclePlus size={16} className="text-blue-500" />;
+      case 'missing_external': return <CircleMinus size={16} className="text-slate-400" />;
+      default: return <CircleAlert size={16} />;
     }
   };
 
@@ -204,7 +204,7 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
 
               {error && (
                  <div className="mt-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100 flex items-start gap-2">
-                    <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                    <TriangleAlert size={14} className="shrink-0 mt-0.5" />
                     {error}
                  </div>
               )}
@@ -322,7 +322,7 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
 
                                         {isFixed && (
                                             <div className="mt-4 text-center text-emerald-600 font-medium text-sm flex items-center justify-center gap-2">
-                                                <CheckCircle size={16} /> Action Applied Successfully
+                                                <CircleCheck size={16} /> Action Applied Successfully
                                             </div>
                                         )}
                                     </div>

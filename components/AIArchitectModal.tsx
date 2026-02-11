@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { processArchitectCommand, processArchitectFile } from '../services/geminiService';
 import { HotelNode, ArchitectResponse, ArchitectAction } from '../types';
-import { Sparkles, X, Check, AlertTriangle, ArrowRight, Loader2, FileText, UploadCloud, MessageSquare } from 'lucide-react';
+import { Sparkles, X, Check, TriangleAlert, ArrowRight, Loader2, FileText, UploadCloud, MessageSquare } from 'lucide-react';
 
 interface AIArchitectModalProps {
   isOpen: boolean;
@@ -231,7 +231,7 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
               
               {error && (
                 <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">
-                  <AlertTriangle size={16} />
+                  <TriangleAlert size={16} />
                   {error}
                 </div>
               )}

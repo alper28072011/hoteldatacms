@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { HotelNode, HealthReport, HealthIssue } from '../types';
 import { generateHealthReport } from '../services/geminiService';
 import { runLocalValidation } from '../utils/validationUtils';
-import { X, Activity, CheckCircle, AlertTriangle, AlertCircle, Sparkles, Loader2, RefreshCw, Zap, Search, BrainCircuit } from 'lucide-react';
+import { X, Activity, CircleCheck, TriangleAlert, CircleAlert, Sparkles, Loader2, RefreshCw, Zap, Search, BrainCircuit } from 'lucide-react';
 
 interface DataHealthModalProps {
   isOpen: boolean;
@@ -113,7 +113,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                         <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs font-bold">{localCount}</span>
                     </div>
                     <div className="text-xs text-slate-500">Checks for empty fields, duplicate names, and structural depth.</div>
-                    {localCount === 0 && <div className="mt-2 text-xs font-bold text-emerald-600 flex items-center gap-1"><CheckCircle size={12}/> All Good</div>}
+                    {localCount === 0 && <div className="mt-2 text-xs font-bold text-emerald-600 flex items-center gap-1"><CircleCheck size={12}/> All Good</div>}
                 </div>
 
                 {/* AI Status */}
@@ -149,7 +149,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
 
                 {error && (
                     <div className="mt-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100 flex items-start gap-2">
-                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                        <TriangleAlert size={14} className="shrink-0 mt-0.5" />
                         {error}
                     </div>
                 )}
@@ -170,7 +170,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                     {getDisplayedIssues().length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
-                            <CheckCircle size={48} className="mb-2 text-emerald-500" />
+                            <CircleCheck size={48} className="mb-2 text-emerald-500" />
                             <p>No issues found in this category.</p>
                             {activeTab === 'local' && !aiReport && (
                                 <p className="text-xs mt-2">Try running the Deep AI Scan for logical checks.</p>
@@ -213,7 +213,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                                                 <Sparkles size={12} /> Fix: {issue.fix.description}
                                             </button>
                                         ) : isFixed ? (
-                                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><CheckCircle size={12}/> FIXED</span>
+                                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><CircleCheck size={12}/> FIXED</span>
                                         ) : null}
                                     </div>
                                 </div>
