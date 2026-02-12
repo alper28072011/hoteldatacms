@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { HotelNode, NodeType, NodeAttribute } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId } from '../utils/treeUtils';
 import { generateNodeContext } from '../services/geminiService';
@@ -49,13 +49,21 @@ const getTypeInfo = (type: string) => {
 };
 
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
-  const { addChild, updateNode } = useHotel();
+  const { addChild } = useHotel();
   const stats = useMemo(() => node ? analyzeHotelStats(node) : null, [node]);
   const typeInfo = node ? getTypeInfo(String(node.type)) : { label: '', desc: '', icon: null };
   const [isGeneratingContext, setIsGeneratingContext] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  
+  // Local state for the "New Attribute" inputs
   const [newAttrKey, setNewAttrKey] = useState('');
   const [newAttrValue, setNewAttrValue] = useState('');
+
+  // Reset new attribute inputs when node changes to avoid confusion
+  useEffect(() => {
+    setNewAttrKey('');
+    setNewAttrValue('');
+  }, [node?.id]);
 
   // Breadcrumbs Calculation
   const breadcrumbs = useMemo(() => {
@@ -108,27 +116,38 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   // --- ATTRIBUTE MANAGERS ---
   const handleAddAttribute = () => {
     if (!newAttrKey.trim()) return;
+
     const newAttr: NodeAttribute = {
         id: generateId('attr'),
-        key: newAttrKey,
+        key: newAttrKey.trim(),
         value: newAttrValue,
         type: 'text'
     };
-    const currentAttributes = node.attributes || [];
-    onUpdate(node.id, { attributes: [...currentAttributes, newAttr] });
+    
+    // SAFE UPDATE: Ensure we create a new array reference
+    const currentAttributes = Array.isArray(node.attributes) ? [...node.attributes] : [];
+    const updatedAttributes = [...currentAttributes, newAttr];
+    
+    onUpdate(node.id, { attributes: updatedAttributes });
+    
+    // Clear inputs
     setNewAttrKey('');
     setNewAttrValue('');
   };
 
   const handleUpdateAttribute = (attrId: string, field: keyof NodeAttribute, value: string) => {
-      const updated = (node.attributes || []).map(a => 
+      const currentAttributes = Array.isArray(node.attributes) ? node.attributes : [];
+      
+      const updated = currentAttributes.map(a => 
           a.id === attrId ? { ...a, [field]: value } : a
       );
+      
       onUpdate(node.id, { attributes: updated });
   };
 
   const handleDeleteAttribute = (attrId: string) => {
-      const updated = (node.attributes || []).filter(a => a.id !== attrId);
+      const currentAttributes = Array.isArray(node.attributes) ? node.attributes : [];
+      const updated = currentAttributes.filter(a => a.id !== attrId);
       onUpdate(node.id, { attributes: updated });
   };
 

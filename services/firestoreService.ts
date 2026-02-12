@@ -59,6 +59,23 @@ const saveLocalTemplates = (list: HotelTemplate[]) => {
   localStorage.setItem(LS_KEYS.TEMPLATES_LIST, JSON.stringify(list));
 };
 
+// Helper: Recursively remove undefined values for Firestore
+const sanitizeForFirestore = (obj: any): any => {
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForFirestore);
+  } else if (obj !== null && typeof obj === 'object') {
+    const newObj: any = {};
+    Object.keys(obj).forEach(key => {
+      const val = obj[key];
+      if (val !== undefined) {
+        newObj[key] = sanitizeForFirestore(val);
+      }
+    });
+    return newObj;
+  }
+  return obj;
+};
+
 // --- SCALABLE FIRESTORE ARCHITECTURE (SHARDING) ---
 
 /**
@@ -122,7 +139,8 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
 
     // 4. ROOT UPDATE
     // Save metadata + order to the main document
-    batch.set(hotelRef, { ...rootMetadata, categoryOrder });
+    // Sanitize to remove undefined fields which Firestore hates
+    batch.set(hotelRef, sanitizeForFirestore({ ...rootMetadata, categoryOrder }));
 
     // 5. CHILDREN UPDATE (Sub-Collection)
     const currentChildIds = new Set<string>();
@@ -135,8 +153,8 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
 
         const childRef = doc(structureRef, childId);
         
-        // Add to batch
-        batch.set(childRef, child);
+        // Add to batch with sanitation
+        batch.set(childRef, sanitizeForFirestore(child));
         currentChildIds.add(childId);
     });
 

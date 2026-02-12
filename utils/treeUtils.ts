@@ -1,9 +1,9 @@
 
 import { HotelNode } from "../types";
 
-// Generate a simple unique ID
+// Generate a simple unique ID with high collision resistance
 export const generateId = (prefix: string = 'node'): string => {
-  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
 // Modern, fast deep clone using native browser API
@@ -49,6 +49,8 @@ export const findPathToNode = (root: HotelNode, targetId: string): HotelNode[] |
  */
 export const updateNodeInTree = (root: HotelNode, targetId: string, updates: Partial<HotelNode>): HotelNode => {
   if (String(root.id) === String(targetId)) {
+    // When updating, ensure we create a new object reference.
+    // Explicitly merge to avoid any potential prototype issues or loss of data.
     return { ...root, ...updates };
   }
 
