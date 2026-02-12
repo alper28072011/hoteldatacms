@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from './types';
 import { 
@@ -215,11 +216,12 @@ const App: React.FC = () => {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, targetId: string) => {
+  // UPDATED: Now correctly handles the position argument ('inside' | 'before' | 'after')
+  const handleDrop = (e: React.DragEvent, targetId: string, position: 'inside' | 'before' | 'after') => {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData('nodeId');
     if (sourceId && sourceId !== targetId) {
-      moveNode(sourceId, targetId, 'inside');
+      moveNode(sourceId, targetId, position);
     }
   };
 
