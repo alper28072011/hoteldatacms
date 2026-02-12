@@ -319,7 +319,13 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   const valueMatch = node.value?.toLowerCase().includes(lowerQuery);
   const tagsMatch = node.tags?.some(tag => tag.toLowerCase().includes(lowerQuery));
   
-  const isMatch = nameMatch || valueMatch || tagsMatch;
+  // CRITICAL UPDATE: Search inside Attributes/Properties as well
+  const attributesMatch = node.attributes?.some(attr => 
+    attr.key.toLowerCase().includes(lowerQuery) || 
+    attr.value.toLowerCase().includes(lowerQuery)
+  );
+  
+  const isMatch = nameMatch || valueMatch || tagsMatch || attributesMatch;
 
   let filteredChildren: HotelNode[] = [];
   if (node.children) {
@@ -460,7 +466,11 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   // Flatten attributes into the semantic object for AI
   if (node.attributes) {
       node.attributes.forEach((attr: any) => {
-          semanticData[attr.key] = attr.value;
+          // Robustly handle keys to prevent JSON issues
+          const safeKey = attr.key.trim();
+          if (safeKey) {
+             semanticData[safeKey] = attr.value;
+          }
       });
       delete semanticData.attributes; // Remove raw array
   }

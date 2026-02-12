@@ -78,9 +78,14 @@ export const chatWithData = async (
     const systemInstruction = `You are an Advanced Hotel Guest Assistant (AI). 
     Current Time: ${now.toLocaleString()}
     
-    CONTEXT:
-    You have access to the live hotel database below. Each item has a "_path" field showing where it belongs (e.g., "Main Restaurant > Dinner > Burgers").
-    Use this structure to give precise answers.
+    CRITICAL INSTRUCTION:
+    You have access to the live hotel database below in JSON format.
+    Every item (like a TV Channel, Dish, or Room) may have dynamic "Properties" flattened into the JSON object (e.g., "Dil": "Almanca", "Price": "10$", "Cuisine": "Italian").
+    
+    WHEN ANSWERING:
+    1. Look specifically for these dynamic attributes to filter answers.
+    2. If a user asks "Which channels are German?", look for items where "Dil" (Language) is "Almanca" (German).
+    3. Use the "_path" field to understand context (e.g., "Main Restaurant > Dinner > Burgers").
     
     HOTEL DATABASE (JSON):
     ${jsonContext}
