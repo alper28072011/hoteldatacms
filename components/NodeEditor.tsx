@@ -7,8 +7,8 @@ import { useHotel } from '../contexts/HotelContext';
 import { 
   LayoutDashboard, BrainCircuit, Sparkles, Loader2, 
   MapPin, Clock, ChevronRight, Check, Plus, 
-  List, FileText, Info, X, Calendar, DollarSign, 
-  Ticket, Trash2, Pencil, Save
+  List, FileText, CircleHelp, X, Calendar, DollarSign, 
+  Ticket, Trash2, Pencil, Save, Box
 } from 'lucide-react';
 
 interface NodeEditorProps {
@@ -26,7 +26,7 @@ const DAYS_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satu
 const ToggleSwitch = ({ label, checked, onChange, icon: Icon }: { label: string, checked: boolean, onChange: (val: boolean) => void, icon?: any }) => (
   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 hover:border-blue-300 transition-colors cursor-pointer" onClick={() => onChange(!checked)}>
     <div className="flex items-center gap-2">
-      {Icon && <Icon size={16} className={`text-slate-500 ${checked ? 'text-blue-600' : ''}`} />}
+      {Icon ? <Icon size={16} className={`text-slate-500 ${checked ? 'text-blue-600' : ''}`} /> : <Box size={16} />}
       <span className={`text-sm font-medium ${checked ? 'text-slate-800' : 'text-slate-500'}`}>{label}</span>
     </div>
     <div className={`w-10 h-5 flex items-center rounded-full p-1 duration-300 ease-in-out ${checked ? 'bg-blue-600' : 'bg-slate-300'}`}>
@@ -215,7 +215,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
                 <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                        {subNode.type === 'qa_pair' ? <Info size={16} className="text-blue-500"/> : <FileText size={16} className="text-amber-500"/>}
+                        {subNode.type === 'qa_pair' ? <CircleHelp size={16} className="text-blue-500"/> : <FileText size={16} className="text-amber-500"/>}
                         {subNode.type === 'qa_pair' ? 'Edit FAQ' : 'Edit Note'}
                     </h3>
                     <button onClick={() => setEditingSubNodeId(null)} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>
@@ -510,7 +510,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col xl:col-span-2">
                  <div className="bg-slate-50/80 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <Info size={16} className="text-violet-500" />
+                        <CircleHelp size={16} className="text-violet-500" />
                         <h3 className="text-sm font-bold text-slate-700">Detailed Information & FAQs</h3>
                     </div>
                     <div className="flex gap-2">
@@ -536,7 +536,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     className="group flex items-start gap-3 p-3 bg-white border border-slate-100 hover:border-blue-300 hover:shadow-md rounded-lg cursor-pointer transition-all"
                                  >
                                      <div className={`mt-0.5 ${sub.type === 'qa_pair' ? 'text-violet-500' : 'text-amber-500'}`}>
-                                         {sub.type === 'qa_pair' ? <Info size={16}/> : <FileText size={16}/>}
+                                         {sub.type === 'qa_pair' ? <CircleHelp size={16}/> : <FileText size={16}/>}
                                      </div>
                                      <div className="flex-1 min-w-0">
                                          <div className="flex justify-between">
