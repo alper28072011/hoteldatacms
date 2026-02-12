@@ -1,8 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { HotelNode } from '../types';
-import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield, GripVertical } from 'lucide-react';
-import { useHotel } from '../contexts/HotelContext';
+import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield } from 'lucide-react'; // GÜNCELLENDİ
 
 interface TreeViewNodeProps {
   node: HotelNode;
@@ -11,6 +9,9 @@ interface TreeViewNodeProps {
   onAddChild: (parentId: string) => void;
   level?: number;
   forceExpand?: boolean;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragOver: (e: React.DragEvent, id: string) => void;
+  onDrop: (e: React.DragEvent, targetId: string) => void;
 }
 
 const getNodeIcon = (type: string) => {
@@ -20,7 +21,7 @@ const getNodeIcon = (type: string) => {
     case 'list': return <List size={14} className="text-indigo-500" />;
     case 'item': return <FileText size={14} className="text-slate-500" />;
     case 'event': return <Calendar size={14} className="text-purple-500" />;
-    case 'qa_pair': return <CircleHelp size={14} className="text-green-500" />;
+    case 'qa_pair': return <CircleHelp size={14} className="text-green-500" />; // GÜNCELLENDİ
     case 'policy': return <Shield size={14} className="text-red-500" />;
     default: return <FileText size={14} className="text-gray-400" />;
   }
@@ -32,18 +33,16 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   onSelect, 
   onAddChild, 
   level = 0,
-  forceExpand = false
+  forceExpand = false,
+  onDragStart,
+  onDragOver,
+  onDrop
 }) => {
-  const { moveNode } = useHotel();
   const [isExpanded, setIsExpanded] = useState(level === 0);
   const [hasRenderedChildren, setHasRenderedChildren] = useState(level === 0 || forceExpand);
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [dropPosition, setDropPosition] = useState<'none' | 'inside' | 'before' | 'after'>('none');
-
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === node.id;
-  const isRoot = node.id === 'root';
 
   useEffect(() => {
     if (forceExpand && hasChildren) {
@@ -69,101 +68,42 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   }
 
   const handleDragStart = (e: React.DragEvent) => {
-    if (isRoot) {
-      e.preventDefault();
-      return;
-    }
-    e.dataTransfer.setData('text/plain', node.id);
-    e.dataTransfer.effectAllowed = 'move';
-    setIsDragging(true);
-  };
-
-  const handleDragEnd = () => {
-    setIsDragging(false);
-    setDropPosition('none');
+    e.stopPropagation();
+    onDragStart(e, node.id);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
+    e.preventDefault(); 
     e.stopPropagation();
-
-    if (isDragging) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    const height = rect.height;
-
-    if (isRoot) {
-       setDropPosition('inside');
-       return;
-    }
-
-    if (y < height * 0.25) {
-      setDropPosition('before');
-    } else if (y > height * 0.75) {
-      setDropPosition('after');
-    } else {
-      setDropPosition('inside');
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-     e.preventDefault();
-     setDropPosition('none');
+    onDragOver(e, node.id);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDropPosition('none');
-
-    const sourceId = e.dataTransfer.getData('text/plain');
-    if (sourceId && sourceId !== node.id) {
-       moveNode(sourceId, node.id, dropPosition === 'none' ? 'inside' : dropPosition);
-       if (dropPosition === 'inside' || isRoot) {
-         setIsExpanded(true);
-         setHasRenderedChildren(true);
-       }
-    }
-  };
-
-  const getDropStyles = () => {
-    switch (dropPosition) {
-      case 'inside': return 'bg-blue-100 ring-1 ring-blue-300';
-      case 'before': return 'border-t-2 border-blue-500';
-      case 'after': return 'border-b-2 border-blue-500';
-      default: return isSelected ? 'bg-blue-50 border-blue-500' : 'hover:bg-slate-50 border-transparent';
-    }
+    onDrop(e, node.id);
   };
 
   return (
-    <div className={`select-none ${isDragging ? 'opacity-50' : ''}`}>
+    <div className="select-none">
       <div 
-        draggable={!isRoot}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
         className={`
-          group relative flex items-center py-1.5 pr-4 cursor-pointer transition-all duration-150 border-l-2
-          ${getDropStyles()}
+          group relative flex items-center py-1.5 pr-4 cursor-pointer transition-colors duration-200 border-l-2
+          ${isSelected ? 'bg-blue-50 border-blue-500' : 'hover:bg-slate-50 border-transparent'}
         `}
         style={{ paddingLeft: `${(level * 12) + 8}px` }}
         onClick={handleSelect}
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         <div className="flex items-center flex-1 overflow-hidden">
-          {!isRoot && (
-             <span className="opacity-0 group-hover:opacity-30 cursor-grab mr-1 -ml-1 hover:opacity-100 transition-opacity">
-                <GripVertical size={10} />
-             </span>
-          )}
-
           <button 
             type="button"
             onClick={handleExpand}
             className={`
-                p-0.5 rounded mr-1 text-slate-400 shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)]
+                p-0.5 rounded mr-1 text-slate-400 shrink-0 transition-transform duration-300
                 ${hasChildren ? 'opacity-100 hover:bg-slate-200 hover:text-slate-600' : 'opacity-0 cursor-default'}
                 ${isExpanded ? 'rotate-90' : 'rotate-0'}
             `}
@@ -200,7 +140,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
 
       <div 
         className={`
-            grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1.0)] contain-content
+            grid transition-[grid-template-rows] duration-300 ease-out contain-content
             ${isExpanded && hasChildren ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}
         `}
       >
@@ -217,6 +157,9 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
                   onAddChild={onAddChild}
                   level={level + 1}
                   forceExpand={forceExpand}
+                  onDragStart={onDragStart}
+                  onDragOver={onDragOver}
+                  onDrop={onDrop}
                 />
             ))}
         </div>
@@ -229,7 +172,6 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   const isNowSelected = next.selectedId === next.node.id;
   const isSelectionChanged = wasSelected !== isNowSelected;
   const isExpandChanged = prev.forceExpand !== next.forceExpand;
-  
   return isSameNode && !isSelectionChanged && !isExpandChanged;
 });
 
