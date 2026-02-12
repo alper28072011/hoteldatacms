@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { HotelNode, DataComparisonReport, SuggestedAction } from '../types';
 import { runDataCheck } from '../services/geminiService';
-import { X, Scale, Globe, FileText, Type, ArrowRight, Loader2, CircleCheck, TriangleAlert, CircleAlert, CirclePlus, CircleMinus, ChevronDown, ChevronUp, Download, RefreshCw } from 'lucide-react';
+import { X, Scale, Globe, FileText, Type, ArrowRight, Loader2, Check, TriangleAlert, Info, Plus, Minus, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface DataCheckModalProps {
   isOpen: boolean;
@@ -22,7 +22,6 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
   const [report, setReport] = useState<DataComparisonReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  // State for expandable rows and tracking fixed items
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [fixedItemIds, setFixedItemIds] = useState<Set<string>>(new Set());
 
@@ -38,7 +37,7 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
     setIsChecking(true);
     setReport(null);
     setError(null);
-    setFixedItemIds(new Set()); // Reset fixed items
+    setFixedItemIds(new Set());
 
     try {
       let inputValue = '';
@@ -53,10 +52,12 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
       } else if (activeTab === 'file') {
         if (!selectedFile) throw new Error("Please upload a file.");
         
-        // Convert to base64
         inputValue = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.onload = () => {
+              const res = reader.result as string;
+              resolve(res.includes('base64,') ? res.split('base64,')[1] : res);
+          };
           reader.onerror = reject;
           reader.readAsDataURL(selectedFile);
         });
@@ -88,21 +89,11 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
 
   const getCategoryIcon = (cat: string) => {
     switch (cat) {
-      case 'match': return <CircleCheck size={16} className="text-emerald-500" />;
+      case 'match': return <Check size={16} className="text-emerald-500" />;
       case 'conflict': return <TriangleAlert size={16} className="text-red-500" />;
-      case 'missing_internal': return <CirclePlus size={16} className="text-blue-500" />;
-      case 'missing_external': return <CircleMinus size={16} className="text-slate-400" />;
-      default: return <CircleAlert size={16} />;
-    }
-  };
-
-  const getCategoryLabel = (cat: string) => {
-    switch (cat) {
-      case 'match': return 'Consistent';
-      case 'conflict': return 'Conflict Found';
-      case 'missing_internal': return 'Missing in DB';
-      case 'missing_external': return 'Missing in Target';
-      default: return cat;
+      case 'missing_internal': return <Plus size={16} className="text-blue-500" />;
+      case 'missing_external': return <Minus size={16} className="text-slate-400" />;
+      default: return <Info size={16} />;
     }
   };
 
@@ -110,7 +101,6 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl flex flex-col max-h-[90vh] overflow-hidden">
         
-        {/* Header */}
         <div className="bg-gradient-to-r from-cyan-600 to-teal-600 p-6 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3 text-white">
             <div className="bg-white/20 p-2 rounded-lg">
@@ -126,10 +116,9 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
            
-           {/* Sidebar: Inputs */}
+           {/* Sidebar */}
            <div className="w-full md:w-80 bg-slate-50 border-r border-slate-200 p-6 flex flex-col shrink-0 overflow-y-auto">
               
               <div className="mb-6">
@@ -168,176 +157,151 @@ const DataCheckModal: React.FC<DataCheckModalProps> = ({ isOpen, onClose, data, 
                           className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
                        />
                        <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                          The AI will browse this page live (using Google Search Grounding) and cross-reference it with your database.
+                          The AI will browse the URL content and compare it with your current structure.
                        </p>
                     </div>
                  )}
 
                  {activeTab === 'text' && (
                     <div>
-                       <label className="block text-sm font-semibold text-slate-700 mb-2">Target Text</label>
+                       <label className="block text-sm font-semibold text-slate-700 mb-2">Paste Content</label>
                        <textarea 
                           value={textInput}
                           onChange={(e) => setTextInput(e.target.value)}
-                          placeholder="Paste a review, an email, or a rule list here..."
-                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none h-40 resize-none"
+                          placeholder="Paste menu items, price lists, or policy text here..."
+                          className="w-full h-40 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none resize-none"
                        />
                     </div>
                  )}
 
                  {activeTab === 'file' && (
                     <div>
+                       <label className="block text-sm font-semibold text-slate-700 mb-2">Upload File</label>
                        <div 
-                          className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-cyan-400 hover:bg-cyan-50 transition-colors"
+                          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${selectedFile ? 'border-cyan-400 bg-cyan-50' : 'border-slate-300 hover:border-cyan-400'}`}
                           onClick={() => fileInputRef.current?.click()}
                        >
-                          {selectedFile ? (
-                             <div className="text-cyan-700 font-medium text-sm truncate">{selectedFile.name}</div>
-                          ) : (
-                             <div className="text-slate-500 text-sm">Click to upload PDF/Image</div>
-                          )}
+                           {selectedFile ? (
+                               <div>
+                                   <FileText className="mx-auto text-cyan-600 mb-2" size={24}/>
+                                   <div className="text-sm font-medium text-slate-700 truncate">{selectedFile.name}</div>
+                               </div>
+                           ) : (
+                               <div className="text-slate-400">
+                                   <span className="block text-sm">Click to upload</span>
+                                   <span className="text-xs">PDF, Image, or JSON</span>
+                               </div>
+                           )}
                        </div>
-                       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,.txt,.md,image/*"/>
+                       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
                     </div>
                  )}
               </div>
 
               {error && (
-                 <div className="mt-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100 flex items-start gap-2">
-                    <TriangleAlert size={14} className="shrink-0 mt-0.5" />
-                    {error}
-                 </div>
+                  <div className="mt-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100 flex items-start gap-2">
+                      <TriangleAlert size={14} className="shrink-0 mt-0.5" />
+                      {error}
+                  </div>
               )}
 
-              <button 
-                 onClick={handleRunCheck}
-                 disabled={isChecking}
-                 className="mt-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-              >
-                 {isChecking ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
-                 Run Comparison
-              </button>
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                 <button 
+                    onClick={handleRunCheck}
+                    disabled={isChecking}
+                    className="w-full bg-cyan-600 hover:bg-cyan-700 text-white py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                 >
+                    {isChecking ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                    Run Comparison
+                 </button>
+              </div>
            </div>
 
-           {/* Main Content: Results */}
-           <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden relative">
-              
-              {!report && !isChecking && (
-                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                    <Scale size={64} className="mb-4 opacity-20" />
-                    <p className="text-lg font-medium">Ready to Validate</p>
-                    <p className="text-sm">Select a source and run the check to see the diff report.</p>
-                 </div>
-              )}
-
-              {isChecking && (
-                 <div className="flex flex-col items-center justify-center h-full text-cyan-600">
-                    <Loader2 size={48} className="animate-spin mb-4" />
-                    <p className="font-bold text-lg">Analyzing Data...</p>
-                    <p className="text-sm text-slate-500 mt-2">Comparing internal nodes against external source.</p>
-                 </div>
-              )}
-
-              {report && (
-                 <div className="flex flex-col h-full overflow-hidden">
-                    <div className="p-6 border-b border-slate-200 bg-white">
-                       <h3 className="text-lg font-bold text-slate-800 mb-1">Validation Report</h3>
-                       <p className="text-sm text-slate-600 leading-relaxed">{report.summary}</p>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-6 space-y-3">
-                       {report.items.map((item) => {
-                          const isExpanded = expandedItemId === item.id;
-                          const isFixed = fixedItemIds.has(item.id);
-                          const hasAction = (item.category === 'conflict' || item.category === 'missing_internal') && item.suggestedAction;
-
-                          return (
-                            <div 
-                                key={item.id} 
-                                className={`
-                                    border rounded-lg transition-all duration-300 overflow-hidden cursor-pointer shadow-sm hover:shadow-md
-                                    ${item.category === 'conflict' ? 'bg-red-50/50 border-red-200' : 
-                                      item.category === 'missing_internal' ? 'bg-blue-50/50 border-blue-200' :
-                                      item.category === 'match' ? 'bg-emerald-50/50 border-emerald-200' : 'bg-white border-slate-200'}
-                                    ${isFixed ? 'opacity-50 grayscale' : ''}
-                                `}
-                                onClick={() => toggleExpand(item.id)}
-                            >
-                                {/* Header Row */}
-                                <div className="p-4 flex gap-4 items-center">
-                                    <div className="mt-0.5 shrink-0">{getCategoryIcon(item.category)}</div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-bold text-slate-800 text-sm">{item.field}</span>
-                                            <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
-                                                isFixed ? 'bg-emerald-600 text-white' :
-                                                item.category === 'conflict' ? 'bg-red-100 text-red-700' :
-                                                item.category === 'missing_internal' ? 'bg-blue-100 text-blue-700' :
-                                                item.category === 'match' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                                            }`}>
-                                                {isFixed ? 'UPDATED' : getCategoryLabel(item.category)}
-                                            </span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1 truncate">{item.description}</p>
-                                    </div>
-                                    <div className="shrink-0 text-slate-400">
-                                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                    </div>
-                                </div>
-
-                                {/* Detailed View (Expandable) */}
-                                {isExpanded && (
-                                    <div className="px-4 pb-4 pt-0 border-t border-slate-200/50 bg-white/50 animate-in slide-in-from-top-2">
-                                        
-                                        <div className="grid grid-cols-2 gap-6 mt-4">
-                                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Internal Database</div>
-                                                <div className="font-mono text-sm text-slate-700 break-words">
-                                                    {item.internalValue ? item.internalValue : <span className="text-slate-400 italic">Not found</span>}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">External Source</div>
-                                                <div className="font-mono text-sm text-slate-700 break-words">
-                                                    {item.externalValue ? item.externalValue : <span className="text-slate-400 italic">Not found</span>}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {hasAction && !isFixed && (
-                                            <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
-                                                <button 
-                                                    onClick={(e) => handleApplyFix(e, item)}
-                                                    className={`
-                                                        px-4 py-2 rounded-lg text-sm font-bold text-white flex items-center gap-2 shadow-sm transition-all
-                                                        ${item.category === 'missing_internal' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'}
-                                                    `}
-                                                >
-                                                    {item.category === 'missing_internal' ? <Download size={16} /> : <RefreshCw size={16} />}
-                                                    {item.category === 'missing_internal' ? 'Import to Database' : 'Update Database'}
+           {/* Results Area */}
+           <div className="flex-1 bg-white flex flex-col min-h-0">
+               {!report ? (
+                   <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
+                       <Scale size={48} className="mb-4 text-cyan-200" />
+                       <p className="text-lg font-medium text-slate-500">Ready to Compare</p>
+                       <p className="text-sm">Select a source and run the check to see discrepancies.</p>
+                   </div>
+               ) : (
+                   <div className="flex flex-col h-full">
+                       <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+                           <h3 className="font-bold text-slate-700">Analysis Report</h3>
+                           <p className="text-sm text-slate-500 mt-1">{report.summary}</p>
+                       </div>
+                       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                           {report.items.map((item) => {
+                               const isFixed = fixedItemIds.has(item.id);
+                               const isExpanded = expandedItemId === item.id;
+                               
+                               return (
+                                   <div key={item.id} className={`border rounded-lg transition-all ${isFixed ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                       <div 
+                                           className="p-4 flex items-center justify-between cursor-pointer"
+                                           onClick={() => toggleExpand(item.id)}
+                                       >
+                                           <div className="flex items-center gap-3">
+                                               <div className={`p-2 rounded-full bg-slate-50 border border-slate-100`}>
+                                                   {getCategoryIcon(item.category)}
+                                               </div>
+                                               <div>
+                                                   <div className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                                       {item.field}
+                                                       <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase">{item.category}</span>
+                                                   </div>
+                                                   <div className="text-xs text-slate-500 mt-0.5">{item.description}</div>
+                                               </div>
+                                           </div>
+                                           <div className="flex items-center gap-2">
+                                                {item.suggestedAction && !isFixed && (
+                                                    <button 
+                                                        onClick={(e) => handleApplyFix(e, item)}
+                                                        className="px-3 py-1.5 text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 rounded hover:bg-cyan-100 flex items-center gap-1.5 transition-colors"
+                                                    >
+                                                        Apply Fix
+                                                    </button>
+                                                )}
+                                                {isFixed && (
+                                                    <span className="px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 rounded flex items-center gap-1">
+                                                        <Check size={12} /> Fixed
+                                                    </span>
+                                                )}
+                                                <button className="text-slate-400 hover:text-slate-600">
+                                                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                                 </button>
-                                            </div>
-                                        )}
-
-                                        {isFixed && (
-                                            <div className="mt-4 text-center text-emerald-600 font-medium text-sm flex items-center justify-center gap-2">
-                                                <CircleCheck size={16} /> Action Applied Successfully
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                          );
-                       })}
-                       
-                       {report.items.length === 0 && (
-                          <div className="text-center py-10 text-slate-400 italic">No discrepancies or specific matches found.</div>
-                       )}
-                    </div>
-                 </div>
-              )}
+                                           </div>
+                                       </div>
+                                       
+                                       {isExpanded && (
+                                           <div className="px-4 pb-4 pt-0 text-xs border-t border-slate-50 bg-slate-50/30">
+                                               <div className="grid grid-cols-2 gap-4 mt-3">
+                                                   <div className="bg-red-50 p-2 rounded border border-red-100">
+                                                       <div className="font-bold text-red-800 mb-1">Internal Value</div>
+                                                       <div className="font-mono text-red-600 break-all">{item.internalValue || 'N/A'}</div>
+                                                   </div>
+                                                   <div className="bg-emerald-50 p-2 rounded border border-emerald-100">
+                                                       <div className="font-bold text-emerald-800 mb-1">External Source</div>
+                                                       <div className="font-mono text-emerald-600 break-all">{item.externalValue || 'N/A'}</div>
+                                                   </div>
+                                               </div>
+                                           </div>
+                                       )}
+                                   </div>
+                               );
+                           })}
+                           {report.items.length === 0 && (
+                               <div className="text-center py-10 text-slate-400">
+                                   <Check size={32} className="mx-auto mb-2 text-emerald-400" />
+                                   <p>Everything looks consistent!</p>
+                               </div>
+                           )}
+                       </div>
+                   </div>
+               )}
            </div>
+
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { HotelNode } from '../types';
 import { saveTemplate } from '../services/firestoreService';
-import { X, Save, Check, CircleAlert, Loader2 } from 'lucide-react';
+import { X, Save, Check, TriangleAlert, Loader2 } from 'lucide-react';
 
 interface TemplateModalProps {
   isOpen: boolean;
@@ -87,7 +87,7 @@ const TemplateModal: React.FC<TemplateModalProps> = ({ isOpen, onClose, data }) 
 
            {status === 'error' && (
               <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg text-sm">
-                 <CircleAlert size={16} /> Failed to save template.
+                 <TriangleAlert size={16} /> Failed to save template.
               </div>
            )}
         </div>
