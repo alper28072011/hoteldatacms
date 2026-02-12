@@ -46,6 +46,7 @@ const App: React.FC = () => {
     updateNode, 
     addChild, 
     deleteNode, 
+    moveNode, // Context action for moving
     saveStatus, 
     hasUnsavedChanges,
     forceSave 
@@ -189,6 +190,25 @@ const App: React.FC = () => {
          }
        } catch (e) { console.error(e); }
     });
+  };
+
+  // --- DRAG AND DROP HANDLERS ---
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('nodeId', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+  };
+
+  // UPDATED: Now accepts position from TreeViewNode's smart calculation
+  const handleDrop = (e: React.DragEvent, targetId: string, position: 'inside' | 'before' | 'after') => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('nodeId');
+    if (sourceId && sourceId !== targetId) {
+      moveNode(sourceId, targetId, position);
+    }
   };
 
   const handleExport = async (format: 'json' | 'clean-json' | 'csv' | 'txt') => {
@@ -444,6 +464,9 @@ const App: React.FC = () => {
                         onSelect={(id) => { setSelectedNodeId(id); setMobileMenuOpen(false); }}
                         onAddChild={(parentId) => addChild(parentId)} 
                         forceExpand={!!searchQuery}
+                        onDragStart={handleDragStart}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
                     />
                 </div>
             </div>

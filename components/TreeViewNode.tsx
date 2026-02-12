@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { HotelNode } from '../types';
-import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield } from 'lucide-react'; // GÜNCELLENDİ
+import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield } from 'lucide-react';
 
 interface TreeViewNodeProps {
   node: HotelNode;
@@ -11,7 +12,8 @@ interface TreeViewNodeProps {
   forceExpand?: boolean;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragOver: (e: React.DragEvent, id: string) => void;
-  onDrop: (e: React.DragEvent, targetId: string) => void;
+  // Updated signature to include position
+  onDrop: (e: React.DragEvent, targetId: string, position: 'inside' | 'before' | 'after') => void;
 }
 
 const getNodeIcon = (type: string) => {
@@ -21,7 +23,7 @@ const getNodeIcon = (type: string) => {
     case 'list': return <List size={14} className="text-indigo-500" />;
     case 'item': return <FileText size={14} className="text-slate-500" />;
     case 'event': return <Calendar size={14} className="text-purple-500" />;
-    case 'qa_pair': return <CircleHelp size={14} className="text-green-500" />; // GÜNCELLENDİ
+    case 'qa_pair': return <CircleHelp size={14} className="text-green-500" />;
     case 'policy': return <Shield size={14} className="text-red-500" />;
     default: return <FileText size={14} className="text-gray-400" />;
   }
@@ -35,11 +37,16 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   level = 0,
   forceExpand = false,
   onDragStart,
-  onDragOver,
+  // onDragOver prop is kept for compatibility but logic is handled internally for specific zones
   onDrop
 }) => {
   const [isExpanded, setIsExpanded] = useState(level === 0);
   const [hasRenderedChildren, setHasRenderedChildren] = useState(level === 0 || forceExpand);
+  
+  // New State for Smart Drop Zones
+  const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | 'inside' | null>(null);
+  
+  const nodeRef = useRef<HTMLDivElement>(null);
 
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === node.id;
@@ -67,43 +74,87 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
       onSelect(node.id);
   }
 
-  const handleDragStart = (e: React.DragEvent) => {
+  const handleDragStartInternal = (e: React.DragEvent) => {
     e.stopPropagation();
     onDragStart(e, node.id);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault(); 
+  // --- SMART DRAG OVER LOGIC ---
+  const handleDragOverInternal = (e: React.DragEvent) => {
+    e.preventDefault(); // Necessary to allow dropping
     e.stopPropagation();
-    onDragOver(e, node.id);
+
+    if (!nodeRef.current) return;
+
+    const rect = nodeRef.current.getBoundingClientRect();
+    const y = e.clientY - rect.top; // Y position relative to the element
+    const height = rect.height;
+
+    // Logic: Top 25% -> Before, Bottom 25% -> After, Middle 50% -> Inside
+    if (y < height * 0.25) {
+        setDragOverPosition('top');
+    } else if (y > height * 0.75) {
+        setDragOverPosition('bottom');
+    } else {
+        setDragOverPosition('inside');
+    }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDragLeaveInternal = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverPosition(null);
+  };
+
+  const handleDropInternal = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    onDrop(e, node.id);
+    
+    let position: 'inside' | 'before' | 'after' = 'inside';
+    
+    if (dragOverPosition === 'top') position = 'before';
+    else if (dragOverPosition === 'bottom') position = 'after';
+    
+    // Safety: Reset state
+    setDragOverPosition(null);
+    
+    // Check if dropping on itself (handled by parent usually, but good to check)
+    const sourceId = e.dataTransfer.getData('nodeId');
+    if (sourceId === node.id) return;
+
+    onDrop(e, node.id, position);
   };
 
   return (
-    <div className="select-none">
+    <div className="select-none relative">
       <div 
+        ref={nodeRef}
         className={`
-          group relative flex items-center py-1.5 pr-4 cursor-pointer transition-colors duration-200 border-l-2
-          ${isSelected ? 'bg-blue-50 border-blue-500' : 'hover:bg-slate-50 border-transparent'}
+          group relative flex items-center py-1.5 pr-4 cursor-pointer transition-all duration-200 border-l-2
+          ${isSelected ? 'bg-blue-50 border-blue-500' : 'border-transparent hover:bg-slate-50'}
+          ${dragOverPosition === 'inside' ? 'bg-blue-100 ring-1 ring-inset ring-blue-300' : ''}
         `}
         style={{ paddingLeft: `${(level * 12) + 8}px` }}
         onClick={handleSelect}
         draggable
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
+        onDragStart={handleDragStartInternal}
+        onDragOver={handleDragOverInternal}
+        onDragLeave={handleDragLeaveInternal}
+        onDrop={handleDropInternal}
       >
-        <div className="flex items-center flex-1 overflow-hidden">
+        {/* --- VISUAL DROP INDICATORS --- */}
+        {dragOverPosition === 'top' && (
+            <div className="absolute top-0 left-0 w-full h-[2px] bg-blue-500 z-50 pointer-events-none shadow-sm" />
+        )}
+        {dragOverPosition === 'bottom' && (
+            <div className="absolute bottom-0 left-0 w-full h-[2px] bg-blue-500 z-50 pointer-events-none shadow-sm" />
+        )}
+
+        <div className="flex items-center flex-1 overflow-hidden pointer-events-none"> {/* content pointer-events-none to prevent flickering */}
           <button 
             type="button"
             onClick={handleExpand}
             className={`
-                p-0.5 rounded mr-1 text-slate-400 shrink-0 transition-transform duration-300
+                p-0.5 rounded mr-1 text-slate-400 shrink-0 transition-transform duration-300 pointer-events-auto
                 ${hasChildren ? 'opacity-100 hover:bg-slate-200 hover:text-slate-600' : 'opacity-0 cursor-default'}
                 ${isExpanded ? 'rotate-90' : 'rotate-0'}
             `}
@@ -130,7 +181,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
               setIsExpanded(true); 
               setHasRenderedChildren(true);
             }}
-            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm border border-slate-200 bg-white transition-colors"
+            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm border border-slate-200 bg-white transition-colors pointer-events-auto"
             title="Add Child"
           >
             <Plus size={12} />
@@ -158,7 +209,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
                   level={level + 1}
                   forceExpand={forceExpand}
                   onDragStart={onDragStart}
-                  onDragOver={onDragOver}
+                  onDragOver={(e) => {}} // No-op, handled internally
                   onDrop={onDrop}
                 />
             ))}
@@ -167,12 +218,10 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     </div>
   );
 }, (prev, next) => {
-  const isSameNode = prev.node === next.node;
-  const wasSelected = prev.selectedId === prev.node.id;
-  const isNowSelected = next.selectedId === next.node.id;
-  const isSelectionChanged = wasSelected !== isNowSelected;
-  const isExpandChanged = prev.forceExpand !== next.forceExpand;
-  return isSameNode && !isSelectionChanged && !isExpandChanged;
+  // RELAXED COMPARISON to fix "stuck selection" bugs.
+  // We strictly check if the node object reference changed or the selection state changed.
+  // We ignore function props as they are stable from App.tsx context/useCallbacks.
+  return prev.node === next.node && prev.selectedId === next.selectedId && prev.forceExpand === next.forceExpand;
 });
 
 export default TreeViewNode;
