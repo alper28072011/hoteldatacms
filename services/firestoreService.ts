@@ -12,10 +12,11 @@ import {
   query,
   select
 } from 'firebase/firestore';
-import { HotelNode, HotelSummary, HotelTemplate } from '../types';
+import { HotelNode, HotelSummary, HotelTemplate, AIPersona } from '../types';
 
 const HOTELS_COLLECTION = 'hotels';
 const STRUCTURE_SUBCOLLECTION = 'structure'; // The sub-collection for sharded data
+const PERSONAS_SUBCOLLECTION = 'personas'; // New sub-collection for personas
 const TEMPLATES_COLLECTION = 'templates';
 
 // --- LOCAL STORAGE HELPERS (OFFLINE FALLBACK & HYBRID SYNC) ---
@@ -23,6 +24,7 @@ const LS_KEYS = {
   HOTELS_LIST: 'cms_hotels_list',
   TEMPLATES_LIST: 'cms_templates_list',
   HOTEL_PREFIX: 'cms_hotel_data_',
+  PERSONAS_PREFIX: 'cms_personas_',
 };
 
 const getLocalHotelsList = (): HotelSummary[] => {
@@ -58,6 +60,19 @@ const getLocalTemplates = (): HotelTemplate[] => {
 const saveLocalTemplates = (list: HotelTemplate[]) => {
   localStorage.setItem(LS_KEYS.TEMPLATES_LIST, JSON.stringify(list));
 };
+
+// Persona Local Storage Helpers
+const getLocalPersonas = (hotelId: string): AIPersona[] => {
+  try {
+    const data = localStorage.getItem(LS_KEYS.PERSONAS_PREFIX + hotelId);
+    return data ? JSON.parse(data) : [];
+  } catch (e) { return []; }
+};
+
+const saveLocalPersonas = (hotelId: string, personas: AIPersona[]) => {
+  localStorage.setItem(LS_KEYS.PERSONAS_PREFIX + hotelId, JSON.stringify(personas));
+};
+
 
 // Helper: Recursively remove undefined values for Firestore
 const sanitizeForFirestore = (obj: any): any => {
@@ -281,6 +296,45 @@ export const getHotelsList = async (): Promise<HotelSummary[]> => {
     console.warn("Firestore list failed. Using LocalStorage.", error);
     return getLocalHotelsList();
   }
+};
+
+// --- PERSONA SERVICES (SUB-COLLECTION) ---
+
+export const getPersonas = async (hotelId: string): Promise<AIPersona[]> => {
+    try {
+        const personasRef = collection(db, HOTELS_COLLECTION, hotelId, PERSONAS_SUBCOLLECTION);
+        const snapshot = await getDocs(personasRef);
+        const personas: AIPersona[] = [];
+        snapshot.forEach(doc => personas.push(doc.data() as AIPersona));
+        return personas;
+    } catch (e) {
+        console.warn("Fetching local personas.", e);
+        return getLocalPersonas(hotelId);
+    }
+};
+
+export const savePersona = async (hotelId: string, persona: AIPersona): Promise<void> => {
+    try {
+        const docRef = doc(db, HOTELS_COLLECTION, hotelId, PERSONAS_SUBCOLLECTION, persona.id);
+        await setDoc(docRef, persona);
+    } catch (e) {
+        console.warn("Saving persona locally.", e);
+        const current = getLocalPersonas(hotelId);
+        const index = current.findIndex(p => p.id === persona.id);
+        if (index >= 0) current[index] = persona;
+        else current.push(persona);
+        saveLocalPersonas(hotelId, current);
+    }
+};
+
+export const deletePersona = async (hotelId: string, personaId: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, HOTELS_COLLECTION, hotelId, PERSONAS_SUBCOLLECTION, personaId));
+    } catch (e) {
+        console.warn("Deleting persona locally.", e);
+        const current = getLocalPersonas(hotelId);
+        saveLocalPersonas(hotelId, current.filter(p => p.id !== personaId));
+    }
 };
 
 // --- TEMPLATE SERVICES ---

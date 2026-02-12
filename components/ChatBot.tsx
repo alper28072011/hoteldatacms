@@ -2,16 +2,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { HotelNode, ChatMessage } from '../types';
 import { chatWithData } from '../services/geminiService';
-import { Send, Bot, User, Sparkles } from 'lucide-react';
+import { useHotel } from '../contexts/HotelContext';
+import { Send, Bot, User, Sparkles, Settings2, UserCog, ChevronDown } from 'lucide-react';
 
 interface ChatBotProps {
   data: HotelNode;
+  onOpenPersonaModal?: () => void; // Callback to open modal
 }
 
 // Custom Renderer to handle Basic Markdown (Bold and Lists)
-// We avoid external libraries to keep it lightweight and stable
 const MessageRenderer = ({ text }: { text: string }) => {
-  // Helper to parse bold syntax **text**
   const parseBold = (str: string) => {
     const parts = str.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, index) => {
@@ -28,8 +28,6 @@ const MessageRenderer = ({ text }: { text: string }) => {
     <div className="space-y-1.5 leading-relaxed">
       {lines.map((line, i) => {
         const trimmed = line.trim();
-        
-        // Handle Bullet Points
         if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
           const content = trimmed.substring(2);
           return (
@@ -39,20 +37,20 @@ const MessageRenderer = ({ text }: { text: string }) => {
             </div>
           );
         }
-
-        // Handle Empty Lines (Paragraphs)
         if (!trimmed) {
           return <div key={i} className="h-2" />;
         }
-
-        // Standard Text
         return <div key={i}>{parseBold(line)}</div>;
       })}
     </div>
   );
 };
 
-const ChatBot: React.FC<ChatBotProps> = ({ data }) => {
+const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
+  const { personas, activePersonaId, setActivePersonaId } = useHotel();
+  
+  const activePersona = personas.find(p => p.id === activePersonaId) || null;
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -64,6 +62,20 @@ const ChatBot: React.FC<ChatBotProps> = ({ data }) => {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Reset chat when persona changes
+  useEffect(() => {
+     if (messages.length > 0) {
+         setMessages([{
+             id: 'system_reset_' + Date.now(),
+             sender: 'ai',
+             text: activePersona 
+                ? `System: Persona switched to "${activePersona.name}" (${activePersona.role}).` 
+                : "System: Switched to Default Assistant.",
+             timestamp: new Date()
+         }]);
+     }
+  }, [activePersonaId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -88,14 +100,13 @@ const ChatBot: React.FC<ChatBotProps> = ({ data }) => {
     setInput('');
     setIsTyping(true);
 
-    // Prepare history for API
     const history = messages.map(m => ({
         role: m.sender === 'user' ? 'user' : 'model',
         parts: [m.text]
     }));
 
-    // Call Gemini
-    const aiResponseText = await chatWithData(data, userMsg.text, history);
+    // Pass activePersona to service
+    const aiResponseText = await chatWithData(data, userMsg.text, history, activePersona);
 
     const aiMsg: ChatMessage = {
       id: (Date.now() + 1).toString(),
@@ -110,18 +121,44 @@ const ChatBot: React.FC<ChatBotProps> = ({ data }) => {
 
   return (
     <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200">
+      {/* Header */}
       <div className="h-20 px-4 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
-         <div className="flex items-center space-x-2">
-            <div className="bg-indigo-100 p-1.5 rounded-full text-indigo-600">
-                <Bot size={18} />
-            </div>
-            <h3 className="font-semibold text-slate-700 text-sm">Simulator</h3>
+         <div className="flex flex-col">
+             <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+                <Bot size={16} className="text-indigo-500" /> Simulator
+             </h3>
+             <div className="flex items-center gap-2 mt-1">
+                 {/* Persona Selector */}
+                 <div className="relative group">
+                     <select 
+                        value={activePersonaId} 
+                        onChange={(e) => setActivePersonaId(e.target.value)}
+                        className="appearance-none bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold py-1 pl-2 pr-6 rounded cursor-pointer hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                     >
+                         <option value="default">Default Assistant</option>
+                         {personas.map(p => (
+                             <option key={p.id} value={p.id}>{p.name}</option>
+                         ))}
+                     </select>
+                     <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                 </div>
+                 
+                 {/* Edit Button */}
+                 <button 
+                    onClick={onOpenPersonaModal}
+                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" 
+                    title="Manage Personas"
+                 >
+                    <Settings2 size={14} />
+                 </button>
+             </div>
          </div>
          <div className="flex items-center text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-            <Sparkles size={10} className="mr-1" /> Gemini 2.5 Flash
+            <Sparkles size={10} className="mr-1" /> Gemini 2.0 Flash
          </div>
       </div>
 
+      {/* Chat Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {messages.map((msg) => (
           <div 
@@ -157,13 +194,14 @@ const ChatBot: React.FC<ChatBotProps> = ({ data }) => {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Input Area */}
       <form onSubmit={handleSend} className="p-4 bg-white border-t border-slate-200 shrink-0">
         <div className="flex items-center space-x-2">
             <input 
                 type="text" 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about the hotel..."
+                placeholder={`Ask as ${activePersona ? activePersona.role : 'Guest'}...`}
                 className="flex-1 bg-white text-slate-700 placeholder:text-slate-400 border border-slate-300 rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-shadow"
             />
             <button 

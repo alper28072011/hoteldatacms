@@ -14,12 +14,13 @@ import DataHealthModal from './components/DataHealthModal';
 import CreateHotelModal from './components/CreateHotelModal';
 import TemplateModal from './components/TemplateModal';
 import DataCheckModal from './components/DataCheckModal'; 
+import AIPersonaModal from './components/AIPersonaModal';
 import { fetchHotelById, getHotelsList, createNewHotel } from './services/firestoreService';
 import { useHotel } from './contexts/HotelContext'; 
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
-  Wifi, WifiOff, Check, Info, Building2, Plus, 
-  ChevronDown, Activity, Database, Clock, Save, 
+  Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
+  ChevronDown, LayoutTemplate, Activity, Database, Clock, Save, 
   FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench
 } from 'lucide-react';
 
@@ -30,8 +31,8 @@ const Toast = ({ message, type }: { message: string, type: 'success' | 'error' |
     ${type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : ''}
     ${type === 'loading' ? 'bg-blue-50 text-blue-700 border-blue-200' : ''}
   `}>
-    {type === 'success' && <Check size={18} />}
-    {type === 'error' && <TriangleAlert size={18} />}
+    {type === 'success' && <CircleCheck size={18} />}
+    {type === 'error' && <CircleAlert size={18} />}
     {type === 'loading' && <Loader2 size={18} className="animate-spin" />}
     <span className="text-sm font-medium">{message}</span>
   </div>
@@ -60,11 +61,15 @@ const App: React.FC = () => {
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [mobileStatsOpen, setMobileStatsOpen] = useState(false);
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  
+  // Modals
   const [isArchitectOpen, setIsArchitectOpen] = useState(false);
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isDataCheckOpen, setIsDataCheckOpen] = useState(false);
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false); // NEW MODAL
+  
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -338,6 +343,7 @@ const App: React.FC = () => {
       }} />
       <CreateHotelModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onCreate={handleCreateNewHotel} />
       <TemplateModal isOpen={isTemplateModalOpen} onClose={() => setIsTemplateModalOpen(false)} data={hotelData} />
+      <AIPersonaModal isOpen={isPersonaModalOpen} onClose={() => setIsPersonaModalOpen(false)} />
 
       <header className="h-20 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-30 shrink-0 shadow-sm relative">
         <div className="flex items-center gap-3">
@@ -364,12 +370,12 @@ const App: React.FC = () => {
                          {hotelsList.map(hotel => (
                            <button key={hotel.id} onClick={() => handleSwitchHotel(hotel.id)} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 transition-colors ${hotelId === hotel.id ? 'text-blue-600 font-medium bg-blue-50' : 'text-slate-700'}`}>
                               <Building2 size={16} className="opacity-50" /> {hotel.name}
-                              {hotelId === hotel.id && <Check size={14} className="ml-auto" />}
+                              {hotelId === hotel.id && <CircleCheck size={14} className="ml-auto" />}
                            </button>
                          ))}
                        </div>
                        <div className="border-t border-slate-100 mt-2 pt-2 px-2 space-y-1">
-                          <button onClick={() => { setIsHotelSelectorOpen(false); setIsCreateModalOpen(true); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg font-medium"><Plus size={16} /> Yeni Otel Ekle</button>
+                          <button onClick={() => { setIsHotelSelectorOpen(false); setIsCreateModalOpen(true); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg font-medium"><CirclePlus size={16} /> Yeni Otel Ekle</button>
                        </div>
                     </div>
                   </>
@@ -387,7 +393,7 @@ const App: React.FC = () => {
                              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin"/> Kaydediliyor...</span>
                          ) : hasUnsavedChanges ? (
                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1"><Info size={10}/> Kaydedilmemiş Değişiklikler</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1"><CircleAlert size={10}/> Kaydedilmemiş Değişiklikler</span>
                                 <button 
                                   onClick={handleManualSave}
                                   className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded hover:bg-amber-200 transition-colors"
@@ -396,7 +402,7 @@ const App: React.FC = () => {
                                 </button>
                              </div>
                          ) : (
-                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1"><Check size={10}/> Güncel</span>
+                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1"><CircleCheck size={10}/> Güncel</span>
                          )}
                      </div>
                  )}
@@ -483,7 +489,11 @@ const App: React.FC = () => {
         </div>
 
         <div className={`absolute inset-0 z-20 bg-white transition-transform duration-300 lg:static lg:translate-x-0 lg:col-span-3 lg:block lg:h-full lg:min-h-0 ${mobileChatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-             <ChatBot key={hotelId || 'default'} data={hotelData} />
+             <ChatBot 
+                key={hotelId || 'default'} 
+                data={hotelData} 
+                onOpenPersonaModal={() => setIsPersonaModalOpen(true)}
+             />
         </div>
       </div>
 

@@ -66,6 +66,17 @@ export interface HotelTemplate {
   data: HotelNode; // The structural snapshot
 }
 
+// AI Persona Definition
+export interface AIPersona {
+  id: string;
+  name: string;        // e.g. "Aggressive Sales"
+  role: string;        // e.g. "Senior Sales Manager"
+  tone: string;        // e.g. "Professional, Urgent, Persuasive"
+  languageStyle: string; // e.g. "Formal Turkish", "Casual English"
+  instructions: string[]; // Specific rules e.g. "Never mention competitors"
+  creativity: number;  // 0.0 - 1.0 (Temperature)
+}
+
 export interface AIResponse {
   type: 'success' | 'error' | 'loading';
   message: string;

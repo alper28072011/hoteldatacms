@@ -1,8 +1,8 @@
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { HotelNode } from '../types';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { HotelNode, AIPersona } from '../types';
 import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree } from '../utils/treeUtils';
-import { updateHotelData } from '../services/firestoreService';
+import { updateHotelData, getPersonas, savePersona as savePersonaToDb, deletePersona as deletePersonaFromDb } from '../services/firestoreService';
 
 interface HotelContextType {
   hotelData: HotelNode;
@@ -10,6 +10,10 @@ interface HotelContextType {
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   lastSavedAt: number | null;
   hasUnsavedChanges: boolean; // Exposed for UI
+  
+  // Persona State
+  personas: AIPersona[];
+  activePersonaId: string;
   
   // Actions
   setHotelData: (data: HotelNode | ((prev: HotelNode) => HotelNode)) => void;
@@ -19,6 +23,12 @@ interface HotelContextType {
   deleteNode: (nodeId: string) => void;
   moveNode: (sourceId: string, targetId: string, position: 'inside' | 'before' | 'after') => void;
   forceSave: () => Promise<void>;
+  
+  // Persona Actions
+  addPersona: (persona: AIPersona) => Promise<void>;
+  updatePersona: (persona: AIPersona) => Promise<void>;
+  deletePersona: (id: string) => Promise<void>;
+  setActivePersonaId: (id: string) => void;
 }
 
 const HotelContext = createContext<HotelContextType | undefined>(undefined);
@@ -32,6 +42,24 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   
   // Tracks if data has changed since last save
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Persona State
+  const [personas, setPersonas] = useState<AIPersona[]>([]);
+  const [activePersonaId, setActivePersonaId] = useState<string>('default');
+
+  // Load Personas when Hotel ID changes
+  useEffect(() => {
+    const loadPersonas = async () => {
+        if (hotelId) {
+            const list = await getPersonas(hotelId);
+            setPersonas(list);
+        } else {
+            setPersonas([]);
+        }
+        setActivePersonaId('default');
+    };
+    loadPersonas();
+  }, [hotelId]);
 
   // --- ACTIONS (Wrapped in useCallback to prevent re-renders) ---
 
@@ -84,9 +112,6 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSaveStatus('idle');
   }, []);
 
-  // Removed aggressive useEffect auto-save.
-  // Saving is now strictly manual or triggered by specific events if needed.
-
   // Manual Save
   const forceSave = async () => {
     if (!hotelId) return;
@@ -107,6 +132,27 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  // Persona Actions
+  const addPersona = useCallback(async (persona: AIPersona) => {
+      if (!hotelId) return;
+      // Optimistic update
+      setPersonas(prev => [...prev, persona]);
+      await savePersonaToDb(hotelId, persona);
+  }, [hotelId]);
+
+  const updatePersona = useCallback(async (persona: AIPersona) => {
+      if (!hotelId) return;
+      setPersonas(prev => prev.map(p => p.id === persona.id ? persona : p));
+      await savePersonaToDb(hotelId, persona);
+  }, [hotelId]);
+
+  const deletePersona = useCallback(async (id: string) => {
+      if (!hotelId) return;
+      setPersonas(prev => prev.filter(p => p.id !== id));
+      if (activePersonaId === id) setActivePersonaId('default');
+      await deletePersonaFromDb(hotelId, id);
+  }, [hotelId, activePersonaId]);
+
   return (
     <HotelContext.Provider value={{
       hotelData,
@@ -120,7 +166,13 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       saveStatus,
       lastSavedAt,
       hasUnsavedChanges,
-      forceSave
+      forceSave,
+      personas,
+      activePersonaId,
+      setActivePersonaId,
+      addPersona,
+      updatePersona,
+      deletePersona
     }}>
       {children}
     </HotelContext.Provider>

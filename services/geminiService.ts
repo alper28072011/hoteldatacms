@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport } from "../types";
+import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona } from "../types";
 import { generateCleanAIJSON } from "../utils/treeUtils";
 
 // API Key yönetimi (Vite veya Process env)
@@ -68,15 +68,34 @@ export const auditStructureDeeply = async (data: HotelNode): Promise<string> => 
 export const chatWithData = async (
   data: HotelNode, 
   userMessage: string, 
-  history: {role: string, parts: string[]}[]
+  history: {role: string, parts: string[]}[],
+  activePersona?: AIPersona | null
 ): Promise<string> => {
   try {
     // CHAT OPTİMİZASYONU: Gereksiz UI state'lerini temizle
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, 1000000); 
     
     const now = new Date();
-    const systemInstruction = `You are an Advanced Hotel Guest Assistant (AI). 
+    
+    // PERSONA CONSTRUCTION
+    let identityBlock = "IDENTITY: You are an Advanced Hotel Guest Assistant (AI). You are helpful, polite, and neutral.";
+    let toneBlock = "TONE: Professional, Helpful, Clear.";
+    let rulesBlock = "";
+    
+    if (activePersona) {
+        identityBlock = `IDENTITY: You are ${activePersona.name}, acting as the ${activePersona.role} at ${data.name || 'this hotel'}.`;
+        toneBlock = `TONE: ${activePersona.tone}. LANGUAGE STYLE: ${activePersona.languageStyle}.`;
+        
+        if (activePersona.instructions && activePersona.instructions.length > 0) {
+            rulesBlock = `CRITICAL BEHAVIOR RULES:\n${activePersona.instructions.map(i => `- ${i}`).join('\n')}`;
+        }
+    }
+
+    const systemInstruction = `
+    ${identityBlock}
     Current Time: ${now.toLocaleString()}
+    ${toneBlock}
+    ${rulesBlock}
 
     CRITICAL RULE: Never output raw JSON blocks, code snippets, or debug information in your final response to the user. Use the provided JSON data purely as context to formulate a natural language answer. Even if the user asks for technical details like 'channel order', answer with a sentence like 'The channel order is 15', not with a JSON object.
     
@@ -96,7 +115,10 @@ export const chatWithData = async (
 
     const chat = ai.chats.create({
       model: modelConfig.model,
-      config: { systemInstruction },
+      config: { 
+          systemInstruction,
+          temperature: activePersona ? activePersona.creativity : 0.7 
+      },
       history: history.map(h => ({
         role: h.role,
         parts: [{ text: h.parts[0] }]
