@@ -77,6 +77,8 @@ export const chatWithData = async (
     const now = new Date();
     const systemInstruction = `You are an Advanced Hotel Guest Assistant (AI). 
     Current Time: ${now.toLocaleString()}
+
+    CRITICAL RULE: Never output raw JSON blocks, code snippets, or debug information in your final response to the user. Use the provided JSON data purely as context to formulate a natural language answer. Even if the user asks for technical details like 'channel order', answer with a sentence like 'The channel order is 15', not with a JSON object.
     
     CRITICAL INSTRUCTION ON DATA STRUCTURE:
     You have access to the live hotel database below in JSON format.

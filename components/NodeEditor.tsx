@@ -346,9 +346,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                             <button 
                                 onClick={handleAddAttribute}
                                 disabled={!newAttrKey.trim()}
-                                className="px-3 py-1 bg-slate-100 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded text-xs font-bold transition-colors disabled:opacity-50"
+                                className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded text-xs font-bold transition-colors disabled:opacity-50 disabled:bg-slate-50 disabled:text-slate-400 disabled:border-slate-200"
                             >
-                                <Plus size={14} />
+                                <Check size={14} />
                             </button>
                         </div>
                     </div>
