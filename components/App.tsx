@@ -206,6 +206,7 @@ const App: React.FC = () => {
   const handleDrop = (e: React.DragEvent, targetId: string, position: 'inside' | 'before' | 'after') => {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData('nodeId');
+    // Ensure source exists and isn't the same as target
     if (sourceId && sourceId !== targetId) {
       moveNode(sourceId, targetId, position);
     }
