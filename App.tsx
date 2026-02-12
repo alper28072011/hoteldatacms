@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from './types';
 import { 
@@ -49,6 +48,7 @@ const App: React.FC = () => {
     updateNode, 
     addChild, 
     deleteNode, 
+    moveNode,
     saveStatus, 
     hasUnsavedChanges,
     forceSave 
@@ -204,6 +204,23 @@ const App: React.FC = () => {
          }
        } catch (e) { console.error(e); }
     });
+  };
+
+  // Drag and Drop Logic
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('nodeId', id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('nodeId');
+    if (sourceId && sourceId !== targetId) {
+      moveNode(sourceId, targetId, 'inside');
+    }
   };
 
   // Dosya Dışa Aktarma (Export)
@@ -471,6 +488,9 @@ const App: React.FC = () => {
                         onSelect={(id) => { setSelectedNodeId(id); setMobileMenuOpen(false); }}
                         onAddChild={(parentId) => addChild(parentId)} // Context Action
                         forceExpand={!!searchQuery}
+                        onDragStart={handleDragStart}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
                     />
                 </div>
             </div>

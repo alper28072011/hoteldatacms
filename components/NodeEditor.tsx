@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { HotelNode, NodeType, NodeAttribute } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId } from '../utils/treeUtils';
@@ -24,7 +25,7 @@ import {
   List,
   MessageCircle,
   FileText,
-  CircleHelp, // GÜNCELLENDİ: HelpCircle -> CircleHelp
+  CircleHelp,
   MoreVertical,
   X
 } from 'lucide-react';
@@ -41,7 +42,7 @@ const getTypeInfo = (type: string) => {
   switch (type) {
     case 'category': return { label: 'Category', desc: 'A folder to organize items.', icon: <Box size={14} /> };
     case 'item': return { label: 'Item / Service', desc: 'A specific entity (e.g. Pool, Butler).', icon: <Box size={14} /> };
-    case 'qa_pair': return { label: 'Q&A', desc: 'A specific question and answer.', icon: <CircleHelp size={14} /> }; // GÜNCELLENDİ
+    case 'qa_pair': return { label: 'Q&A', desc: 'A specific question and answer.', icon: <CircleHelp size={14} /> };
     case 'note': return { label: 'Internal Note', desc: 'Information for staff or AI context.', icon: <FileText size={14} /> };
     default: return { label: type, desc: 'Generic data node.', icon: <Box size={14} /> };
   }
@@ -245,7 +246,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                             value={node.type === 'qa_pair' ? (node.answer || '') : (node.value || '')}
                             onChange={(e) => handleChange(node.type === 'qa_pair' ? 'answer' : 'value', e.target.value)}
                             rows={4}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+                            className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
                             placeholder="Enter the main content here..."
                         />
                          {node.type === 'qa_pair' && (
@@ -290,7 +291,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     type="text" 
                                     value={attr.value}
                                     onChange={(e) => handleUpdateAttribute(attr.id, 'value', e.target.value)}
-                                    className="w-full text-sm text-slate-800 border border-slate-200 rounded px-3 py-1.5 focus:border-blue-500 outline-none"
+                                    className="w-full bg-white text-sm text-slate-800 border border-slate-200 rounded px-3 py-1.5 focus:border-blue-500 outline-none"
                                 />
                             </div>
                             <button 
@@ -321,7 +322,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 onChange={(e) => setNewAttrValue(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddAttribute()}
                                 placeholder="Value (e.g. 50$)"
-                                className="flex-1 text-sm text-slate-600 border border-slate-200 border-dashed rounded px-3 py-1.5 focus:border-blue-400 outline-none"
+                                className="flex-1 bg-white text-sm text-slate-600 border border-slate-200 border-dashed rounded px-3 py-1.5 focus:border-blue-400 outline-none"
                             />
                             <button 
                                 onClick={handleAddAttribute}
@@ -344,7 +345,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => handleAddSubContent('qa_pair')} className="text-[10px] font-bold bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 px-2 py-1 rounded flex items-center gap-1 transition-colors">
-                            <CircleHelp size={12} /> Add Q&A {/* GÜNCELLENDİ */}
+                            <CircleHelp size={12} /> Add Q&A
                         </button>
                         <button onClick={() => handleAddSubContent('note')} className="text-[10px] font-bold bg-white border border-slate-200 hover:border-amber-400 hover:text-amber-600 px-2 py-1 rounded flex items-center gap-1 transition-colors">
                             <FileText size={12} /> Add Note
@@ -362,7 +363,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                              {subContentNodes.map(sub => (
                                  <div key={sub.id} className="group flex items-start gap-3 p-3 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-100 transition-all">
                                      <div className={`mt-1 ${sub.type === 'qa_pair' ? 'text-green-500' : 'text-amber-500'}`}>
-                                         {sub.type === 'qa_pair' ? <CircleHelp size={16}/> : <FileText size={16}/>} {/* GÜNCELLENDİ */}
+                                         {sub.type === 'qa_pair' ? <CircleHelp size={16}/> : <FileText size={16}/>}
                                      </div>
                                      <div className="flex-1 min-w-0">
                                          <div className="flex justify-between">
