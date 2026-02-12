@@ -143,11 +143,15 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
                      <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                  </div>
                  
-                 {/* Edit Button */}
+                 {/* Edit Button - Fixed Clickability with z-index and explicit stopPropagation */}
                  <button 
                     type="button"
-                    onClick={(e) => { e.preventDefault(); onOpenPersonaModal?.(); }}
-                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" 
+                    onClick={(e) => { 
+                        e.preventDefault(); 
+                        e.stopPropagation();
+                        if (onOpenPersonaModal) onOpenPersonaModal();
+                    }}
+                    className="p-2 ml-1 text-slate-500 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded-lg shadow-sm transition-all z-10" 
                     title="Manage Personas"
                  >
                     <Settings2 size={15} />
@@ -155,7 +159,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
              </div>
          </div>
          <div className="flex items-center text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-            <Sparkles size={10} className="mr-1" /> Gemini 2.0 Flash
+            <Sparkles size={10} className="mr-1" /> Gemini 2.5 Flash
          </div>
       </div>
 
