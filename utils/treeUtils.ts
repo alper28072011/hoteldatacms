@@ -315,14 +315,14 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
 
   const lowerQuery = query.toLowerCase();
   
-  const nameMatch = node.name?.toLowerCase().includes(lowerQuery);
-  const valueMatch = node.value?.toLowerCase().includes(lowerQuery);
-  const tagsMatch = node.tags?.some(tag => tag.toLowerCase().includes(lowerQuery));
+  const nameMatch = (node.name || '').toLowerCase().includes(lowerQuery);
+  const valueMatch = (node.value || '').toLowerCase().includes(lowerQuery);
+  const tagsMatch = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
   
   // CRITICAL UPDATE: Search inside Attributes/Properties as well
   const attributesMatch = node.attributes?.some(attr => 
-    attr.key.toLowerCase().includes(lowerQuery) || 
-    attr.value.toLowerCase().includes(lowerQuery)
+    (attr.key || '').toLowerCase().includes(lowerQuery) || 
+    (attr.value || '').toLowerCase().includes(lowerQuery)
   );
   
   const isMatch = nameMatch || valueMatch || tagsMatch || attributesMatch;
@@ -381,7 +381,9 @@ const generateRichAttributes = (node: HotelNode): string => {
   // New Attributes
   if (node.attributes) {
       node.attributes.forEach(attr => {
-          parts.push(`${attr.key}: ${attr.value}`);
+          if (attr.key) {
+            parts.push(`${attr.key}: ${attr.value || ''}`);
+          }
       });
   }
   
@@ -467,7 +469,7 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   if (node.attributes) {
       node.attributes.forEach((attr: any) => {
           // Robustly handle keys to prevent JSON issues
-          const safeKey = attr.key.trim();
+          const safeKey = (attr.key || '').trim();
           if (safeKey) {
              semanticData[safeKey] = attr.value;
           }
@@ -514,7 +516,7 @@ export const generateAIText = async (
           if (node.answer) content += ` | Answer: ${node.answer}`;
 
           if (node.attributes) {
-              content += " | " + node.attributes.map(a => `${a.key}: ${a.value}`).join(', ');
+              content += " | " + node.attributes.map(a => `${a.key || 'Unknown'}: ${a.value || ''}`).join(', ');
           }
           
           if (node.tags && node.tags.length > 0) content += ` | Tags: ${node.tags.join(', ')}`;
