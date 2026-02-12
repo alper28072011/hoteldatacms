@@ -1,7 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona } from "../types";
-import { generateCleanAIJSON } from "../utils/treeUtils";
+import { generateCleanAIJSON, generateAIText } from "../utils/treeUtils";
 
 // API Key yönetimi (Vite veya Process env)
 const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
@@ -73,8 +73,9 @@ export const chatWithData = async (
   activePersona?: AIPersona | null
 ): Promise<string> => {
   try {
-    // CHAT OPTİMİZASYONU: Gereksiz UI state'lerini temizle
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, 1000000); 
+    // CHAT OPTİMİZASYONU: JSON yerine Hiyerarşik Markdown kullanıyoruz.
+    // generateAIText asenkron olduğu için await ile bekliyoruz.
+    const textContext = await generateAIText(data, () => {}); 
     
     const now = new Date();
     
@@ -98,20 +99,17 @@ export const chatWithData = async (
     ${toneBlock}
     ${rulesBlock}
 
-    CRITICAL RULE: Never output raw JSON blocks, code snippets, or debug information in your final response to the user. Use the provided JSON data purely as context to formulate a natural language answer. Even if the user asks for technical details like 'channel order', answer with a sentence like 'The channel order is 15', not with a JSON object.
+    CRITICAL RULE: Do not invent information. Answer solely based on the provided HOTEL DATABASE below. Never mention "I checked the markdown file", just say "We have..." or "The hotel offers...".
     
-    CRITICAL INSTRUCTION ON DATA STRUCTURE:
-    You have access to the live hotel database below in JSON format.
+    INSTRUCTIONS ON DATA SOURCE:
+    You are provided with the live hotel database in a structured MARKDOWN format below.
+    1. **HIERARCHY**: Use the Headings (#, ##, ###) to understand categories (e.g., "Restaurants", "Rooms").
+    2. **ITEMS**: Bullet points (-) represent specific items (e.g., "Steakhouse", "Standard Room").
+    3. **ATTRIBUTES**: Details like prices, hours, or specific features are often found in parentheses () next to the item name (e.g., "Price: 50$").
+    4. **NOTES**: Contextual AI notes are indicated with "> Note:". Use these to understand implicit rules (e.g., "Adults only").
     
-    1. **FEATURES OBJECT**: Every item (like a TV Channel, Dish, or Room) typically has a "features" object. This is where dynamic properties are stored.
-       - Example: { "name": "TV Channel 1", "features": { "Dil": "Almanca", "Category": "Kids" } }
-       
-    2. **QUERYING**: When a user asks a specific question (e.g., "Which channels are in German?"), you MUST iterate through the items and check if 'features.Dil' (or 'Language') matches 'Almanca' (or 'German').
-    
-    3. **CONTEXT**: Use the "_path" field to understand context (e.g., "Main Restaurant > Dinner > Burgers").
-    
-    HOTEL DATABASE (JSON):
-    ${jsonContext}
+    HOTEL DATABASE (Markdown Format):
+    ${textContext}
     `;
 
     const chat = ai.chats.create({
