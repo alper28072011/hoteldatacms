@@ -503,41 +503,92 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   return semanticData;
 };
 
+// Generates an optimized, token-efficient Markdown structure for AI
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
 ): Promise<string> => {
-  const lines: string[] = [];
   const flatNodes = flattenTreeForExport(root);
   const totalNodes = flatNodes.length;
-  
+  const lines: string[] = [];
   const CHUNK_SIZE = 50;
 
-  for (let i = 0; i < totalNodes; i += CHUNK_SIZE) {
-      const chunk = flatNodes.slice(i, i + CHUNK_SIZE);
-      
-      chunk.forEach(({ node, path }) => {
-          const contextPath = `[${path.join(' > ')}]`;
-          
-          let content = `${contextPath} ${node.type.toUpperCase()}: ${node.name || 'Untitled'}`;
+  for (let i = 0; i < totalNodes; i++) {
+    const { node, depth } = flatNodes[i];
+    const type = String(node.type);
+    
+    // 1. Determine Hierarchy (Containers vs Items)
+    const isContainer = ['root', 'category', 'list', 'menu'].includes(type);
+    let line = "";
 
-          if (node.value) content += ` | Value: ${node.value}`;
-          if (node.question) content += ` | Question: ${node.question}`;
-          if (node.answer) content += ` | Answer: ${node.answer}`;
+    if (isContainer) {
+       // Headers for structure ( # Root, ## Category, ### SubCategory )
+       // Limit to H6 to ensure valid markdown
+       const headerLevel = Math.min(depth + 1, 6);
+       line = `\n${"#".repeat(headerLevel)} ${node.name || 'Untitled'}`;
+    } else {
+       // Bullets for content items
+       line = `- **${node.name || 'Untitled'}**`;
+    }
 
-          if (node.attributes) {
-              content += " | " + node.attributes.map(a => `${a.key || 'Unknown'}: ${a.value || ''}`).join(', ');
+    // 2. Add Content Values (Value, Answer, etc.)
+    const contentParts: string[] = [];
+
+    // Special handling for Q&A pairs
+    if (type === 'qa_pair') {
+       // If question is distinct from name, show it
+       if (node.question && node.question !== node.name) {
+          contentParts.push(`Q: ${node.question}`);
+       }
+       if (node.answer) {
+          contentParts.push(`A: ${node.answer}`);
+       }
+    } else {
+       // Standard Items
+       if (node.value) contentParts.push(node.value);
+    }
+    
+    if (contentParts.length > 0) {
+       line += `: ${contentParts.join(' | ')}`;
+    }
+
+    // 3. Add Attributes (Properties & Settings) - Inline
+    const attributesParts: string[] = [];
+    
+    // Legacy Price
+    if (node.price) attributesParts.push(`Price: ${node.price}`);
+    
+    // Dynamic Attributes
+    if (node.attributes && node.attributes.length > 0) {
+       node.attributes.forEach(attr => {
+          if (attr.key && attr.value) {
+             attributesParts.push(`${attr.key}: ${attr.value}`);
           }
-          
-          if (node.tags && node.tags.length > 0) content += ` | Tags: ${node.tags.join(', ')}`;
-          if (node.description) content += ` | Note: ${node.description}`;
+       });
+    }
 
-          lines.push(content);
-      });
+    if (attributesParts.length > 0) {
+       line += ` (${attributesParts.join(', ')})`;
+    }
 
-      const progress = Math.round(((i + chunk.length) / totalNodes) * 100);
-      onProgress(progress);
+    lines.push(line);
+
+    // 4. Add Context/Notes (Blockquote)
+    if (node.description || (node.tags && node.tags.length > 0)) {
+       const noteParts = [];
+       if (node.description) noteParts.push(node.description);
+       if (node.tags && node.tags.length > 0) noteParts.push(`Tags: [${node.tags.join(', ')}]`);
+       
+       if (noteParts.length > 0) {
+          lines.push(`> Note: ${noteParts.join(' | ')}`);
+       }
+    }
+
+    // Progress Update
+    if (i % CHUNK_SIZE === 0) {
+      onProgress(Math.round((i / totalNodes) * 100));
       await new Promise(resolve => setTimeout(resolve, 5));
+    }
   }
 
   return lines.join('\n');
