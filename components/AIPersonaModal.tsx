@@ -51,12 +51,12 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
 
   const handleAddRule = () => {
       if (!newRule.trim()) return;
-      setFormData(prev => ({ ...prev, instructions: [...prev.instructions, newRule.trim()] }));
+      setFormData(prev => ({ ...prev, instructions: [...(prev.instructions || []), newRule.trim()] }));
       setNewRule('');
   };
 
   const handleRemoveRule = (idx: number) => {
-      setFormData(prev => ({ ...prev, instructions: prev.instructions.filter((_, i) => i !== idx) }));
+      setFormData(prev => ({ ...prev, instructions: (prev.instructions || []).filter((_, i) => i !== idx) }));
   };
 
   const handleSave = async () => {
@@ -153,7 +153,7 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Persona Name</label>
                             <input 
                                 type="text" 
-                                value={formData.name}
+                                value={formData.name || ''}
                                 onChange={(e) => handleChange('name', e.target.value)}
                                 placeholder="e.g. Aggressive Sales Agent"
                                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -163,7 +163,7 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Role / Title</label>
                             <input 
                                 type="text" 
-                                value={formData.role}
+                                value={formData.role || ''}
                                 onChange={(e) => handleChange('role', e.target.value)}
                                 placeholder="e.g. Senior Manager"
                                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -175,7 +175,7 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tone & Voice</label>
                         <input 
                             type="text" 
-                            value={formData.tone}
+                            value={formData.tone || ''}
                             onChange={(e) => handleChange('tone', e.target.value)}
                             placeholder="e.g. Professional, Persuasive, Urgent, Helpful"
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -187,7 +187,7 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Language Style</label>
                         <input 
                             type="text" 
-                            value={formData.languageStyle}
+                            value={formData.languageStyle || ''}
                             onChange={(e) => handleChange('languageStyle', e.target.value)}
                             placeholder="e.g. Formal Turkish, Casual English, Technical"
                             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -197,7 +197,7 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Behavior Rules (Instructions)</label>
                         <div className="space-y-2 mb-3">
-                            {formData.instructions.map((rule, idx) => (
+                            {(formData.instructions || []).map((rule, idx) => (
                                 <div key={idx} className="flex items-start gap-2 bg-white p-2 rounded border border-slate-200 text-sm text-slate-700">
                                     <span className="text-emerald-500 mt-0.5">•</span>
                                     <span className="flex-1">{rule}</span>
@@ -206,7 +206,7 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
                                     </button>
                                 </div>
                             ))}
-                            {formData.instructions.length === 0 && <div className="text-xs text-slate-400 italic">No specific rules added yet.</div>}
+                            {(formData.instructions || []).length === 0 && <div className="text-xs text-slate-400 italic">No specific rules added yet.</div>}
                         </div>
                         <div className="flex gap-2">
                             <input 
@@ -226,12 +226,14 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
                     <div>
                         <div className="flex justify-between items-center mb-2">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Creativity (Temperature)</label>
-                            <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600">{formData.creativity.toFixed(1)}</span>
+                            <span className="text-xs font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                {(formData.creativity !== undefined ? formData.creativity : 0.7).toFixed(1)}
+                            </span>
                         </div>
                         <input 
                             type="range" 
                             min="0" max="1" step="0.1"
-                            value={formData.creativity}
+                            value={formData.creativity !== undefined ? formData.creativity : 0.7}
                             onChange={(e) => handleChange('creativity', parseFloat(e.target.value))}
                             className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                         />
@@ -244,7 +246,7 @@ const AIPersonaModal: React.FC<AIPersonaModalProps> = ({ isOpen, onClose }) => {
                     <div className="pt-6 border-t border-slate-100 flex justify-end gap-3">
                         <button 
                             onClick={handleSave}
-                            disabled={!formData.name.trim()}
+                            disabled={!formData.name?.trim()}
                             className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-2 shadow-sm shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             <Save size={18} /> Save Persona

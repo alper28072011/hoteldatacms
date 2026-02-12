@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from '../types';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
@@ -296,6 +296,11 @@ const App: React.FC = () => {
       }
   };
 
+  // Safe handler for opening the modal
+  const handleOpenPersonaModal = useCallback(() => {
+    setIsPersonaModalOpen(true);
+  }, []);
+
   if (isInitializing) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-50 text-slate-500">
@@ -492,7 +497,7 @@ const App: React.FC = () => {
              <ChatBot 
                 key={hotelId || 'default'} 
                 data={hotelData} 
-                onOpenPersonaModal={() => setIsPersonaModalOpen(true)}
+                onOpenPersonaModal={handleOpenPersonaModal}
              />
         </div>
       </div>

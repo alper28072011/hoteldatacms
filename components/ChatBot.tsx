@@ -145,11 +145,12 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
                  
                  {/* Edit Button */}
                  <button 
-                    onClick={onOpenPersonaModal}
-                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" 
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); onOpenPersonaModal?.(); }}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" 
                     title="Manage Personas"
                  >
-                    <Settings2 size={14} />
+                    <Settings2 size={15} />
                  </button>
              </div>
          </div>
