@@ -320,6 +320,7 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   const tagsMatch = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
   
   // CRITICAL UPDATE: Search inside Attributes/Properties as well
+  // We check both keys and values for better discovery (e.g., search "Almanca" or "Dil")
   const attributesMatch = node.attributes?.some(attr => 
     (attr.key || '').toLowerCase().includes(lowerQuery) || 
     (attr.value || '').toLowerCase().includes(lowerQuery)
@@ -459,24 +460,31 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
     uiState, 
     isExpanded, 
     children,
+    attributes, // Extract attributes separately to process them
     ...semanticData 
   } = node as any;
 
   const currentPath = parentPath ? `${parentPath} > ${node.name || 'Untitled'}` : (node.name || 'Untitled');
   semanticData._path = currentPath;
 
-  // Flatten attributes into the semantic object for AI
-  if (node.attributes) {
-      node.attributes.forEach((attr: any) => {
-          // Robustly handle keys to prevent JSON issues
-          const safeKey = (attr.key || '').trim();
-          if (safeKey) {
-             semanticData[safeKey] = attr.value;
-          }
-      });
-      delete semanticData.attributes; // Remove raw array
+  // Flatten attributes into a specific 'features' object for AI
+  // This creates a dedicated bucket for dynamic properties (key:value)
+  if (attributes && Array.isArray(attributes) && attributes.length > 0) {
+    const features: Record<string, string> = {};
+    attributes.forEach((attr: any) => {
+        const safeKey = (attr.key || '').trim();
+        if (safeKey) {
+            features[safeKey] = attr.value || '';
+        }
+    });
+    
+    // Only add if not empty
+    if (Object.keys(features).length > 0) {
+        semanticData.features = features;
+    }
   }
 
+  // Cleanup empty fields
   Object.keys(semanticData).forEach(key => {
     if (semanticData[key] === null || semanticData[key] === undefined || semanticData[key] === '') {
       delete semanticData[key];
