@@ -457,20 +457,22 @@ export const generateOptimizedCSV = async (
 
 export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): any => {
   const { 
-    id, 
+    // id,  <-- REMOVED DESTRUCTURING OF ID. WE NEED ID FOR AI TO TARGET NODES.
     lastSaved, 
     uiState, 
     isExpanded, 
     children,
-    attributes, // Extract attributes separately to process them
+    attributes,
     ...semanticData 
   } = node as any;
+
+  // Explicitly ensure ID is in the semantic data
+  semanticData.id = node.id;
 
   const currentPath = parentPath ? `${parentPath} > ${node.name || 'Untitled'}` : (node.name || 'Untitled');
   semanticData._path = currentPath;
 
   // Flatten attributes into a specific 'features' object for AI
-  // This creates a dedicated bucket for dynamic properties (key:value)
   if (attributes && Array.isArray(attributes) && attributes.length > 0) {
     const features: Record<string, string> = {};
     attributes.forEach((attr: any) => {
@@ -480,7 +482,6 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
         }
     });
     
-    // Only add if not empty
     if (Object.keys(features).length > 0) {
         semanticData.features = features;
     }

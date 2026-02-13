@@ -180,21 +180,53 @@ const App: React.FC = () => {
     setTimeout(() => setNotification(null), 2000);
   };
 
+  // --- ROBUST AI ARCHITECT HANDLER WITH ID VALIDATION ---
   const handleArchitectActions = (actions: ArchitectAction[]) => {
+    let successCount = 0;
+    let fallbackTriggered = false;
+
     actions.forEach(action => {
        try {
          if (action.type === 'add' && action.data) {
             setHotelData(prev => {
+                // 1. Verify if target exists
+                const targetNode = findNodeById(prev, action.targetId);
+                let finalTargetId = action.targetId;
+
+                // 2. Fallback Logic: If AI hallucinates an ID, default to Root
+                if (!targetNode) {
+                    finalTargetId = prev.id; // Root ID
+                    fallbackTriggered = true;
+                }
+
                 const newNode = { ...action.data, id: action.data?.id || generateId('ai') } as HotelNode;
-                return addChildToNode(prev, action.targetId, newNode);
+                return addChildToNode(prev, finalTargetId, newNode);
             });
+            successCount++;
          } else if (action.type === 'update' && action.data) {
-            updateNode(action.targetId, action.data);
+            // Check existence for updates too
+            if (findNodeById(hotelData, action.targetId)) {
+                updateNode(action.targetId, action.data);
+                successCount++;
+            }
          } else if (action.type === 'delete') {
-            deleteNode(action.targetId);
+            if (findNodeById(hotelData, action.targetId)) {
+                deleteNode(action.targetId);
+                successCount++;
+            }
          }
-       } catch (e) { console.error(e); }
+       } catch (e) { console.error("Architect Action Failed:", e); }
     });
+
+    if (successCount > 0) {
+        if (fallbackTriggered) {
+             setNotification({ message: "Bazı öğeler ana dizine eklendi (Hedef bulunamadı).", type: 'loading' }); // Yellow/Loading warning style
+             setTimeout(() => setNotification(null), 3000);
+        } else {
+             setNotification({ message: "Yapı başarıyla güncellendi.", type: 'success' });
+             setTimeout(() => setNotification(null), 2000);
+        }
+    }
   };
 
   // --- DRAG AND DROP HANDLERS ---
