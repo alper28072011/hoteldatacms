@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona } from "../types";
+import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute } from "../types";
 import { generateCleanAIJSON, generateAIText } from "../utils/treeUtils";
 
 const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
@@ -12,9 +12,19 @@ const modelConfig = {
 
 const MAX_CONTEXT_LENGTH = 50000; 
 
+// --- TYPES FOR AUTO-FIX ---
+export interface AutoFixAction {
+  id: string;
+  type: 'move' | 'update' | 'changeType';
+  targetId: string; // The node ID being modified
+  destinationId?: string; // For 'move' actions (new parent)
+  payload?: Partial<HotelNode>; // For updates
+  reasoning: string;
+  severity: 'critical' | 'structural' | 'content';
+}
+
 export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
   try {
-    // Use enriched markdown for analysis too, as it provides better context
     let textContext = await generateAIText(data, () => {});
     if (textContext.length > MAX_CONTEXT_LENGTH) {
         textContext = textContext.substring(0, MAX_CONTEXT_LENGTH);
@@ -73,8 +83,6 @@ export const chatWithData = async (
   activePersona?: AIPersona | null
 ): Promise<string> => {
   try {
-    // CRITICAL UPDATE: Use generateAIText (Smart Weaving) instead of JSON
-    // This injects definitions like "Standard Minibar (Contents: Coke, Water)" directly into the context
     let textContext = await generateAIText(data, () => {}); 
     
     if (textContext.length > MAX_CONTEXT_LENGTH) {
@@ -245,7 +253,6 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
 
 export const generateHealthReport = async (data: HotelNode): Promise<HealthReport> => {
   try {
-    // Generate context using smart weaving to reveal relationships
     let textContext = await generateAIText(data, () => {});
     if (textContext.length > MAX_CONTEXT_LENGTH) {
         textContext = textContext.substring(0, MAX_CONTEXT_LENGTH);
@@ -341,6 +348,76 @@ export const generateNodeContext = async (node: HotelNode, contextPath: string =
     
     return JSON.parse(response.text || "{}");
 };
+
+// NEW: Value Assistant Generator
+export const generateValueFromAttributes = async (nodeName: string, attributes: NodeAttribute[]): Promise<string> => {
+    const attrsStr = attributes.map(a => `${a.key}: ${a.value}`).join(', ');
+    const prompt = `
+    Based on the following attributes for a hotel item named "${nodeName}", write a concise, attractive "Main Value" summary sentence.
+    
+    Attributes: ${attrsStr}
+    
+    Example Input: Name: Airport Transfer, Attrs: Distance: 15km, Time: 20min
+    Example Output: Located 15km away, approximately 20 minutes by car.
+    
+    Output strictly the sentence string.
+    `;
+    
+    const response = await ai.models.generateContent({
+        model: modelConfig.model,
+        contents: prompt
+    });
+    
+    return response.text?.trim() || "";
+}
+
+// NEW: Auto-Fix Database Engine
+export const autoFixDatabase = async (rootNode: HotelNode): Promise<AutoFixAction[]> => {
+    // We send a simplified tree structure to save tokens
+    const cleanJson = JSON.stringify(generateCleanAIJSON(rootNode), null, 2).substring(0, MAX_CONTEXT_LENGTH);
+    
+    const prompt = `
+    You are a "Deep Structure Auto-Fix Engine" for a Hotel Database.
+    Analyze the JSON structure below and identify structural and logical errors.
+    
+    DETECT THESE SCENARIOS:
+    1. **Empty Value with Attributes**: An item has no 'value' description but has attributes. 
+       -> ACTION: 'update' the value with a summary of attributes.
+    2. **Wrong Type**: An 'item' or 'field' has children. 
+       -> ACTION: 'changeType' to 'category' or 'list'.
+    3. **Semantic Misplacement**: An item is in the wrong category (e.g. 'Pool Hours' inside 'Restaurants'). 
+       -> ACTION: 'move' to a better category (find the ID of a better parent).
+    4. **Empty Containers**: A category or list has no children and no content.
+       -> ACTION: ignore or mark as 'structural' warning.
+    
+    INPUT DATA:
+    \`\`\`json
+    ${cleanJson}
+    \`\`\`
+    
+    RETURN JSON ARRAY of Action Objects:
+    [
+      {
+        "id": "fix_1",
+        "type": "move" | "update" | "changeType",
+        "targetId": "ID of the node to fix",
+        "destinationId": "ID of new parent (only for move)",
+        "payload": { "value": "New Summary", "type": "category" }, 
+        "reasoning": "Explanation why",
+        "severity": "critical" | "structural" | "content"
+      }
+    ]
+    `;
+    
+    const response = await ai.models.generateContent({
+        model: modelConfig.model,
+        contents: prompt,
+        config: { responseMimeType: 'application/json' }
+    });
+    
+    const result = JSON.parse(response.text || "[]");
+    return Array.isArray(result) ? result : [];
+}
 
 export const runDataCheck = async (data: HotelNode, inputType: 'url' | 'text' | 'file', inputValue: string, mimeType?: string): Promise<DataComparisonReport> => {
   try {
