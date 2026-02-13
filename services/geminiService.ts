@@ -1,5 +1,5 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona } from "../types";
 import { generateCleanAIJSON, generateAIText } from "../utils/treeUtils";
 
@@ -253,15 +253,45 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
   }
 };
 
-export const generateNodeContext = async (node: HotelNode): Promise<any> => {
-    // Tekil node için temizleme yapıp yapmamak opsiyonel, ama temiz veri her zaman iyidir.
+export const generateNodeContext = async (node: HotelNode, contextPath: string = ''): Promise<{ tags: string[], description: string }> => {
+    // We clean the node but we also pass the contextPath for better understanding
     const cleanNode = generateCleanAIJSON(node);
-    const prompt = `Generate suitable metadata/tags for this hotel item: ${JSON.stringify(cleanNode, null, 2)}`;
+    
+    const prompt = `
+    You are an AI Data Enricher for a Hotel CMS.
+    
+    CONTEXT:
+    Path: ${contextPath}
+    Item Data: ${JSON.stringify(cleanNode, null, 2)}
+    
+    TASK:
+    1. Generate 5-8 relevant "Search Tags" (synonyms, categories, related concepts) that a guest might use to find this.
+    2. Write a "Hidden Description" (max 2 sentences) that explains implicit context, rules, or connections for an AI chatbot.
+       - E.g. If it's a "Honeymoon Suite", implicit rule might be "Couples only, romantic atmosphere".
+       - E.g. If "Steakhouse", implicit rule "Requires reservation, smart casual dress code".
+    
+    RETURN JSON ONLY.
+    `;
     
     const response = await ai.models.generateContent({
       model: modelConfig.model,
       contents: prompt,
-      config: { responseMimeType: 'application/json' }
+      config: { 
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            tags: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            description: {
+              type: Type.STRING
+            }
+          },
+          required: ["tags", "description"]
+        }
+      }
     });
     
     return JSON.parse(response.text || "{}");

@@ -101,9 +101,19 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const handleAutoGenerateContext = async () => {
     setIsGeneratingContext(true);
     try {
-      const result = await generateNodeContext(node);
+      // Pass the context path (Breadcrumbs) to the AI service
+      const pathString = breadcrumbs.map(b => b.name || 'Untitled').join(' > ');
+      
+      const result = await generateNodeContext(node, pathString);
+      
+      // Merge new tags with existing ones to prevent overwrite if desired, 
+      // but usually AI replaces context. Let's merge unique tags.
+      const currentTags = node.tags || [];
+      const newTags = result.tags || [];
+      const mergedTags = Array.from(new Set([...currentTags, ...newTags]));
+
       onUpdate(node.id, {
-        tags: result.tags,
+        tags: mergedTags,
         description: result.description
       });
     } catch (error) {
