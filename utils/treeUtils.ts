@@ -456,26 +456,61 @@ export const generateOptimizedCSV = async (
 };
 
 export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): any => {
-  const { 
-    // id,  <-- REMOVED DESTRUCTURING OF ID. WE NEED ID FOR AI TO TARGET NODES.
-    lastSaved, 
-    uiState, 
-    isExpanded, 
-    children,
-    attributes,
-    ...semanticData 
-  } = node as any;
+  const semanticData: any = {};
+  
+  // Safe Copy Helper to prevent circular deps and filter out library internals (e.g. Q$1, Sa)
+  const safeCopy = (val: any, depth: number): any => {
+      if (depth > 5) return undefined; // Limit depth for safety
+      if (val === null || val === undefined) return val;
+      if (typeof val !== 'object') return val;
+      if (Array.isArray(val)) return val.map(v => safeCopy(v, depth + 1));
+      
+      // Ensure we are copying a plain object, not a complex class instance
+      if (val.constructor && val.constructor !== Object) {
+         return undefined; // Skip complex types (React Events, Firestore Refs, etc.)
+      }
+      
+      const res: any = {};
+      for (const k in val) {
+          if (Object.prototype.hasOwnProperty.call(val, k)) {
+              const safeVal = safeCopy(val[k], depth + 1);
+              if (safeVal !== undefined) res[k] = safeVal;
+          }
+      }
+      return res;
+  }
 
-  // Explicitly ensure ID is in the semantic data
-  semanticData.id = node.id;
+  // Explicitly copy allowed known fields
+  if (node.id) semanticData.id = node.id;
+  if (node.type) semanticData.type = node.type;
+  if (node.name) semanticData.name = node.name;
+  if (node.value) semanticData.value = node.value;
+  if (node.description) semanticData.description = node.description;
+  if (node.tags) semanticData.tags = node.tags;
+  if (node.question) semanticData.question = node.question;
+  if (node.answer) semanticData.answer = node.answer;
+  if (node.price) semanticData.price = node.price;
+
+  // Copy other properties safely, excluding UI/System keys
+  const excludeKeys = new Set([
+      'id', 'type', 'name', 'value', 'description', 'tags', 'question', 
+      'answer', 'price', 'children', 'attributes', 'uiState', 'lastSaved', 'isExpanded'
+  ]);
+  
+  Object.keys(node).forEach(key => {
+     if (!excludeKeys.has(key) && !key.startsWith('_')) {
+         const safe = safeCopy(node[key], 0);
+         if (safe !== undefined) semanticData[key] = safe;
+     }
+  });
 
   const currentPath = parentPath ? `${parentPath} > ${node.name || 'Untitled'}` : (node.name || 'Untitled');
   semanticData._path = currentPath;
 
   // Flatten attributes into a specific 'features' object for AI
-  if (attributes && Array.isArray(attributes) && attributes.length > 0) {
+  if (node.attributes && Array.isArray(node.attributes) && node.attributes.length > 0) {
     const features: Record<string, string> = {};
-    attributes.forEach((attr: any) => {
+    node.attributes.forEach((attr: any) => {
         const safeKey = (attr.key || '').trim();
         if (safeKey) {
             features[safeKey] = attr.value || '';
@@ -487,18 +522,8 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
     }
   }
 
-  // Cleanup empty fields
-  Object.keys(semanticData).forEach(key => {
-    if (semanticData[key] === null || semanticData[key] === undefined || semanticData[key] === '') {
-      delete semanticData[key];
-    }
-    if (Array.isArray(semanticData[key]) && semanticData[key].length === 0) {
-      delete semanticData[key];
-    }
-  });
-
-  if (children && children.length > 0) {
-    semanticData.contains = children.map((child: HotelNode) => generateCleanAIJSON(child, currentPath));
+  if (node.children && node.children.length > 0) {
+    semanticData.contains = node.children.map((child: HotelNode) => generateCleanAIJSON(child, currentPath));
   }
 
   return semanticData;

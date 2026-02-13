@@ -47,7 +47,11 @@ const getLocalHotelData = (id: string): HotelNode | null => {
 
 // LocalStorage saves the MONOLITHIC tree as a backup
 const saveLocalHotelData = (id: string, data: HotelNode) => {
-  localStorage.setItem(LS_KEYS.HOTEL_PREFIX + id, JSON.stringify(data));
+  try {
+    localStorage.setItem(LS_KEYS.HOTEL_PREFIX + id, JSON.stringify(data));
+  } catch (e) {
+    console.error("Failed to save local backup", e);
+  }
 };
 
 const getLocalTemplates = (): HotelTemplate[] => {
@@ -89,6 +93,36 @@ const sanitizeForFirestore = (obj: any): any => {
     return newObj;
   }
   return obj;
+};
+
+// Helper: Sanitize data coming FROM Firestore (convert Timestamps, remove Refs)
+const sanitizeFromFirestore = (data: any): any => {
+  if (data === null || data === undefined) return data;
+  if (typeof data !== 'object') return data;
+  
+  // Handle Arrays
+  if (Array.isArray(data)) {
+      return data.map(sanitizeFromFirestore);
+  }
+
+  // Handle Timestamp (duck typing)
+  if (typeof data.toMillis === 'function') {
+      return data.toMillis();
+  }
+
+  // Handle DocumentReference or other internal circular types
+  // If it has 'firestore' property (DocumentReference), we strip it to avoid circular refs
+  if (data.firestore && data.path) {
+      // Just return the path string as a safe fallback
+      return data.path; 
+  }
+
+  // Handle plain objects
+  const clean: any = {};
+  Object.keys(data).forEach(key => {
+      clean[key] = sanitizeFromFirestore(data[key]);
+  });
+  return clean;
 };
 
 // --- SCALABLE FIRESTORE ARCHITECTURE (SHARDING) ---
@@ -231,7 +265,9 @@ export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null>
       return null;
     }
 
-    const rootData = rootSnap.data() as HotelNode & { categoryOrder?: string[] };
+    // SANITIZE ROOT DATA
+    const rawRootData = rootSnap.data();
+    const rootData = sanitizeFromFirestore(rawRootData) as HotelNode & { categoryOrder?: string[] };
 
     // 2. Fetch Sharded Children
     const structureRef = collection(hotelRef, STRUCTURE_SUBCOLLECTION);
@@ -239,7 +275,9 @@ export const fetchHotelById = async (hotelId: string): Promise<HotelNode | null>
 
     const assembledChildren: HotelNode[] = [];
     structureSnap.forEach((doc) => {
-        assembledChildren.push(doc.data() as HotelNode);
+        // SANITIZE CHILD DATA
+        const cleanChild = sanitizeFromFirestore(doc.data());
+        assembledChildren.push(cleanChild as HotelNode);
     });
 
     // 3. Reassemble & Sort Tree
@@ -305,7 +343,7 @@ export const getPersonas = async (hotelId: string): Promise<AIPersona[]> => {
         const personasRef = collection(db, HOTELS_COLLECTION, hotelId, PERSONAS_SUBCOLLECTION);
         const snapshot = await getDocs(personasRef);
         const personas: AIPersona[] = [];
-        snapshot.forEach(doc => personas.push(doc.data() as AIPersona));
+        snapshot.forEach(doc => personas.push(sanitizeFromFirestore(doc.data()) as AIPersona));
         return personas;
     } catch (e) {
         console.warn("Fetching local personas.", e);
@@ -316,7 +354,7 @@ export const getPersonas = async (hotelId: string): Promise<AIPersona[]> => {
 export const savePersona = async (hotelId: string, persona: AIPersona): Promise<void> => {
     try {
         const docRef = doc(db, HOTELS_COLLECTION, hotelId, PERSONAS_SUBCOLLECTION, persona.id);
-        await setDoc(docRef, persona);
+        await setDoc(docRef, sanitizeForFirestore(persona));
     } catch (e) {
         console.warn("Saving persona locally.", e);
         const current = getLocalPersonas(hotelId);
@@ -341,7 +379,7 @@ export const deletePersona = async (hotelId: string, personaId: string): Promise
 
 export const saveTemplate = async (template: Omit<HotelTemplate, 'id'>): Promise<string> => {
   try {
-    const docRef = await addDoc(collection(db, TEMPLATES_COLLECTION), template);
+    const docRef = await addDoc(collection(db, TEMPLATES_COLLECTION), sanitizeForFirestore(template));
     return docRef.id;
   } catch (error) {
     console.warn("Saving Template locally.", error);
@@ -359,7 +397,7 @@ export const getTemplatesList = async (): Promise<HotelTemplate[]> => {
     const querySnapshot = await getDocs(collection(db, TEMPLATES_COLLECTION));
     const templates: HotelTemplate[] = [];
     querySnapshot.forEach((doc) => {
-      const data = doc.data() as Omit<HotelTemplate, 'id'>;
+      const data = sanitizeFromFirestore(doc.data()) as Omit<HotelTemplate, 'id'>;
       templates.push({
         id: doc.id,
         ...data
