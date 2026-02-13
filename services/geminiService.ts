@@ -8,9 +8,9 @@ const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_
 const ai = new GoogleGenAI({ apiKey });
 
 // Helper: Model yapılandırması
-// USER REQUEST: Updated to Gemini 2.5 Flash
+// UPDATED: Switched to 'gemini-3-flash-preview' as per latest API availability
 const modelConfig = {
-  model: 'gemini-2.5-flash-latest', 
+  model: 'gemini-3-flash-preview', 
 };
 
 export const analyzeHotelData = async (data: HotelNode): Promise<string> => {

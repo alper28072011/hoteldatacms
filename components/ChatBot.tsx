@@ -159,7 +159,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
              </div>
          </div>
          <div className="flex items-center text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-            <Sparkles size={10} className="mr-1" /> Gemini 2.5 Flash
+            <Sparkles size={10} className="mr-1" /> Gemini 3 Flash
          </div>
       </div>
 
