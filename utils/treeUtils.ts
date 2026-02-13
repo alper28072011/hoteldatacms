@@ -44,13 +44,8 @@ export const findPathToNode = (root: HotelNode, targetId: string): HotelNode[] |
   return null;
 };
 
-/**
- * OPTIMIZED: UPDATE NODE (Structural Sharing)
- */
 export const updateNodeInTree = (root: HotelNode, targetId: string, updates: Partial<HotelNode>): HotelNode => {
   if (String(root.id) === String(targetId)) {
-    // When updating, ensure we create a new object reference.
-    // Explicitly merge to avoid any potential prototype issues or loss of data.
     return { ...root, ...updates };
   }
 
@@ -75,9 +70,6 @@ export const updateNodeInTree = (root: HotelNode, targetId: string, updates: Par
   return { ...root, children: newChildren };
 };
 
-/**
- * OPTIMIZED: ADD CHILD (Structural Sharing)
- */
 export const addChildToNode = (root: HotelNode, parentId: string, newChild: HotelNode): HotelNode => {
   if (String(root.id) === String(parentId)) {
     return {
@@ -103,9 +95,6 @@ export const addChildToNode = (root: HotelNode, parentId: string, newChild: Hote
   return hasChanges ? { ...root, children: newChildren } : root;
 };
 
-/**
- * OPTIMIZED: DELETE NODE (Structural Sharing)
- */
 export const deleteNodeFromTree = (root: HotelNode, nodeIdToDelete: string): HotelNode => {
   if (String(root.id) === String(nodeIdToDelete)) {
     return root; 
@@ -134,16 +123,11 @@ export const deleteNodeFromTree = (root: HotelNode, nodeIdToDelete: string): Hot
   return hasChanges ? { ...root, children: newChildren } : root;
 };
 
-/**
- * NEW: INSERT NODE SIBLING (Before/After)
- * Helper to insert a node adjacent to a target node.
- */
 const insertNodeSibling = (root: HotelNode, targetId: string, newNode: HotelNode, position: 'before' | 'after'): HotelNode => {
-  if (String(root.id) === String(targetId)) return root; // Cannot insert sibling of root
+  if (String(root.id) === String(targetId)) return root; 
 
   if (!root.children) return root;
 
-  // Check if target is a direct child
   const index = root.children.findIndex(c => String(c.id) === String(targetId));
   
   if (index !== -1) {
@@ -153,7 +137,6 @@ const insertNodeSibling = (root: HotelNode, targetId: string, newNode: HotelNode
     return { ...root, children: newChildren };
   }
 
-  // Recurse
   let hasChanges = false;
   const newChildren = root.children.map(child => {
     const updatedChild = insertNodeSibling(child, targetId, newNode, position);
@@ -167,31 +150,22 @@ const insertNodeSibling = (root: HotelNode, targetId: string, newNode: HotelNode
   return hasChanges ? { ...root, children: newChildren } : root;
 };
 
-/**
- * NEW: MOVE NODE (Drag & Drop Logic)
- */
 export const moveNode = (root: HotelNode, sourceId: string, targetId: string, position: 'inside' | 'before' | 'after'): HotelNode => {
-  // 1. Basic Validation
   if (sourceId === targetId) return root;
   if (sourceId === 'root') return root; 
-  if (targetId === 'root' && position !== 'inside') return root; // Can only insert INSIDE root, not before/after
+  if (targetId === 'root' && position !== 'inside') return root; 
 
-  // 2. Find Source Node
   const sourceNode = findNodeById(root, sourceId);
   if (!sourceNode) return root;
 
-  // 3. Circular Dependency Check (Cannot move parent inside its own child)
   const targetPath = findPathToNode(root, targetId);
   if (targetPath && targetPath.some(n => n.id === sourceId)) {
     console.warn("Cannot move a node into its own descendant");
     return root;
   }
 
-  // 4. Remove Source from old location
-  // We use the existing delete function which returns a new tree reference
   const treeWithoutSource = deleteNodeFromTree(root, sourceId);
 
-  // 5. Insert Source at new location
   if (position === 'inside') {
      return addChildToNode(treeWithoutSource, targetId, sourceNode);
   } else {
@@ -224,8 +198,6 @@ export const getInitialData = (): HotelNode => ({
   ]
 });
 
-// --- TEMPLATE ALGORITHMS ---
-
 export const regenerateIds = (node: HotelNode): HotelNode => {
   const newNode = { ...node, id: generateId(node.type.substring(0, 3)) };
   if (node.children) {
@@ -243,8 +215,6 @@ export const cleanTreeValues = (node: HotelNode): HotelNode => {
   delete newNode.answer;
   delete newNode.calories;
   delete newNode.description;
-  // Attributes should probably be kept in structure mode, but values cleared? 
-  // For now, let's keep attributes as they are often structural (e.g. "Is Paid")
   if (newNode.attributes) {
       newNode.attributes = newNode.attributes.map(attr => ({ ...attr, value: '' }));
   }
@@ -254,8 +224,6 @@ export const cleanTreeValues = (node: HotelNode): HotelNode => {
   }
   return newNode;
 };
-
-// --- DATA HEALTH STATISTICS ---
 
 export interface HotelStats {
   totalNodes: number;
@@ -310,8 +278,6 @@ export const analyzeHotelStats = (root: HotelNode): HotelStats => {
   return stats;
 };
 
-// --- SEARCH ALGORITHM ---
-
 export const filterHotelTree = (node: HotelNode, query: string): HotelNode | null => {
   if (!query) return node;
 
@@ -320,9 +286,6 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   const nameMatch = (node.name || '').toLowerCase().includes(lowerQuery);
   const valueMatch = (node.value || '').toLowerCase().includes(lowerQuery);
   const tagsMatch = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
-  
-  // CRITICAL UPDATE: Search inside Attributes/Properties as well
-  // We check both keys and values for better discovery (e.g., search "Almanca" or "Dil")
   const attributesMatch = node.attributes?.some(attr => 
     (attr.key || '').toLowerCase().includes(lowerQuery) || 
     (attr.value || '').toLowerCase().includes(lowerQuery)
@@ -346,129 +309,171 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   return null;
 };
 
-// --- EXPORT ALGORITHMS ---
+// --- DATA PROCESSING HELPERS FOR GENERATE AI TEXT ---
 
-const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[], depth: number }[] => {
-  const result: { node: HotelNode, path: string[], depth: number }[] = [];
-  const traverse = (node: HotelNode, path: string[], depth: number) => {
-    const currentPath = [...path, node.name || 'Untitled'];
-    result.push({ node, path: currentPath, depth });
-    if (node.children) {
-      node.children.forEach(child => traverse(child, currentPath, depth + 1));
-    }
+interface GlobalIndex {
+  definitions: Map<string, string>; // Maps "Standard Minibar" -> "Coke, Water, Beer..."
+  globalRules: string[];
+}
+
+/**
+ * Builds a Global Knowledge Graph of definitions.
+ * It finds 'list', 'menu', 'policy' nodes and creates a concise summary of their content.
+ */
+const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
+  const index: GlobalIndex = {
+    definitions: new Map(),
+    globalRules: []
   };
-  traverse(root, [], 0);
-  return result;
+
+  const traverse = (node: HotelNode) => {
+    // Index definable items
+    if (['list', 'menu', 'policy', 'category'].includes(String(node.type))) {
+      const name = node.name?.trim();
+      if (name && name.length > 3) {
+        // Extract a summary of this container's children
+        const childrenSummary = node.children
+          ?.map(c => c.name + (c.value ? `: ${c.value}` : ''))
+          .slice(0, 5) // Limit to 5 items to keep definitions concise
+          .join(', ');
+        
+        if (childrenSummary) {
+          index.definitions.set(name, childrenSummary);
+        }
+      }
+    }
+
+    // Index Global Rules (Heuristic: tagged 'global' or named 'General Rules')
+    if (node.name?.toLowerCase().includes('general rule') || node.tags?.includes('global')) {
+       if (node.children) {
+          node.children.forEach(c => {
+             if (c.value) index.globalRules.push(`${c.name}: ${c.value}`);
+          });
+       }
+    }
+
+    if (node.children) node.children.forEach(traverse);
+  };
+
+  traverse(root);
+  return index;
 };
 
-const generateAvailabilityRule = (node: HotelNode): string => {
-  const rule: any = {};
-  if (node.recurrenceType) rule.recurrence = node.recurrenceType;
-  if (node.startTime) rule.start = node.startTime;
-  if (node.endTime) rule.end = node.endTime;
-  if (node.days && node.days.length > 0) rule.days = node.days;
-  if (node.validFrom) rule.validFrom = node.validFrom;
-  if (node.validUntil) rule.validUntil = node.validUntil;
-  if (node.eventStatus) rule.status = node.eventStatus;
-  
-  return Object.keys(rule).length > 0 ? JSON.stringify(rule) : '';
-};
-
-const generateRichAttributes = (node: HotelNode): string => {
-  const parts: string[] = [];
-  
-  // Legacy
-  if (node.price) parts.push(`Price: $${node.price}`);
-  if (node.isPaid) parts.push(`isPaid: true`);
-  
-  // New Attributes
-  if (node.attributes) {
-      node.attributes.forEach(attr => {
-          if (attr.key) {
-            parts.push(`${attr.key}: ${attr.value || ''}`);
-          }
-      });
-  }
-  
-  return parts.join(' | ');
-};
-
-export const generateOptimizedCSV = async (
+/**
+ * SMART WEAVING ALGORITHM (generateAIText)
+ * 1. Indexes the tree to understand what "things" are.
+ * 2. Generates Markdown where undefined references (like "Standard Minibar") 
+ *    are automatically enriched with their definition found elsewhere in the tree.
+ */
+export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
 ): Promise<string> => {
-  const flatNodes = flattenTreeForExport(root);
-  const totalNodes = flatNodes.length;
   
-  const headers = [
-    'System_ID', 
-    'Context_Path', 
-    'Parent_Context', 
-    'Node_Type', 
-    'Name', 
-    'Primary_Content', 
-    'Availability_Rule', 
-    'Rich_Attributes', 
-    'Tags', 
-    'AI_Description'
-  ];
-
-  const rows: string[] = [];
-  rows.push('\uFEFF' + headers.join(',')); 
-
-  const safeCSV = (val: string | number | undefined | null): string => {
-    if (val === undefined || val === null) return '';
-    const stringVal = String(val);
-    if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n')) {
-      return `"${stringVal.replace(/"/g, '""')}"`;
+  // Phase 1: Build Knowledge Graph
+  const globalIndex = buildGlobalIndex(root);
+  
+  const flattenTree = (node: HotelNode, depth: number): { node: HotelNode, depth: number }[] => {
+    const result: { node: HotelNode, depth: number }[] = [{ node, depth }];
+    if (node.children) {
+      node.children.forEach(child => result.push(...flattenTree(child, depth + 1)));
     }
-    return stringVal;
+    return result;
   };
 
+  const flatNodes = flattenTree(root, 0);
+  const totalNodes = flatNodes.length;
+  const lines: string[] = [];
   const CHUNK_SIZE = 50;
-  for (let i = 0; i < totalNodes; i += CHUNK_SIZE) {
-    const chunk = flatNodes.slice(i, i + CHUNK_SIZE);
-    chunk.forEach(({ node, path }) => {
-       const fullPath = path.join(' > ');
-       const parentPath = path.slice(0, -1).join(' > ') || 'ROOT';
-       
-       const content = node.value || node.answer || node.question || '';
 
-       const rowData = [
-         safeCSV(node.id),
-         safeCSV(fullPath),
-         safeCSV(parentPath), 
-         safeCSV(node.type),
-         safeCSV(node.name),
-         safeCSV(content),
-         safeCSV(generateAvailabilityRule(node)),
-         safeCSV(generateRichAttributes(node)), 
-         safeCSV((node.tags || []).join(', ')),
-         safeCSV(node.description)
-       ];
-       rows.push(rowData.join(','));
-    });
-    const progress = Math.round(((i + chunk.length) / totalNodes) * 100);
-    onProgress(progress);
-    await new Promise(resolve => setTimeout(resolve, 5));
+  // Phase 2: Enriched Generation
+  for (let i = 0; i < totalNodes; i++) {
+    const { node, depth } = flatNodes[i];
+    const type = String(node.type);
+    const name = node.name || 'Untitled';
+    const value = node.value || node.answer || '';
+    
+    // Indentation based on depth
+    const indent = "  ".repeat(depth);
+    let line = "";
+
+    // A. Structural Formatting
+    const isContainer = ['root', 'category', 'list', 'menu'].includes(type);
+    
+    if (isContainer) {
+       // Headers for high level, bullets for deep nested lists
+       if (depth < 3) {
+         line = `\n${"#".repeat(depth + 1)} ${name}`;
+       } else {
+         line = `${indent}- **[${type.toUpperCase()}] ${name}**`;
+       }
+    } else {
+       // Items / Fields
+       line = `${indent}- ${name}`;
+    }
+
+    // B. Value & Definition Injection (Smart Weaving)
+    if (value) {
+      line += `: ${value}`;
+      
+      // CHECK FOR DEFINITION LINK
+      // If the value matches a key in our Global Index (e.g. value="Standard Minibar"), inject the def.
+      // We skip if the node itself is the definition container to avoid self-reference loops.
+      const definition = globalIndex.definitions.get(value.trim());
+      if (definition && type !== 'list' && type !== 'menu') {
+        line += ` _(System Definition: ${definition}...)_`;
+      }
+    }
+
+    // C. Attribute Injection
+    const attributesParts: string[] = [];
+    if (node.price) attributesParts.push(`Price: ${node.price}`);
+    if (node.attributes && node.attributes.length > 0) {
+       node.attributes.forEach(attr => {
+          if (attr.key && attr.value) {
+             attributesParts.push(`${attr.key}: ${attr.value}`);
+          }
+       });
+    }
+    if (attributesParts.length > 0) {
+       line += ` [${attributesParts.join(', ')}]`;
+    }
+
+    // D. Global Rule Injection for Rooms (Context Awareness)
+    // If this node is a Room, inject global amenities automatically
+    if (type === 'category' && (name.toLowerCase().includes('room') || name.toLowerCase().includes('suite'))) {
+       if (globalIndex.globalRules.length > 0) {
+         // Only inject a summary to save tokens
+         line += `\n${indent}  > *Implicit Global Amenities applied: ${globalIndex.globalRules.length} items included.*`;
+       }
+    }
+
+    lines.push(line);
+
+    // E. Note/Q&A Handling (Visual Grouping)
+    if (node.description) {
+       lines.push(`${indent}  > Note: ${node.description}`);
+    }
+
+    // Progress Update
+    if (i % CHUNK_SIZE === 0) {
+      onProgress(Math.round((i / totalNodes) * 100));
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
   }
-  return rows.join('\n');
+
+  return lines.join('\n');
 };
 
 export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): any => {
   const semanticData: any = {};
   
-  // Safe Copy Helper to prevent circular deps and filter out library internals (e.g. Q$1, Sa)
   const safeCopy = (val: any, depth: number): any => {
-      if (depth > 5) return undefined; // Limit depth for safety
+      if (depth > 5) return undefined; 
       if (val === null || val === undefined) return val;
       if (typeof val !== 'object') return val;
       if (Array.isArray(val)) return val.map(v => safeCopy(v, depth + 1));
-      
-      // Ensure we are copying a plain object, not a complex class instance
-      if (val.constructor && val.constructor !== Object) {
-         return undefined; // Skip complex types (React Events, Firestore Refs, etc.)
-      }
+      if (val.constructor && val.constructor !== Object) return undefined;
       
       const res: any = {};
       for (const k in val) {
@@ -480,7 +485,6 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
       return res;
   }
 
-  // Explicitly copy allowed known fields
   if (node.id) semanticData.id = node.id;
   if (node.type) semanticData.type = node.type;
   if (node.name) semanticData.name = node.name;
@@ -491,7 +495,6 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   if (node.answer) semanticData.answer = node.answer;
   if (node.price) semanticData.price = node.price;
 
-  // Copy other properties safely, excluding UI/System keys
   const excludeKeys = new Set([
       'id', 'type', 'name', 'value', 'description', 'tags', 'question', 
       'answer', 'price', 'children', 'attributes', 'uiState', 'lastSaved', 'isExpanded'
@@ -507,7 +510,6 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   const currentPath = parentPath ? `${parentPath} > ${node.name || 'Untitled'}` : (node.name || 'Untitled');
   semanticData._path = currentPath;
 
-  // Flatten attributes into a specific 'features' object for AI
   if (node.attributes && Array.isArray(node.attributes) && node.attributes.length > 0) {
     const features: Record<string, string> = {};
     node.attributes.forEach((attr: any) => {
@@ -529,93 +531,45 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   return semanticData;
 };
 
-// Generates an optimized, token-efficient Markdown structure for AI
-export const generateAIText = async (
-  root: HotelNode, 
-  onProgress: (percent: number) => void
-): Promise<string> => {
+export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent: number) => void): Promise<string> => {
+  // Simple CSV generation kept for export compatibility
+  const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[] }[] => {
+    const result: { node: HotelNode, path: string[] }[] = [];
+    const traverse = (node: HotelNode, path: string[]) => {
+      const currentPath = [...path, node.name || 'Untitled'];
+      result.push({ node, path: currentPath });
+      if (node.children) node.children.forEach(child => traverse(child, currentPath));
+    };
+    traverse(root, []);
+    return result;
+  };
+
   const flatNodes = flattenTreeForExport(root);
   const totalNodes = flatNodes.length;
-  const lines: string[] = [];
-  const CHUNK_SIZE = 50;
+  
+  const headers = ['System_ID', 'Path', 'Type', 'Name', 'Value', 'Attributes'];
+  const rows: string[] = ['\uFEFF' + headers.join(',')]; 
+
+  const safeCSV = (val: any) => {
+    const s = String(val || '').replace(/"/g, '""');
+    return `"${s}"`;
+  };
 
   for (let i = 0; i < totalNodes; i++) {
-    const { node, depth } = flatNodes[i];
-    const type = String(node.type);
-    
-    // 1. Determine Hierarchy (Containers vs Items)
-    const isContainer = ['root', 'category', 'list', 'menu'].includes(type);
-    let line = "";
-
-    if (isContainer) {
-       // Headers for structure ( # Root, ## Category, ### SubCategory )
-       // Limit to H6 to ensure valid markdown
-       const headerLevel = Math.min(depth + 1, 6);
-       line = `\n${"#".repeat(headerLevel)} ${node.name || 'Untitled'}`;
-    } else {
-       // Bullets for content items
-       line = `- **${node.name || 'Untitled'}**`;
-    }
-
-    // 2. Add Content Values (Value, Answer, etc.)
-    const contentParts: string[] = [];
-
-    // Special handling for Q&A pairs
-    if (type === 'qa_pair') {
-       // If question is distinct from name, show it
-       if (node.question && node.question !== node.name) {
-          contentParts.push(`Q: ${node.question}`);
-       }
-       if (node.answer) {
-          contentParts.push(`A: ${node.answer}`);
-       }
-    } else {
-       // Standard Items
-       if (node.value) contentParts.push(node.value);
-    }
-    
-    if (contentParts.length > 0) {
-       line += `: ${contentParts.join(' | ')}`;
-    }
-
-    // 3. Add Attributes (Properties & Settings) - Inline
-    const attributesParts: string[] = [];
-    
-    // Legacy Price
-    if (node.price) attributesParts.push(`Price: ${node.price}`);
-    
-    // Dynamic Attributes
-    if (node.attributes && node.attributes.length > 0) {
-       node.attributes.forEach(attr => {
-          if (attr.key && attr.value) {
-             attributesParts.push(`${attr.key}: ${attr.value}`);
-          }
-       });
-    }
-
-    if (attributesParts.length > 0) {
-       line += ` (${attributesParts.join(', ')})`;
-    }
-
-    lines.push(line);
-
-    // 4. Add Context/Notes (Blockquote)
-    if (node.description || (node.tags && node.tags.length > 0)) {
-       const noteParts = [];
-       if (node.description) noteParts.push(node.description);
-       if (node.tags && node.tags.length > 0) noteParts.push(`Tags: [${node.tags.join(', ')}]`);
-       
-       if (noteParts.length > 0) {
-          lines.push(`> Note: ${noteParts.join(' | ')}`);
-       }
-    }
-
-    // Progress Update
-    if (i % CHUNK_SIZE === 0) {
-      onProgress(Math.round((i / totalNodes) * 100));
-      await new Promise(resolve => setTimeout(resolve, 5));
-    }
+     const { node, path } = flatNodes[i];
+     rows.push([
+        safeCSV(node.id),
+        safeCSV(path.join(' > ')),
+        safeCSV(node.type),
+        safeCSV(node.name),
+        safeCSV(node.value),
+        safeCSV(JSON.stringify(node.attributes || []))
+     ].join(','));
+     
+     if (i % 50 === 0) {
+       onProgress(Math.round((i / totalNodes) * 100));
+       await new Promise(r => setTimeout(r, 5));
+     }
   }
-
-  return lines.join('\n');
+  return rows.join('\n');
 };

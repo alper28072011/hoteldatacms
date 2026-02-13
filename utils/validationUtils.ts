@@ -8,6 +8,16 @@ import { generateId } from './treeUtils';
 export const runLocalValidation = (root: HotelNode): HealthIssue[] => {
   const issues: HealthIssue[] = [];
   
+  // Build a set of known definitions for Relational Checks
+  const definedTerms = new Set<string>();
+  const collectDefinitions = (node: HotelNode) => {
+      if (['list', 'menu', 'policy', 'category'].includes(String(node.type)) && node.name) {
+          definedTerms.add(node.name.trim());
+      }
+      node.children?.forEach(collectDefinitions);
+  };
+  collectDefinitions(root);
+
   // 1. Empty/Missing Data Check
   issues.push(...findEmptyNodes(root));
 
@@ -16,6 +26,12 @@ export const runLocalValidation = (root: HotelNode): HealthIssue[] => {
 
   // 3. Duplicate Siblings Check
   issues.push(...findDuplicateSiblings(root));
+
+  // 4. Relational Integrity (Broken Links)
+  issues.push(...findBrokenReferences(root, definedTerms));
+
+  // 5. Missing Service Details
+  issues.push(...findMissingServiceDetails(root));
 
   return issues;
 };
@@ -40,40 +56,31 @@ const createIssue = (
   } : undefined
 });
 
-/**
- * RULE 1: Find Empty Nodes
- * Checks for missing names or missing required values based on type.
- */
 const findEmptyNodes = (node: HotelNode, issues: HealthIssue[] = []): HealthIssue[] => {
-  // Check Name
   if (!node.name || node.name.trim() === '') {
     issues.push(createIssue(node, 'critical', 'Node has no name.', 'Set Name', { name: 'New Item' }));
   } else if (node.name.toLowerCase() === 'new item' || node.name.toLowerCase() === 'untitled') {
     issues.push(createIssue(node, 'warning', 'Node has default placeholder name.', 'Rename', {}));
   }
 
-  // Check Value based on Type
   if (['item', 'field'].includes(String(node.type))) {
     if (!node.value || node.value.trim() === '') {
       issues.push(createIssue(node, 'warning', `Field "${node.name}" is empty.`, 'Set Placeholder', { value: 'TBD' }));
     }
   }
 
-  // Check Menu Items
   if (node.type === 'menu_item') {
     if (!node.price && node.price !== 0) {
       issues.push(createIssue(node, 'warning', `Menu item "${node.name}" has no price.`, 'Set Price', { price: '0' }));
     }
   }
 
-  // Check Q&A
   if (node.type === 'qa_pair') {
     if (!node.answer || node.answer.trim() === '') {
       issues.push(createIssue(node, 'critical', `Question "${node.question || 'Unknown'}" has no answer.`, 'Set Answer', { answer: 'Answer pending.' }));
     }
   }
 
-  // Recurse
   if (node.children) {
     node.children.forEach(child => findEmptyNodes(child, issues));
   }
@@ -81,22 +88,15 @@ const findEmptyNodes = (node: HotelNode, issues: HealthIssue[] = []): HealthIssu
   return issues;
 };
 
-/**
- * RULE 2: Structural Issues
- * Checks for excessive depth or odd typing.
- */
 const findStructuralIssues = (node: HotelNode, depth: number = 0, issues: HealthIssue[] = []): HealthIssue[] => {
-  // Max Depth Warning (UX Rule: Don't go deeper than 5 levels)
   if (depth > 5) {
     issues.push(createIssue(node, 'optimization', `Nesting level (${depth}) is too deep for good UX.`, undefined));
   }
 
-  // Type Logic: A 'field' should rarely have children
   if (node.type === 'field' && node.children && node.children.length > 0) {
     issues.push(createIssue(node, 'warning', `Node "${node.name}" is a 'field' type but has children. Should it be a 'category'?`, 'Convert to Category', { type: 'category' }));
   }
 
-  // Recurse
   if (node.children) {
     node.children.forEach(child => findStructuralIssues(child, depth + 1, issues));
   }
@@ -104,10 +104,6 @@ const findStructuralIssues = (node: HotelNode, depth: number = 0, issues: Health
   return issues;
 };
 
-/**
- * RULE 3: Duplicate Siblings
- * Checks if siblings have the exact same name (confusing for users/AI).
- */
 const findDuplicateSiblings = (node: HotelNode, issues: HealthIssue[] = []): HealthIssue[] => {
   if (node.children && node.children.length > 1) {
     const nameMap = new Map<string, number>();
@@ -122,18 +118,78 @@ const findDuplicateSiblings = (node: HotelNode, issues: HealthIssue[] = []): Hea
     node.children.forEach(child => {
       const name = (child.name || '').trim().toLowerCase();
       if (nameMap.get(name)! > 1) {
-        // We only flag one instance per traversal pass effectively, but that's fine for local check
-        // To avoid duplicate issues for the same pair, we could use a set, but simple is better here.
-        // We'll just flag it.
-        // Check if we haven't already flagged this node ID in this pass (not possible in recursion logic easily without set)
-        // Optimization: Just push it.
         issues.push(createIssue(child, 'critical', `Duplicate name "${child.name}" found in same category.`, 'Rename', { name: `${child.name} (Copy)` }));
       }
     });
     
-    // Recurse
     node.children.forEach(child => findDuplicateSiblings(child, issues));
   }
 
   return issues;
 };
+
+/**
+ * RULE 4: Relational Integrity (Broken References)
+ * Checks if a field references a named entity (e.g. "Standard Minibar") that doesn't exist.
+ */
+const findBrokenReferences = (node: HotelNode, definedTerms: Set<string>, issues: HealthIssue[] = []): HealthIssue[] => {
+    // Only check fields that act as pointers/references
+    if (node.type === 'field' || node.type === 'item') {
+        const value = node.value?.trim();
+        // Heuristic: If value is Capitalized (looks like a proper noun) and has no spaces or few spaces
+        // And matches the pattern of a Definition Name
+        if (value && value.length > 3 && /^[A-Z]/.test(value)) {
+             // If we have a term like "Standard Minibar", check if it exists in definitions
+             // But we need to be careful not to flag "Yes", "No", "Available"
+             const isCommonWord = ['Yes', 'No', 'Available', 'Free', 'Paid', 'Included'].includes(value);
+             
+             if (!isCommonWord && !definedTerms.has(value)) {
+                 // Check if it MIGHT be a broken reference. 
+                 // We only warn if the parent suggests it's a feature (e.g. parent is "Room Features")
+                 // This is a loose heuristic.
+                 issues.push(createIssue(
+                     node, 
+                     'warning', 
+                     `Potential Broken Reference: Value "${value}" looks like a named entity but is not defined in the system.`, 
+                     undefined
+                 ));
+             }
+        }
+    }
+
+    if (node.children) {
+        node.children.forEach(c => findBrokenReferences(c, definedTerms, issues));
+    }
+    return issues;
+}
+
+/**
+ * RULE 5: Missing Service Details
+ * Checks if services have location/time attributes.
+ */
+const findMissingServiceDetails = (node: HotelNode, issues: HealthIssue[] = []): HealthIssue[] => {
+    const isService = node.name?.toLowerCase().includes('service') || 
+                      node.name?.toLowerCase().includes('restaurant') || 
+                      node.name?.toLowerCase().includes('bar') ||
+                      node.type === 'item'; // Assuming 'item' is often a service/facility
+    
+    if (isService && node.children && node.children.length === 0) { // Leaf node service
+        const hasTime = node.attributes?.some(a => a.key.toLowerCase().includes('time') || a.key.toLowerCase().includes('open') || a.key.toLowerCase().includes('hour'));
+        const hasLocation = node.attributes?.some(a => a.key.toLowerCase().includes('location') || a.key.toLowerCase().includes('where'));
+        
+        if (!hasTime && !hasLocation && !node.value?.includes(':')) {
+             issues.push(createIssue(
+                 node, 
+                 'optimization', 
+                 `Service "${node.name}" lacks 'Time' or 'Location' details.`, 
+                 'Add Attribute', 
+                 { attributes: [...(node.attributes || []), { id: `attr_${Date.now()}`, key: 'Opening Hours', value: '09:00 - 18:00', type: 'text' }] }
+             ));
+        }
+    }
+
+    if (node.children) {
+        node.children.forEach(c => findMissingServiceDetails(c, issues));
+    }
+    return issues;
+}

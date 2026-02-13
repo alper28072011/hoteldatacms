@@ -3,29 +3,27 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona } from "../types";
 import { generateCleanAIJSON, generateAIText } from "../utils/treeUtils";
 
-// API Key yönetimi (Vite veya Process env)
 const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
-// Helper: Model yapılandırması
-// 'gemini-3-flash-preview' is the correct model.
 const modelConfig = {
   model: 'gemini-3-flash-preview', 
 };
 
-// CONSTANT: Limit context size to prevent "Rpc failed due to xhr error" (500/Network Error)
 const MAX_CONTEXT_LENGTH = 50000; 
 
 export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
   try {
-    const jsonString = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
+    // Use enriched markdown for analysis too, as it provides better context
+    let textContext = await generateAIText(data, () => {});
+    if (textContext.length > MAX_CONTEXT_LENGTH) {
+        textContext = textContext.substring(0, MAX_CONTEXT_LENGTH);
+    }
     
-    const prompt = `You are an expert Hotel Data Analyst. Review the following JSON structure and provide a summary of the hotel's offerings, identifying any key strengths or missing categories.
+    const prompt = `You are an expert Hotel Data Analyst. Review the following structured hotel data and provide a summary of the hotel's offerings, identifying any key strengths or missing categories.
     
-    Data (Truncated if too large):
-    \`\`\`json
-    ${jsonString}
-    \`\`\`
+    Data (Markdown Format with Definition Injection):
+    ${textContext}
     `;
 
     const response = await ai.models.generateContent({
@@ -75,16 +73,16 @@ export const chatWithData = async (
   activePersona?: AIPersona | null
 ): Promise<string> => {
   try {
-    // Generate markdown context
+    // CRITICAL UPDATE: Use generateAIText (Smart Weaving) instead of JSON
+    // This injects definitions like "Standard Minibar (Contents: Coke, Water)" directly into the context
     let textContext = await generateAIText(data, () => {}); 
-    // Truncate markdown as well to prevent XHR errors
+    
     if (textContext.length > MAX_CONTEXT_LENGTH) {
         textContext = textContext.substring(0, MAX_CONTEXT_LENGTH) + "\n...[Data Truncated]...";
     }
     
     const now = new Date();
     
-    // PERSONA CONSTRUCTION
     let identityBlock = "IDENTITY: You are an Advanced Hotel Guest Assistant (AI). You are helpful, polite, and neutral.";
     let toneBlock = "TONE: Professional, Helpful, Clear.";
     let rulesBlock = "";
@@ -104,16 +102,14 @@ export const chatWithData = async (
     ${toneBlock}
     ${rulesBlock}
 
-    CRITICAL RULE: Do not invent information. Answer solely based on the provided HOTEL DATABASE below. Never mention "I checked the markdown file", just say "We have..." or "The hotel offers...".
+    CRITICAL RULE: Do not invent information. Answer solely based on the provided HOTEL DATABASE below. 
     
-    INSTRUCTIONS ON DATA SOURCE:
-    You are provided with the live hotel database in a structured MARKDOWN format below.
-    1. **HIERARCHY**: Use the Headings (#, ##, ###) to understand categories (e.g., "Restaurants", "Rooms").
-    2. **ITEMS**: Bullet points (-) represent specific items (e.g., "Steakhouse", "Standard Room").
-    3. **ATTRIBUTES**: Details like prices, hours, or specific features are often found in parentheses () next to the item name (e.g., "Price: 50$").
-    4. **NOTES**: Contextual AI notes are indicated with "> Note:". Use these to understand implicit rules (e.g., "Adults only").
+    UNDERSTANDING THE DATA:
+    The data below is structured in Markdown.
+    - IMPORTANT: Some items have definitions injected automatically (e.g. "Minibar (System Definition: Coke, Water)"). Use these definitions to answer "What is in the minibar?" questions.
+    - If a Room Category has "Implicit Global Amenities", assume the room includes those items.
     
-    HOTEL DATABASE (Markdown Format):
+    HOTEL DATABASE (Relational Context Enabled):
     ${textContext}
     `;
 
@@ -192,7 +188,6 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
         return { summary: "Error parsing AI response.", actions: [] };
     }
 
-    // Safety check for array existence
     if (!parsed.actions || !Array.isArray(parsed.actions)) {
         parsed.actions = [];
     }
@@ -250,39 +245,40 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
 
 export const generateHealthReport = async (data: HotelNode): Promise<HealthReport> => {
   try {
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
+    // Generate context using smart weaving to reveal relationships
+    let textContext = await generateAIText(data, () => {});
+    if (textContext.length > MAX_CONTEXT_LENGTH) {
+        textContext = textContext.substring(0, MAX_CONTEXT_LENGTH);
+    }
     
     const prompt = `
-    You are the "Semantic Logic Auditor" for a Hotel Database.
+    You are a "Data Relationship Expert" and "Semantic Logic Auditor" for a Hotel Database.
     
     YOUR TASK:
-    Analyze the data for LOGICAL and SEMANTIC inconsistencies ONLY.
-    Ignore structural issues (like empty names/ids) as we check those locally.
+    Analyze the data (provided in enriched Markdown) for relational and logical inconsistencies.
     
     LOOK FOR:
-    1. Contradictions (e.g., "No Alcohol Policy" but Menu contains "Wine").
-    2. Ambiguous Content (e.g., "Open all day" instead of "08:00 - 22:00").
-    3. Spelling/Typos in public facing names.
-    4. Price logic (e.g., A luxury steak for $1).
+    1. **Broken References / Undefined Services**: (e.g., A room mentions "VIP Breakfast" but "VIP Breakfast" is not defined anywhere in the lists or menus).
+    2. **Contradictions**: (e.g., "Pool Bar open 24h" but "Pool closes at 20:00").
+    3. **Logical Gaps**: (e.g., A "Steakhouse" exists but has no opening hours or dress code).
+    4. **Spelling/Typos**: In public facing names.
     
     INPUT DATA:
-    \`\`\`json
-    ${jsonContext}
-    \`\`\`
+    ${textContext}
     
     OUTPUT SCHEMA (JSON):
     {
-      "score": number (0-100, purely based on semantic quality),
-      "summary": "Short analysis summary.",
+      "score": number (0-100, purely based on relational/semantic quality),
+      "summary": "Short analysis summary focusing on data relationships.",
       "issues": [
         {
           "id": "ai_issue_x",
-          "nodeId": "id from json",
-          "nodeName": "name from json",
+          "nodeId": "Use the exact ID from the data if possible, or describe the path",
+          "nodeName": "Name of the item",
           "severity": "critical" | "warning" | "optimization",
-          "message": "Description of logical flaw",
+          "message": "Description of the relational flaw",
           "fix": { // OPTIONAL
-             "targetId": "id from json",
+             "targetId": "approximate ID",
              "action": "update",
              "data": { "key": "value" },
              "description": "Suggestion"
@@ -318,8 +314,6 @@ export const generateNodeContext = async (node: HotelNode, contextPath: string =
     TASK:
     1. Generate 5-8 relevant "Search Tags" (synonyms, categories, related concepts) that a guest might use to find this.
     2. Write a "Hidden Description" (max 2 sentences) that explains implicit context, rules, or connections for an AI chatbot.
-       - E.g. If it's a "Honeymoon Suite", implicit rule might be "Couples only, romantic atmosphere".
-       - E.g. If "Steakhouse", implicit rule "Requires reservation, smart casual dress code".
     
     RETURN JSON ONLY.
     `;
