@@ -1,12 +1,50 @@
 
 export type NodeType = 'root' | 'category' | 'item' | 'field' | 'list' | 'menu' | 'menu_item' | 'event' | 'qa_pair' | 'policy' | 'note';
 
+export type SchemaType = 'generic' | 'event' | 'dining' | 'room' | 'pool';
+
+// --- SCHEMA DEFINITIONS ---
+
+export interface EventData {
+  scheduleType: 'daily' | 'weekly' | 'once';
+  days: string[]; // ['Mon', 'Tue']
+  startTime: string; // "14:00"
+  endTime: string; // "16:00"
+  location: string;
+  ageMin: number;
+  ageMax: number;
+  isPaid: boolean;
+  price?: string;
+  requiresReservation: boolean;
+  dressCode?: string;
+}
+
+export interface DiningData {
+  cuisine: string; // "Italian", "Buffet"
+  mealType: ('breakfast' | 'lunch' | 'dinner' | 'snack')[];
+  openingTime: string;
+  closingTime: string;
+  dressCode: string;
+  reservationRequired: boolean;
+  isPaid: boolean;
+  priceRange?: 'Low' | 'Medium' | 'High';
+}
+
+export interface RoomData {
+  sizeSqM: number;
+  bedType: string; // "King", "Twin"
+  maxOccupancy: number;
+  view: string; // "Sea", "Garden"
+  hasBalcony: boolean;
+  amenities: string[]; // ["Wifi", "Minibar", "Safe"]
+}
+
 export interface NodeAttribute {
   id: string;
-  key: string; // e.g., "Price", "Working Hours"
-  value: string; // e.g., "100$", "09:00 - 18:00"
+  key: string; 
+  value: string; 
   type: 'text' | 'boolean' | 'number' | 'select';
-  options?: string[]; // For select type
+  options?: string[]; 
 }
 
 export interface HotelNode {
@@ -14,34 +52,22 @@ export interface HotelNode {
   type: NodeType | string;
   name?: string;
   
+  // NEW: SCHEMA AWARENESS
+  schemaType?: SchemaType; 
+  data?: EventData | DiningData | RoomData | any; // Structured payload based on schemaType
+
   // PRIMARY CONTENT
-  value?: string; // Main description or value
+  value?: string; // Main description or generated summary
   description?: string; // Internal AI notes / Context
   
-  // DYNAMIC ATTRIBUTES (The new flexible structure)
+  // DYNAMIC ATTRIBUTES
   attributes?: NodeAttribute[];
   
   // HIERARCHY
   children?: HotelNode[];
   
-  // LEGACY / SPECIFIC FIELDS (Kept for backward compatibility but mapped to attributes in UI)
-  recurrenceType?: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'specific_date';
-  validFrom?: string; 
-  validUntil?: string; 
-  startTime?: string; 
-  endTime?: string; 
-  days?: string[]; 
-  eventStatus?: 'active' | 'cancelled' | 'postponed' | 'full';
-  location?: string; 
-  targetAudience?: 'all' | 'adults' | 'kids' | 'teens' | 'couples' | 'family';
-  minAge?: number;
-  maxAge?: number;
-  isExternalAllowed?: boolean;
-  requiresReservation?: boolean;
+  // LEGACY FIELDS (Kept for backward compatibility)
   price?: string | number | null;
-  calories?: string;
-  isPaid?: boolean | null;
-  isMandatory?: boolean | null;
   tags?: string[];
   question?: string;
   answer?: string;
@@ -69,12 +95,12 @@ export interface HotelTemplate {
 // AI Persona Definition
 export interface AIPersona {
   id: string;
-  name: string;        // e.g. "Aggressive Sales"
-  role: string;        // e.g. "Senior Sales Manager"
-  tone: string;        // e.g. "Professional, Urgent, Persuasive"
-  languageStyle: string; // e.g. "Formal Turkish", "Casual English"
-  instructions: string[]; // Specific rules e.g. "Never mention competitors"
-  creativity: number;  // 0.0 - 1.0 (Temperature)
+  name: string;        
+  role: string;        
+  tone: string;        
+  languageStyle: string; 
+  instructions: string[]; 
+  creativity: number;  
 }
 
 export interface AIResponse {
@@ -94,8 +120,8 @@ export interface ChatMessage {
 // AI Architect Types
 export interface ArchitectAction {
   type: 'add' | 'update' | 'delete';
-  targetId: string; // parentId for 'add', nodeId for 'update'/'delete'
-  data?: Partial<HotelNode>; // For add/update. For 'add', this is the new node.
+  targetId: string; 
+  data?: Partial<HotelNode>; 
   reason?: string;
 }
 
@@ -134,7 +160,7 @@ export interface HealthReport {
 
 export interface SuggestedAction {
   type: 'add' | 'update';
-  targetId: string; // ID of the parent (for add) or the node itself (for update)
+  targetId: string; 
   data: Partial<HotelNode>;
 }
 
@@ -145,7 +171,7 @@ export interface ComparisonItem {
   internalValue: string | null;
   externalValue: string | null;
   description: string;
-  suggestedAction?: SuggestedAction; // New field for actionable imports
+  suggestedAction?: SuggestedAction; 
 }
 
 export interface DataComparisonReport {

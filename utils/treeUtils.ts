@@ -1,5 +1,5 @@
 
-import { HotelNode } from "../types";
+import { HotelNode, EventData, DiningData, RoomData } from "../types";
 
 // Generate a simple unique ID with high collision resistance
 export const generateId = (prefix: string = 'node'): string => {
@@ -210,10 +210,8 @@ export const cleanTreeValues = (node: HotelNode): HotelNode => {
   const newNode = { ...node };
   delete newNode.value;
   delete newNode.price;
-  delete newNode.startTime;
-  delete newNode.endTime;
   delete newNode.answer;
-  delete newNode.calories;
+  delete newNode.data; // Clean structured data too
   delete newNode.description;
   if (newNode.attributes) {
       newNode.attributes = newNode.attributes.map(attr => ({ ...attr, value: '' }));
@@ -259,7 +257,7 @@ export const analyzeHotelStats = (root: HotelNode): HotelStats => {
       } else if (type === 'menu_item') {
          if (!node.price) isEmpty = true;
       } else {
-         if (!node.value || !node.value.trim()) isEmpty = true;
+         if ((!node.value || !node.value.trim()) && !node.data) isEmpty = true;
       }
       if (isEmpty) stats.emptyItems++;
     }
@@ -316,10 +314,6 @@ interface GlobalIndex {
   globalRules: string[];
 }
 
-/**
- * Builds a Global Knowledge Graph of definitions.
- * It finds 'list', 'menu', 'policy' nodes and creates a concise summary of their content.
- */
 const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
   const index: GlobalIndex = {
     definitions: new Map(),
@@ -331,10 +325,9 @@ const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
     if (['list', 'menu', 'policy', 'category'].includes(String(node.type))) {
       const name = node.name?.trim();
       if (name && name.length > 3) {
-        // Extract a summary of this container's children
         const childrenSummary = node.children
           ?.map(c => c.name + (c.value ? `: ${c.value}` : ''))
-          .slice(0, 5) // Limit to 5 items to keep definitions concise
+          .slice(0, 5) 
           .join(', ');
         
         if (childrenSummary) {
@@ -343,7 +336,6 @@ const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
       }
     }
 
-    // Index Global Rules (Heuristic: tagged 'global' or named 'General Rules')
     if (node.name?.toLowerCase().includes('general rule') || node.tags?.includes('global')) {
        if (node.children) {
           node.children.forEach(c => {
@@ -360,10 +352,44 @@ const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
 };
 
 /**
+ * TRANSLATOR: Converts structured Schema Data (JSON) into Natural Language
+ * This allows the AI to "read" the database as if it were written by a human.
+ */
+const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
+    if (!node.schemaType || !node.data) return '';
+
+    const { schemaType, data } = node;
+
+    if (schemaType === 'event') {
+        const d = data as EventData;
+        const days = d.days?.join(', ') || 'Every day';
+        const time = d.startTime ? `${d.startTime} to ${d.endTime}` : 'Variable time';
+        const age = (d.ageMin > 0 || d.ageMax < 100) ? `for ages ${d.ageMin}-${d.ageMax}` : 'for all ages';
+        const cost = d.isPaid ? `(Paid: ${d.price})` : '(Free)';
+        
+        return `[SCHEDULED EVENT] Occurs ${d.scheduleType} on ${days} from ${time}. ${age}. ${cost}. Location: ${d.location || 'N/A'}. ${d.requiresReservation ? 'Reservation Required.' : ''}`;
+    }
+
+    if (schemaType === 'dining') {
+        const d = data as DiningData;
+        return `[RESTAURANT] Cuisine: ${d.cuisine}. Open: ${d.openingTime} - ${d.closingTime}. Meals: ${d.mealType?.join(', ')}. Dress Code: ${d.dressCode}. ${d.reservationRequired ? 'Reservation Required.' : ''}`;
+    }
+
+    if (schemaType === 'room') {
+        const d = data as RoomData;
+        const balc = d.hasBalcony ? 'with Balcony' : 'no balcony';
+        return `[ROOM SPEC] Size: ${d.sizeSqM}m². Bed: ${d.bedType}. Max People: ${d.maxOccupancy}. View: ${d.view}, ${balc}. Amenities: ${d.amenities?.join(', ')}.`;
+    }
+
+    return '';
+}
+
+/**
  * SMART WEAVING ALGORITHM (generateAIText)
  * 1. Indexes the tree to understand what "things" are.
  * 2. Generates Markdown where undefined references (like "Standard Minibar") 
  *    are automatically enriched with their definition found elsewhere in the tree.
+ * 3. NEW: Translates structured Schema Data into Natural Language paragraphs.
  */
 export const generateAIText = async (
   root: HotelNode, 
@@ -416,16 +442,21 @@ export const generateAIText = async (
     if (value) {
       line += `: ${value}`;
       
-      // CHECK FOR DEFINITION LINK
-      // If the value matches a key in our Global Index (e.g. value="Standard Minibar"), inject the def.
-      // We skip if the node itself is the definition container to avoid self-reference loops.
       const definition = globalIndex.definitions.get(value.trim());
       if (definition && type !== 'list' && type !== 'menu') {
         line += ` _(System Definition: ${definition}...)_`;
       }
     }
 
-    // C. Attribute Injection
+    // C. NEW: Schema Translation (Structured Data -> Natural Language)
+    if (node.schemaType && node.data) {
+        const translatedText = translateSchemaToNaturalLanguage(node);
+        if (translatedText) {
+            line += `\n${indent}  > AI_NOTE: ${translatedText}`;
+        }
+    }
+
+    // D. Attribute Injection
     const attributesParts: string[] = [];
     if (node.price) attributesParts.push(`Price: ${node.price}`);
     if (node.attributes && node.attributes.length > 0) {
@@ -439,18 +470,16 @@ export const generateAIText = async (
        line += ` [${attributesParts.join(', ')}]`;
     }
 
-    // D. Global Rule Injection for Rooms (Context Awareness)
-    // If this node is a Room, inject global amenities automatically
+    // E. Global Rule Injection for Rooms (Context Awareness)
     if (type === 'category' && (name.toLowerCase().includes('room') || name.toLowerCase().includes('suite'))) {
        if (globalIndex.globalRules.length > 0) {
-         // Only inject a summary to save tokens
          line += `\n${indent}  > *Implicit Global Amenities applied: ${globalIndex.globalRules.length} items included.*`;
        }
     }
 
     lines.push(line);
 
-    // E. Note/Q&A Handling (Visual Grouping)
+    // F. Note/Q&A Handling (Visual Grouping)
     if (node.description) {
        lines.push(`${indent}  > Note: ${node.description}`);
     }
@@ -491,13 +520,14 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   if (node.value) semanticData.value = node.value;
   if (node.description) semanticData.description = node.description;
   if (node.tags) semanticData.tags = node.tags;
-  if (node.question) semanticData.question = node.question;
-  if (node.answer) semanticData.answer = node.answer;
-  if (node.price) semanticData.price = node.price;
+  
+  // Include Schema Data in JSON export
+  if (node.schemaType) semanticData.schemaType = node.schemaType;
+  if (node.data) semanticData.data = safeCopy(node.data, 0);
 
   const excludeKeys = new Set([
       'id', 'type', 'name', 'value', 'description', 'tags', 'question', 
-      'answer', 'price', 'children', 'attributes', 'uiState', 'lastSaved', 'isExpanded'
+      'answer', 'price', 'children', 'attributes', 'uiState', 'lastSaved', 'isExpanded', 'data', 'schemaType'
   ]);
   
   Object.keys(node).forEach(key => {
@@ -532,7 +562,6 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
 };
 
 export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent: number) => void): Promise<string> => {
-  // Simple CSV generation kept for export compatibility
   const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[] }[] => {
     const result: { node: HotelNode, path: string[] }[] = [];
     const traverse = (node: HotelNode, path: string[]) => {
@@ -547,7 +576,7 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
   const flatNodes = flattenTreeForExport(root);
   const totalNodes = flatNodes.length;
   
-  const headers = ['System_ID', 'Path', 'Type', 'Name', 'Value', 'Attributes'];
+  const headers = ['System_ID', 'Path', 'Type', 'Schema', 'Name', 'Value', 'Attributes', 'Structured_Data'];
   const rows: string[] = ['\uFEFF' + headers.join(',')]; 
 
   const safeCSV = (val: any) => {
@@ -561,9 +590,11 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
         safeCSV(node.id),
         safeCSV(path.join(' > ')),
         safeCSV(node.type),
+        safeCSV(node.schemaType || 'generic'),
         safeCSV(node.name),
         safeCSV(node.value),
-        safeCSV(JSON.stringify(node.attributes || []))
+        safeCSV(JSON.stringify(node.attributes || [])),
+        safeCSV(node.data ? JSON.stringify(node.data) : '')
      ].join(','));
      
      if (i % 50 === 0) {

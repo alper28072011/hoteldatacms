@@ -83,6 +83,7 @@ export const chatWithData = async (
   activePersona?: AIPersona | null
 ): Promise<string> => {
   try {
+    // Uses the new Natural Language translation logic from treeUtils
     let textContext = await generateAIText(data, () => {}); 
     
     if (textContext.length > MAX_CONTEXT_LENGTH) {
@@ -90,6 +91,8 @@ export const chatWithData = async (
     }
     
     const now = new Date();
+    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' }); // "Monday"
+    const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }); // "14:30"
     
     let identityBlock = "IDENTITY: You are an Advanced Hotel Guest Assistant (AI). You are helpful, polite, and neutral.";
     let toneBlock = "TONE: Professional, Helpful, Clear.";
@@ -106,18 +109,22 @@ export const chatWithData = async (
 
     const systemInstruction = `
     ${identityBlock}
-    Current Time: ${now.toLocaleString()}
+    
+    CURRENT CONTEXT:
+    - Date/Day: ${dayName}, ${now.toLocaleDateString()}
+    - Time: ${timeStr}
+    
     ${toneBlock}
     ${rulesBlock}
 
-    CRITICAL RULE: Do not invent information. Answer solely based on the provided HOTEL DATABASE below. 
+    CRITICAL INSTRUCTIONS:
+    1. Answer solely based on the provided HOTEL DATABASE below. Do not invent information.
+    2. **TIME AWARENESS**: If a user asks "What can I do now?", check the 'Current Context' against the 'Event Schedules' or 'Restaurant Hours' in the database.
+       - Example: If it's Monday 14:00, do not suggest an event that is "Fridays only".
+    3. **AGE AWARENESS**: If a user mentions children, check the 'Target Age Range' in the data (e.g. Min Age).
+    4. **DEFINITIONS**: Use the "System Definitions" injected in the data to answer questions about specific packages (e.g. Minibar content).
     
-    UNDERSTANDING THE DATA:
-    The data below is structured in Markdown.
-    - IMPORTANT: Some items have definitions injected automatically (e.g. "Minibar (System Definition: Coke, Water)"). Use these definitions to answer "What is in the minibar?" questions.
-    - If a Room Category has "Implicit Global Amenities", assume the room includes those items.
-    
-    HOTEL DATABASE (Relational Context Enabled):
+    HOTEL DATABASE (Natural Language Translated):
     ${textContext}
     `;
 
