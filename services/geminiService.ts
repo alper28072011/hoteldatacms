@@ -136,7 +136,18 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, 200000);
     
-    const prompt = `You are an AI Architect modifying a Hotel CMS structure.
+    const prompt = `You are an AI Architect.
+    
+    TASK:
+    Analyze the "Current Structure" against the "User Command".
+    
+    CRITICAL RULES:
+    1. **DUPLICATE CHECK**: Before creating anything, check if it already exists in the JSON.
+       - If it exists and matches the user's request: Return NO actions and explain in 'summary'.
+       - If it exists but needs modification: Return an 'update' action instead of 'create'.
+    2. **HIERARCHY**: Find the most logical 'targetId' (parent ID) for new items.
+    3. **JSON ONLY**: Return strictly valid JSON matching the schema.
+    
     User Command: "${userCommand}"
     
     Current Structure:
@@ -144,12 +155,17 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     ${jsonContext}
     \`\`\`
     
-    Return a JSON object with:
+    RETURN JSON FORMAT:
     {
-      "action": "create" | "update" | "delete" | "move",
-      "targetPath": "string (e.g., root > Dining)",
-      "data": { ...new node data... },
-      "reasoning": "Explanation"
+      "summary": "Explanation of what will be done (e.g. 'Found existing item, updating price' or 'Creating new category').",
+      "actions": [
+        {
+          "type": "add" | "update" | "delete",
+          "targetId": "ID of parent (for add) or ID of node (for update/delete)",
+          "data": { "name": "...", "type": "...", "value": "..." },
+          "reason": "Why this action is taken"
+        }
+      ]
     }
     `;
 
@@ -159,7 +175,22 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
       config: { responseMimeType: 'application/json' }
     });
 
-    return JSON.parse(response.text || "{}") as ArchitectResponse;
+    const rawText = response.text || "{}";
+    let parsed: any = {};
+    
+    try {
+        parsed = JSON.parse(rawText);
+    } catch (e) {
+        console.error("JSON Parse Error", e);
+        return { summary: "Error parsing AI response.", actions: [] };
+    }
+
+    // Safety check for array existence
+    if (!parsed.actions || !Array.isArray(parsed.actions)) {
+        parsed.actions = [];
+    }
+
+    return parsed as ArchitectResponse;
   } catch (error) {
     console.error(error);
     throw new Error("Architect error.");
@@ -177,7 +208,8 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
     ${jsonContext}
     \`\`\`
     
-    Return JSON format compatible with ArchitectResponse.
+    Return JSON format compatible with ArchitectResponse (summary, actions array).
+    Ensure you check for existing data to avoid duplicates.
     `;
 
     const response = await ai.models.generateContent({
@@ -189,7 +221,20 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
       config: { responseMimeType: 'application/json' }
     });
 
-    return JSON.parse(response.text || "{}") as ArchitectResponse;
+    const rawText = response.text || "{}";
+    let parsed: any = {};
+    
+    try {
+        parsed = JSON.parse(rawText);
+    } catch (e) {
+        return { summary: "Error parsing AI file response.", actions: [] };
+    }
+
+    if (!parsed.actions || !Array.isArray(parsed.actions)) {
+        parsed.actions = [];
+    }
+
+    return parsed as ArchitectResponse;
   } catch (error) {
     console.error(error);
     throw new Error("File process error.");

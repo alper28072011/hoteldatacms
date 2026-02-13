@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { processArchitectCommand, processArchitectFile } from '../services/geminiService';
 import { HotelNode, ArchitectResponse, ArchitectAction } from '../types';
-import { Sparkles, X, Check, TriangleAlert, ArrowRight, Loader2, FileText, UploadCloud, MessageSquare } from 'lucide-react';
+import { Sparkles, X, Check, TriangleAlert, ArrowRight, Loader2, FileText, UploadCloud, MessageSquare, Info } from 'lucide-react';
 
 interface AIArchitectModalProps {
   isOpen: boolean;
@@ -249,36 +249,46 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
               {/* Actions List */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Planned Actions</h4>
-                {proposal.actions.map((action, idx) => (
-                  <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-white shadow-sm flex gap-3">
-                    <div className={`
-                      shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs uppercase
-                      ${action.type === 'add' ? 'bg-blue-100 text-blue-600' : ''}
-                      ${action.type === 'update' ? 'bg-amber-100 text-amber-600' : ''}
-                      ${action.type === 'delete' ? 'bg-red-100 text-red-600' : ''}
-                    `}>
-                      {action.type.slice(0, 3)}
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      <div className="flex justify-between items-start">
-                        <span className="font-mono text-xs text-slate-400">Target ID: {action.targetId}</span>
-                        {action.data?.type && (
-                          <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-bold uppercase">
-                            {action.data.type}
-                          </span>
-                        )}
+                {(proposal.actions && proposal.actions.length > 0) ? (
+                    proposal.actions.map((action, idx) => (
+                      <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-white shadow-sm flex gap-3">
+                        <div className={`
+                          shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs uppercase
+                          ${action.type === 'add' ? 'bg-blue-100 text-blue-600' : ''}
+                          ${action.type === 'update' ? 'bg-amber-100 text-amber-600' : ''}
+                          ${action.type === 'delete' ? 'bg-red-100 text-red-600' : ''}
+                        `}>
+                          {action.type.slice(0, 3)}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <div className="flex justify-between items-start">
+                            <span className="font-mono text-xs text-slate-400">Target ID: {action.targetId}</span>
+                            {action.data?.type && (
+                              <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-bold uppercase">
+                                {action.data.type}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-slate-800 text-sm font-medium truncate mt-1">
+                            {action.type === 'add' && `New Node: ${action.data?.name || 'Unnamed'}`}
+                            {action.type === 'update' && `Update: ${action.data?.name || 'Fields'}`}
+                            {action.type === 'delete' && 'Remove Node'}
+                          </p>
+                          {action.reason && (
+                            <p className="text-xs text-slate-500 mt-1 italic">"{action.reason}"</p>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-slate-800 text-sm font-medium truncate mt-1">
-                        {action.type === 'add' && `New Node: ${action.data?.name || 'Unnamed'}`}
-                        {action.type === 'update' && `Update: ${action.data?.name || 'Fields'}`}
-                        {action.type === 'delete' && 'Remove Node'}
-                      </p>
-                      {action.reason && (
-                        <p className="text-xs text-slate-500 mt-1 italic">"{action.reason}"</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                    ))
+                ) : (
+                   <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200 text-slate-500">
+                      <Info size={20} />
+                      <div className="text-sm">
+                        No structural changes needed or duplicates found.
+                        <div className="text-xs opacity-70">The AI decided not to create new actions based on your command.</div>
+                      </div>
+                   </div>
+                )}
               </div>
               
               <div className="flex gap-3 pt-4 border-t border-slate-100">
@@ -290,7 +300,8 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
                 </button>
                 <button
                   onClick={handleApply}
-                  className="flex-1 px-4 py-2.5 text-white font-medium bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 shadow-sm shadow-emerald-200"
+                  disabled={!proposal.actions || proposal.actions.length === 0}
+                  className="flex-1 px-4 py-2.5 text-white font-medium bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 shadow-sm shadow-emerald-200 disabled:opacity-50 disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
                 >
                   <Check size={18} /> Confirm & Apply
                 </button>
