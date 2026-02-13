@@ -8,21 +8,23 @@ const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_
 const ai = new GoogleGenAI({ apiKey });
 
 // Helper: Model yapılandırması
-// UPDATED: Switched to 'gemini-3-flash-preview' as per latest API availability
+// 'gemini-3-flash-preview' is the correct model.
 const modelConfig = {
   model: 'gemini-3-flash-preview', 
 };
 
+// CONSTANT: Limit context size to prevent "Rpc failed due to xhr error" (500/Network Error)
+const MAX_CONTEXT_LENGTH = 50000; 
+
 export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
   try {
-    // OPTİMİZASYON: Temiz veri ve path bilgisi gönderiliyor
-    const jsonString = JSON.stringify(generateCleanAIJSON(data), null, 2);
+    const jsonString = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
     const prompt = `You are an expert Hotel Data Analyst. Review the following JSON structure and provide a summary of the hotel's offerings, identifying any key strengths or missing categories.
     
-    Data:
+    Data (Truncated if too large):
     \`\`\`json
-    ${jsonString.substring(0, 100000)}
+    ${jsonString}
     \`\`\`
     `;
 
@@ -34,13 +36,13 @@ export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
     return response.text || "No response generated.";
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
-    throw new Error("Failed to analyze data. Please check your API key.");
+    throw new Error("Failed to analyze data. Please check your network or API key.");
   }
 };
 
 export const auditStructureDeeply = async (data: HotelNode): Promise<string> => {
   try {
-     const jsonString = JSON.stringify(generateCleanAIJSON(data), null, 2);
+     const jsonString = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
      
      const prompt = `Act as a Senior Data Architect. Audit this hotel data structure for UX logic flaws.
      Focus on:
@@ -50,7 +52,7 @@ export const auditStructureDeeply = async (data: HotelNode): Promise<string> => 
      
      Data:
      \`\`\`json
-     ${jsonString.substring(0, 100000)}
+     ${jsonString}
      \`\`\`
      `;
 
@@ -73,9 +75,12 @@ export const chatWithData = async (
   activePersona?: AIPersona | null
 ): Promise<string> => {
   try {
-    // CHAT OPTİMİZASYONU: JSON yerine Hiyerarşik Markdown kullanıyoruz.
-    // generateAIText asenkron olduğu için await ile bekliyoruz.
-    const textContext = await generateAIText(data, () => {}); 
+    // Generate markdown context
+    let textContext = await generateAIText(data, () => {}); 
+    // Truncate markdown as well to prevent XHR errors
+    if (textContext.length > MAX_CONTEXT_LENGTH) {
+        textContext = textContext.substring(0, MAX_CONTEXT_LENGTH) + "\n...[Data Truncated]...";
+    }
     
     const now = new Date();
     
@@ -128,13 +133,13 @@ export const chatWithData = async (
     return result.text || "I'm not sure how to answer that.";
   } catch (error) {
     console.error(error);
-    return "I'm having trouble accessing the hotel database right now.";
+    return "I'm having trouble accessing the hotel database right now (Network Error).";
   }
 };
 
 export const processArchitectCommand = async (data: HotelNode, userCommand: string): Promise<ArchitectResponse> => {
   try {
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, 200000);
+    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
     const prompt = `You are an AI Architect.
     
@@ -193,13 +198,13 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     return parsed as ArchitectResponse;
   } catch (error) {
     console.error(error);
-    throw new Error("Architect error.");
+    throw new Error("Architect error (Possible Network/Size Limit).");
   }
 };
 
 export const processArchitectFile = async (data: HotelNode, fileBase64: string, mimeType: string): Promise<ArchitectResponse> => {
   try {
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, 200000);
+    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
     const prompt = `Analyze this uploaded image/PDF and extract hotel data to merge into the current structure.
     
@@ -243,7 +248,7 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
 
 export const generateHealthReport = async (data: HotelNode): Promise<HealthReport> => {
   try {
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, 300000);
+    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
     const prompt = `
     You are the "Semantic Logic Auditor" for a Hotel Database.
@@ -294,12 +299,11 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
     return JSON.parse(response.text || "{}") as HealthReport;
   } catch (error) {
     console.error("Health Audit Error:", error);
-    throw new Error("Failed to generate semantic health report.");
+    throw new Error("Failed to generate semantic health report (Network Limit).");
   }
 };
 
 export const generateNodeContext = async (node: HotelNode, contextPath: string = ''): Promise<{ tags: string[], description: string }> => {
-    // We clean the node but we also pass the contextPath for better understanding
     const cleanNode = generateCleanAIJSON(node);
     
     const prompt = `
@@ -344,7 +348,7 @@ export const generateNodeContext = async (node: HotelNode, contextPath: string =
 
 export const runDataCheck = async (data: HotelNode, inputType: 'url' | 'text' | 'file', inputValue: string, mimeType?: string): Promise<DataComparisonReport> => {
   try {
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, 200000);
+    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
     const basePrompt = `Compare the Hotel Database JSON with the provided Source Material.
     Identify discrepancies (Price mismatches, missing items, wrong hours).
