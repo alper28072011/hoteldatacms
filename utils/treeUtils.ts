@@ -360,25 +360,60 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
 
     const { schemaType, data } = node;
 
+    // --- EVENT TRANSLATOR ---
     if (schemaType === 'event') {
         const d = data as EventData;
-        const days = d.days?.join(', ') || 'Every day';
-        const time = d.startTime ? `${d.startTime} to ${d.endTime}` : 'Variable time';
-        const age = (d.ageMin > 0 || d.ageMax < 100) ? `for ages ${d.ageMin}-${d.ageMax}` : 'for all ages';
-        const cost = d.isPaid ? `(Paid: ${d.price})` : '(Free)';
         
-        return `[SCHEDULED EVENT] Occurs ${d.scheduleType} on ${days} from ${time}. ${age}. ${cost}. Location: ${d.location || 'N/A'}. ${d.requiresReservation ? 'Reservation Required.' : ''}`;
+        // Status Check
+        if (d.status === 'cancelled') return `[EVENT CANCELLED] This event is cancelled. Reason: ${d.statusReason || 'Unspecified'}.`;
+        if (d.status === 'moved') return `[EVENT MOVED] Location changed to ${d.location}.`;
+
+        // Schedule Logic
+        let scheduleText = "";
+        const s = d.schedule;
+        
+        if (s.frequency === 'daily') {
+            scheduleText = "Runs DAILY.";
+        } else if (s.frequency === 'weekly') {
+            scheduleText = `Runs WEEKLY on ${s.activeDays?.join(', ')}.`;
+        } else if (s.frequency === 'biweekly') {
+            scheduleText = `Runs BI-WEEKLY (Every 2 weeks) on ${s.activeDays?.join(', ')}. Cycle Anchor: ${s.cycleAnchorDate || 'Unknown'}. (AI: Calculate week offset from anchor)`;
+        } else if (s.frequency === 'once') {
+            scheduleText = `ONE-TIME Event on ${s.validFrom}.`;
+        }
+
+        // Validity
+        if (s.validFrom && s.validUntil) scheduleText += ` Valid between ${s.validFrom} and ${s.validUntil}.`;
+        
+        const time = s.startTime ? `${s.startTime}${s.endTime ? ` - ${s.endTime}` : ''}` : 'Time varies';
+        const cost = d.isPaid ? `PAID EVENT (${d.price || 'Check price'})` : 'FREE';
+        const audience = d.ageGroup === 'all' ? 'All Ages' : d.ageGroup === 'kids' ? 'KIDS ONLY (4-12)' : d.ageGroup === 'adults' ? 'ADULTS ONLY (18+)' : 'Teens';
+
+        return `[ACTIVITY: ${node.name}] ${scheduleText} Time: ${time}. Location: ${d.location}. Audience: ${audience}. ${cost}. ${d.requiresReservation ? 'Reservation Required.' : ''}`;
     }
 
+    // --- DINING TRANSLATOR ---
     if (schemaType === 'dining') {
         const d = data as DiningData;
-        return `[RESTAURANT] Cuisine: ${d.cuisine}. Open: ${d.openingTime} - ${d.closingTime}. Meals: ${d.mealType?.join(', ')}. Dress Code: ${d.dressCode}. ${d.reservationRequired ? 'Reservation Required.' : ''}`;
+        const shifts = d.shifts?.map(s => `${s.name}: ${s.start}-${s.end}`).join(', ');
+        const concept = d.concept === 'all_inclusive' ? 'Included in All-Inclusive' : 'Extra Charge';
+        
+        // Dietary features
+        const feats = [];
+        if (d.features?.hasKidsMenu) feats.push("Kids Menu");
+        if (d.features?.hasVeganOptions) feats.push("Vegan Options");
+        if (d.features?.hasGlutenFreeOptions) feats.push("Gluten Free Available");
+        
+        return `[RESTAURANT: ${node.name}] Type: ${d.type}. Cuisine: ${d.cuisine}. Hours: ${shifts}. Concept: ${concept}. Dress Code: ${d.dressCode}. Facilities: ${feats.join(', ')}. Highlights: ${d.menuHighlights?.join(', ')}.`;
     }
 
+    // --- ROOM TRANSLATOR ---
     if (schemaType === 'room') {
         const d = data as RoomData;
-        const balc = d.hasBalcony ? 'with Balcony' : 'no balcony';
-        return `[ROOM SPEC] Size: ${d.sizeSqM}m². Bed: ${d.bedType}. Max People: ${d.maxOccupancy}. View: ${d.view}, ${balc}. Amenities: ${d.amenities?.join(', ')}.`;
+        const balc = d.hasBalcony ? 'Balcony' : 'No Balcony';
+        const occ = `Max: ${d.maxOccupancy?.adults} Adult + ${d.maxOccupancy?.children} Child`;
+        
+        return `[ROOM TYPE: ${node.name}] Size: ${d.sizeSqM}m². ${occ}. View: ${d.view}. Bed: ${d.bedConfiguration}. ${balc}. Amenities: ${d.amenities?.join(', ')}. Minibar: ${d.minibarContent?.join(', ')}.`;
     }
 
     return '';

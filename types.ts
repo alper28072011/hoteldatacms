@@ -1,42 +1,101 @@
 
 export type NodeType = 'root' | 'category' | 'item' | 'field' | 'list' | 'menu' | 'menu_item' | 'event' | 'qa_pair' | 'policy' | 'note';
 
-export type SchemaType = 'generic' | 'event' | 'dining' | 'room' | 'pool';
+export type SchemaType = 'generic' | 'event' | 'dining' | 'room' | 'pool' | 'bar';
 
-// --- SCHEMA DEFINITIONS ---
+// --- ROBUST EVENT SCHEDULING ---
+
+export interface ScheduleConfig {
+  frequency: 'once' | 'daily' | 'weekly' | 'biweekly'; // biweekly = her 2 haftada bir
+  
+  // Sezonluk Geçerlilik (Örn: 1 Mayıs - 31 Ekim arası)
+  validFrom?: string; // YYYY-MM-DD
+  validUntil?: string; // YYYY-MM-DD
+  
+  // Haftalık/İki Haftalık günler
+  activeDays: string[]; // ['Mon', 'Thu']
+  
+  // İki haftalık döngü için referans tarihi (Hangi haftada olduğumuzu hesaplamak için)
+  cycleAnchorDate?: string; // YYYY-MM-DD (Döngünün başladığı ilk Pazartesi)
+  
+  // Saatler
+  startTime: string; // "21:30"
+  endTime?: string; // "23:00"
+  
+  // İstisnalar (Örn: Yağmur nedeniyle iptal)
+  excludedDates?: string[]; // ['2024-06-12']
+}
 
 export interface EventData {
-  scheduleType: 'daily' | 'weekly' | 'once';
-  days: string[]; // ['Mon', 'Tue']
-  startTime: string; // "14:00"
-  endTime: string; // "16:00"
+  schedule: ScheduleConfig;
   location: string;
-  ageMin: number;
-  ageMax: number;
+  
+  // Hedef Kitle
+  ageGroup: 'all' | 'adults' | 'kids' | 'teens';
+  minAge?: number;
+  
+  // Durum
+  status: 'active' | 'cancelled' | 'moved';
+  statusReason?: string; // "Hava muhalefeti nedeniyle"
+  
+  // Finansal
   isPaid: boolean;
   price?: string;
+  currency?: string;
   requiresReservation: boolean;
-  dressCode?: string;
+  
+  // İçerik
+  performer?: string; // "Fire of Anatolia"
+  description?: string; // "Anadolu ateşinin büyüleyici dansı..."
+  tags: string[]; // ['Dance', 'Show', 'Live Music']
 }
 
+// --- DINING & CULINARY ---
+
 export interface DiningData {
-  cuisine: string; // "Italian", "Buffet"
-  mealType: ('breakfast' | 'lunch' | 'dinner' | 'snack')[];
-  openingTime: string;
-  closingTime: string;
-  dressCode: string;
+  type: 'buffet' | 'alacarte' | 'snack' | 'patisserie';
+  cuisine: string; // "Italian", "International", "Ottoman"
+  
+  // Konsept Detayları
+  concept: 'all_inclusive' | 'extra_charge' | 'mixed'; // Mixed: Bazı içkiler ücretli
   reservationRequired: boolean;
-  isPaid: boolean;
-  priceRange?: 'Low' | 'Medium' | 'High';
+  dressCode: string;
+  
+  // Öğün Saatleri (Array of shifts)
+  shifts: { name: string; start: string; end: string }[]; // [{name: 'Breakfast', start: '07:00', end: '10:00'}]
+  
+  // Özellikler & Diyet
+  features: {
+    hasKidsMenu: boolean;
+    hasVeganOptions: boolean;
+    hasGlutenFreeOptions: boolean;
+    hasBabyChair: boolean;
+    hasTerrace: boolean;
+  };
+  
+  menuHighlights: string[]; // ["Sushi", "Steak", "Fresh Pasta"]
+  beverageHighlights: string[]; // ["Premium Whisky", "Fresh Orange Juice"]
 }
+
+// --- ROOM & ACCOMMODATION ---
 
 export interface RoomData {
   sizeSqM: number;
-  bedType: string; // "King", "Twin"
-  maxOccupancy: number;
-  view: string; // "Sea", "Garden"
+  maxOccupancy: { adults: number; children: number; total: number };
+  
+  // Yatak Düzeni
+  bedConfiguration: string; // "1 French + 1 Single"
+  pillowMenuAvailable: boolean;
+  
+  // Manzara & Konum
+  view: 'sea' | 'land' | 'garden' | 'pool' | 'partial_sea';
   hasBalcony: boolean;
-  amenities: string[]; // ["Wifi", "Minibar", "Safe"]
+  hasJacuzzi: boolean;
+  
+  // Teknik & İmkanlar
+  amenities: string[]; // ["Espresso Machine", "Iron", "Smart TV", "High Speed Wifi"]
+  minibarContent: string[]; // ["Coke", "Beer", "Water", "Chocolate"]
+  bathroomDetails: string; // "Shower & Bathtub, Bulgari Amenities"
 }
 
 export interface NodeAttribute {

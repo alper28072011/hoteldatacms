@@ -8,7 +8,8 @@ import { useHotel } from '../contexts/HotelContext';
 import { 
   Tag, Trash2, LayoutDashboard, Box, BrainCircuit, Sparkles, Loader2, 
   ChevronRight, Database, Check, Settings, List, FileText, CircleHelp, 
-  X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, Clock, Users, DollarSign
+  X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, Clock, Users, DollarSign,
+  ChefHat, Wine, Activity, AlertCircle
 } from 'lucide-react';
 
 // --- SUB-COMPONENTS FOR SCHEMAS ---
@@ -16,141 +17,338 @@ import {
 const EventForm: React.FC<{ data: EventData, onChange: (d: EventData) => void }> = ({ data, onChange }) => {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   
+  const updateSchedule = (field: string, value: any) => {
+      onChange({ ...data, schedule: { ...data.schedule, [field]: value } });
+  };
+
   const toggleDay = (day: string) => {
-    const current = data.days || [];
+    const current = data.schedule?.activeDays || [];
     const updated = current.includes(day) ? current.filter(d => d !== day) : [...current, day];
-    onChange({ ...data, days: updated });
+    updateSchedule('activeDays', updated);
   };
 
   return (
-    <div className="space-y-4 bg-purple-50 p-4 rounded-lg border border-purple-100">
-       <h4 className="text-sm font-bold text-purple-800 flex items-center gap-2"><Calendar size={16}/> Event Schedule & Rules</h4>
-       
-       {/* Days */}
-       <div>
-         <label className="text-xs font-bold text-slate-500 uppercase">Days Active</label>
-         <div className="flex gap-2 mt-1">
-            {days.map(day => (
-              <button 
-                key={day} 
-                onClick={() => toggleDay(day)}
-                className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${data.days?.includes(day) ? 'bg-purple-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-              >
-                {day.charAt(0)}
-              </button>
-            ))}
-         </div>
+    <div className="space-y-6 bg-purple-50 p-5 rounded-xl border border-purple-100">
+       <div className="flex items-center justify-between border-b border-purple-200 pb-3">
+           <h4 className="text-sm font-bold text-purple-800 flex items-center gap-2"><Calendar size={18}/> Activity Scheduler</h4>
+           <select 
+              value={data.status} 
+              onChange={e => onChange({...data, status: e.target.value as any})}
+              className={`text-xs font-bold px-2 py-1 rounded border ${data.status === 'active' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300'}`}
+           >
+               <option value="active">Active</option>
+               <option value="cancelled">Cancelled</option>
+               <option value="moved">Location Changed</option>
+           </select>
        </div>
 
-       {/* Time */}
+       {data.status !== 'active' && (
+           <div className="bg-red-50 border border-red-200 p-2 rounded">
+               <label className="text-xs font-bold text-red-600">Cancellation Reason</label>
+               <input type="text" value={data.statusReason || ''} onChange={e => onChange({...data, statusReason: e.target.value})} placeholder="e.g. Due to rain" className="w-full mt-1 text-sm p-1 bg-white border border-red-200 rounded text-red-700"/>
+           </div>
+       )}
+       
+       {/* Frequency & Dates */}
        <div className="grid grid-cols-2 gap-4">
+           <div>
+               <label className="text-xs font-bold text-slate-500 uppercase">Frequency</label>
+               <select 
+                  value={data.schedule?.frequency || 'weekly'} 
+                  onChange={e => updateSchedule('frequency', e.target.value)}
+                  className="w-full mt-1 bg-white border border-purple-200 rounded px-2 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"
+               >
+                   <option value="daily">Daily (Every Day)</option>
+                   <option value="weekly">Weekly (Specific Days)</option>
+                   <option value="biweekly">Bi-Weekly (Every 2 Weeks)</option>
+                   <option value="once">One Time (Specific Date)</option>
+               </select>
+           </div>
+           
+           {(data.schedule?.frequency === 'biweekly') && (
+               <div>
+                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                       Cycle Start Date <Info size={10} title="The first Monday of the 2-week cycle" />
+                   </label>
+                   <input 
+                      type="date" 
+                      value={data.schedule?.cycleAnchorDate || ''} 
+                      onChange={e => updateSchedule('cycleAnchorDate', e.target.value)}
+                      className="w-full mt-1 bg-white border border-purple-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none"
+                   />
+               </div>
+           )}
+           
+           {(data.schedule?.frequency === 'once') && (
+               <div>
+                   <label className="text-xs font-bold text-slate-500 uppercase">Event Date</label>
+                   <input 
+                      type="date" 
+                      value={data.schedule?.validFrom || ''} 
+                      onChange={e => updateSchedule('validFrom', e.target.value)}
+                      className="w-full mt-1 bg-white border border-purple-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none"
+                   />
+               </div>
+           )}
+       </div>
+
+       {/* Days Selection (Hidden for One Time) */}
+       {data.schedule?.frequency !== 'once' && (
+           <div>
+             <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Active Days</label>
+             <div className="flex gap-2">
+                {days.map(day => (
+                  <button 
+                    key={day} 
+                    onClick={() => toggleDay(day)}
+                    className={`flex-1 h-9 rounded-lg text-xs font-bold transition-all border ${data.schedule?.activeDays?.includes(day) ? 'bg-purple-600 text-white border-purple-600 shadow-sm' : 'bg-white border-slate-200 text-slate-400 hover:border-purple-300 hover:text-purple-500'}`}
+                  >
+                    {day}
+                  </button>
+                ))}
+             </div>
+           </div>
+       )}
+
+       {/* Time & Seasonality */}
+       <div className="grid grid-cols-2 gap-4 pt-2 border-t border-purple-200/50">
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase">Start Time</label>
-            <input type="time" value={data.startTime || ''} onChange={e => onChange({...data, startTime: e.target.value})} className="w-full mt-1 border border-purple-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
+            <input type="time" value={data.schedule?.startTime || ''} onChange={e => updateSchedule('startTime', e.target.value)} className="w-full mt-1 bg-white border border-purple-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none"/>
           </div>
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase">End Time</label>
-            <input type="time" value={data.endTime || ''} onChange={e => onChange({...data, endTime: e.target.value})} className="w-full mt-1 border border-purple-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
+            <label className="text-xs font-bold text-slate-500 uppercase">Season End (Optional)</label>
+            <input type="date" value={data.schedule?.validUntil || ''} onChange={e => updateSchedule('validUntil', e.target.value)} className="w-full mt-1 bg-white border border-slate-200 rounded px-2 py-1.5 text-sm text-slate-500 outline-none"/>
           </div>
        </div>
 
-       {/* Age */}
-       <div>
-          <label className="text-xs font-bold text-slate-500 uppercase flex justify-between">
-            <span>Target Age Range</span>
-            <span className="text-purple-600">{data.ageMin || 0} - {data.ageMax || 99} yrs</span>
-          </label>
-          <div className="flex gap-4 items-center mt-1">
-             <input type="number" placeholder="Min" value={data.ageMin} onChange={e => onChange({...data, ageMin: parseInt(e.target.value)})} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
-             <span className="text-slate-400">-</span>
-             <input type="number" placeholder="Max" value={data.ageMax} onChange={e => onChange({...data, ageMax: parseInt(e.target.value)})} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
-          </div>
-       </div>
-
-       {/* Price */}
-       <div className="flex items-center gap-4 border-t border-purple-200 pt-3">
-           <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer">
-             <input type="checkbox" checked={data.isPaid} onChange={e => onChange({...data, isPaid: e.target.checked})} className="rounded text-purple-600 focus:ring-purple-500"/>
-             Paid Event
-           </label>
-           {data.isPaid && (
-              <input type="text" placeholder="Price (e.g. 20$)" value={data.price || ''} onChange={e => onChange({...data, price: e.target.value})} className="flex-1 border border-slate-200 rounded px-2 py-1 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
-           )}
+       {/* Details */}
+       <div className="bg-white p-3 rounded-lg border border-purple-100 space-y-3">
+           <div>
+               <label className="text-xs font-bold text-slate-500 uppercase">Location / Venue</label>
+               <input type="text" value={data.location || ''} onChange={e => onChange({...data, location: e.target.value})} placeholder="e.g. Amphitheatre" className="w-full mt-1 border border-slate-200 rounded px-2 py-1.5 text-sm outline-none focus:border-purple-400"/>
+           </div>
+           
+           <div className="flex gap-4">
+               <div className="flex-1">
+                   <label className="text-xs font-bold text-slate-500 uppercase">Target Audience</label>
+                   <select value={data.ageGroup} onChange={e => onChange({...data, ageGroup: e.target.value as any})} className="w-full mt-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-sm outline-none">
+                       <option value="all">Everyone</option>
+                       <option value="adults">Adults Only (18+)</option>
+                       <option value="kids">Kids Club (4-12)</option>
+                       <option value="teens">Teenagers</option>
+                   </select>
+               </div>
+               <div className="flex items-end pb-2">
+                   <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer">
+                     <input type="checkbox" checked={data.isPaid} onChange={e => onChange({...data, isPaid: e.target.checked})} className="rounded text-purple-600 focus:ring-purple-500"/>
+                     Paid Event
+                   </label>
+               </div>
+           </div>
        </div>
     </div>
   );
 };
 
 const DiningForm: React.FC<{ data: DiningData, onChange: (d: DiningData) => void }> = ({ data, onChange }) => {
+    
+    const updateFeature = (key: keyof typeof data.features, val: boolean) => {
+        onChange({ ...data, features: { ...data.features, [key]: val } });
+    };
+
+    const addShift = () => {
+        onChange({ ...data, shifts: [...(data.shifts || []), { name: 'Dinner', start: '19:00', end: '21:30' }] });
+    };
+
+    const updateShift = (index: number, field: string, value: string) => {
+        const newShifts = [...(data.shifts || [])];
+        newShifts[index] = { ...newShifts[index], [field]: value };
+        onChange({ ...data, shifts: newShifts });
+    };
+
+    const removeShift = (index: number) => {
+        onChange({ ...data, shifts: (data.shifts || []).filter((_, i) => i !== index) });
+    };
+
     return (
-        <div className="space-y-4 bg-orange-50 p-4 rounded-lg border border-orange-100">
-            <h4 className="text-sm font-bold text-orange-800 flex items-center gap-2"><Utensils size={16}/> Restaurant Details</h4>
+        <div className="space-y-6 bg-orange-50 p-5 rounded-xl border border-orange-100">
+            <div className="flex items-center justify-between border-b border-orange-200 pb-3">
+                <h4 className="text-sm font-bold text-orange-800 flex items-center gap-2"><Utensils size={18}/> Culinary Details</h4>
+                <div className="flex gap-2">
+                    <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${data.concept === 'all_inclusive' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {data.concept === 'all_inclusive' ? 'All Inclusive' : 'Extra Charge'}
+                    </span>
+                </div>
+            </div>
             
+            {/* Core Info */}
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase">Cuisine</label>
-                    <input type="text" value={data.cuisine || ''} onChange={e => onChange({...data, cuisine: e.target.value})} placeholder="e.g. Italian" className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-orange-200 outline-none"/>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Restaurant Type</label>
+                    <select value={data.type} onChange={e => onChange({...data, type: e.target.value as any})} className="w-full mt-1 bg-white border border-orange-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none">
+                        <option value="buffet">Main Buffet</option>
+                        <option value="alacarte">A la Carte</option>
+                        <option value="snack">Snack / Bistro</option>
+                        <option value="patisserie">Patisserie / Cafe</option>
+                    </select>
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase">Dress Code</label>
-                    <select value={data.dressCode || ''} onChange={e => onChange({...data, dressCode: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-orange-200 outline-none">
-                        <option value="Casual">Casual</option>
-                        <option value="Smart Casual">Smart Casual</option>
-                        <option value="Formal">Formal</option>
-                        <option value="Beachwear">Beachwear</option>
-                    </select>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Cuisine / Theme</label>
+                    <input type="text" value={data.cuisine || ''} onChange={e => onChange({...data, cuisine: e.target.value})} placeholder="e.g. Mediterranean" className="w-full mt-1 bg-white border border-orange-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none"/>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase">Opens</label>
-                    <input type="time" value={data.openingTime || ''} onChange={e => onChange({...data, openingTime: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-orange-200 outline-none"/>
+            {/* Operating Hours (Shifts) */}
+            <div className="bg-white/60 p-3 rounded-lg border border-orange-100">
+                <div className="flex justify-between items-center mb-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Opening Hours (Shifts)</label>
+                    <button onClick={addShift} className="text-[10px] text-blue-600 hover:underline font-bold">+ Add Shift</button>
                 </div>
-                <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase">Closes</label>
-                    <input type="time" value={data.closingTime || ''} onChange={e => onChange({...data, closingTime: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-orange-200 outline-none"/>
+                <div className="space-y-2">
+                    {data.shifts?.map((shift, idx) => (
+                        <div key={idx} className="flex gap-2 items-center">
+                            <input type="text" value={shift.name} onChange={e => updateShift(idx, 'name', e.target.value)} className="flex-1 text-xs border border-slate-200 rounded px-2 py-1" placeholder="Meal Name"/>
+                            <input type="time" value={shift.start} onChange={e => updateShift(idx, 'start', e.target.value)} className="w-20 text-xs border border-slate-200 rounded px-1 py-1"/>
+                            <span className="text-slate-400">-</span>
+                            <input type="time" value={shift.end} onChange={e => updateShift(idx, 'end', e.target.value)} className="w-20 text-xs border border-slate-200 rounded px-1 py-1"/>
+                            <button onClick={() => removeShift(idx)} className="text-red-400 hover:text-red-600"><X size={14}/></button>
+                        </div>
+                    ))}
+                    {(!data.shifts || data.shifts.length === 0) && <div className="text-xs text-slate-400 italic">No hours defined.</div>}
+                </div>
+            </div>
+
+            {/* Features Toggles */}
+            <div className="bg-white p-3 rounded-lg border border-orange-100">
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Dietary & Facilities</label>
+                <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+                    <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                        <input type="checkbox" checked={data.features?.hasKidsMenu} onChange={e => updateFeature('hasKidsMenu', e.target.checked)} className="rounded text-orange-500"/>
+                        Kids Menu Available
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                        <input type="checkbox" checked={data.features?.hasVeganOptions} onChange={e => updateFeature('hasVeganOptions', e.target.checked)} className="rounded text-orange-500"/>
+                        Vegan / Vegetarian
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                        <input type="checkbox" checked={data.features?.hasGlutenFreeOptions} onChange={e => updateFeature('hasGlutenFreeOptions', e.target.checked)} className="rounded text-orange-500"/>
+                        Gluten Free Options
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                        <input type="checkbox" checked={data.reservationRequired} onChange={e => onChange({...data, reservationRequired: e.target.checked})} className="rounded text-orange-500"/>
+                        Reservation Required
+                    </label>
                 </div>
             </div>
             
-            <div className="flex gap-4 border-t border-orange-200 pt-3">
-                 <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer">
-                    <input type="checkbox" checked={data.reservationRequired} onChange={e => onChange({...data, reservationRequired: e.target.checked})} className="rounded text-orange-600 focus:ring-orange-500"/>
-                    Reservation Required
-                 </label>
+            {/* Highlights */}
+            <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Menu Highlights (Comma separated)</label>
+                <input 
+                    type="text" 
+                    value={data.menuHighlights?.join(', ') || ''} 
+                    onChange={e => onChange({...data, menuHighlights: e.target.value.split(',').map(s => s.trim())})} 
+                    placeholder="e.g. Signature Steak, Fresh Lobster, Truffle Pasta" 
+                    className="w-full mt-1 bg-white border border-orange-200 rounded px-3 py-2 text-sm outline-none placeholder:text-orange-200"
+                />
             </div>
         </div>
     );
 };
 
 const RoomForm: React.FC<{ data: RoomData, onChange: (d: RoomData) => void }> = ({ data, onChange }) => {
+    
+    const toggleAmenity = (item: string) => {
+        const current = data.amenities || [];
+        const updated = current.includes(item) ? current.filter(i => i !== item) : [...current, item];
+        onChange({ ...data, amenities: updated });
+    };
+
+    const commonAmenities = ["High Speed Wifi", "Smart TV", "Espresso Machine", "Iron & Board", "Safe", "Bathrobes", "Hairdryer", "Kettle"];
+
     return (
-        <div className="space-y-4 bg-indigo-50 p-4 rounded-lg border border-indigo-100">
-             <h4 className="text-sm font-bold text-indigo-800 flex items-center gap-2"><BedDouble size={16}/> Room Specs</h4>
+        <div className="space-y-6 bg-indigo-50 p-5 rounded-xl border border-indigo-100">
+             <div className="flex items-center justify-between border-b border-indigo-200 pb-3">
+                <h4 className="text-sm font-bold text-indigo-800 flex items-center gap-2"><BedDouble size={18}/> Room Specifications</h4>
+             </div>
              
+             {/* Stats */}
              <div className="grid grid-cols-3 gap-3">
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Size (m²)</label>
-                    <input type="number" value={data.sizeSqM || ''} onChange={e => onChange({...data, sizeSqM: parseFloat(e.target.value)})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+                    <input type="number" value={data.sizeSqM || ''} onChange={e => onChange({...data, sizeSqM: parseFloat(e.target.value)})} className="w-full mt-1 bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none"/>
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase">Occupancy</label>
-                    <input type="number" value={data.maxOccupancy || ''} onChange={e => onChange({...data, maxOccupancy: parseInt(e.target.value)})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Max Adults</label>
+                    <input type="number" value={data.maxOccupancy?.adults || 2} onChange={e => onChange({...data, maxOccupancy: {...data.maxOccupancy, adults: parseInt(e.target.value)}})} className="w-full mt-1 bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none"/>
                 </div>
-                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase">Bed Type</label>
-                    <select value={data.bedType || ''} onChange={e => onChange({...data, bedType: e.target.value})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 outline-none">
-                        <option value="King">King</option>
-                        <option value="Queen">Queen</option>
-                        <option value="Twin">Twin</option>
-                        <option value="Double">Double</option>
-                    </select>
+                <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Max Children</label>
+                    <input type="number" value={data.maxOccupancy?.children || 1} onChange={e => onChange({...data, maxOccupancy: {...data.maxOccupancy, children: parseInt(e.target.value)}})} className="w-full mt-1 bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none"/>
                 </div>
              </div>
 
-             <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">View</label>
-                <input type="text" value={data.view || ''} onChange={e => onChange({...data, view: e.target.value})} placeholder="Sea, Garden, Land..." className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 outline-none"/>
+             {/* Config */}
+             <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Bed Config</label>
+                    <input type="text" value={data.bedConfiguration || ''} onChange={e => onChange({...data, bedConfiguration: e.target.value})} placeholder="1 King + 1 Sofa" className="w-full mt-1 bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm outline-none"/>
+                 </div>
+                 <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase">View</label>
+                    <select value={data.view} onChange={e => onChange({...data, view: e.target.value as any})} className="w-full mt-1 bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm outline-none">
+                        <option value="land">Land View</option>
+                        <option value="garden">Garden View</option>
+                        <option value="pool">Pool View</option>
+                        <option value="sea">Sea View</option>
+                        <option value="partial_sea">Partial Sea View</option>
+                    </select>
+                 </div>
+             </div>
+
+             {/* Toggles */}
+             <div className="flex gap-4 border-t border-indigo-200 pt-3">
+                 <label className="flex items-center gap-2 text-xs text-slate-700 font-bold cursor-pointer">
+                    <input type="checkbox" checked={data.hasBalcony} onChange={e => onChange({...data, hasBalcony: e.target.checked})} className="rounded text-indigo-600"/>
+                    Balcony
+                 </label>
+                 <label className="flex items-center gap-2 text-xs text-slate-700 font-bold cursor-pointer">
+                    <input type="checkbox" checked={data.hasJacuzzi} onChange={e => onChange({...data, hasJacuzzi: e.target.checked})} className="rounded text-indigo-600"/>
+                    Jacuzzi
+                 </label>
+                 <label className="flex items-center gap-2 text-xs text-slate-700 font-bold cursor-pointer">
+                    <input type="checkbox" checked={data.pillowMenuAvailable} onChange={e => onChange({...data, pillowMenuAvailable: e.target.checked})} className="rounded text-indigo-600"/>
+                    Pillow Menu
+                 </label>
+             </div>
+
+             {/* Amenities */}
+             <div className="bg-white p-3 rounded-lg border border-indigo-100">
+                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Room Amenities</label>
+                 <div className="flex flex-wrap gap-2">
+                     {commonAmenities.map(am => (
+                         <button 
+                            key={am}
+                            onClick={() => toggleAmenity(am)}
+                            className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${data.amenities?.includes(am) ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100'}`}
+                         >
+                             {am}
+                         </button>
+                     ))}
+                 </div>
+                 <input 
+                    type="text" 
+                    placeholder="Add other amenities (comma separated)..." 
+                    className="w-full mt-3 text-xs border-b border-slate-200 py-1 outline-none focus:border-indigo-400"
+                    onBlur={(e) => {
+                        if(e.target.value) {
+                            const newItems = e.target.value.split(',').map(s=>s.trim()).filter(s=>s);
+                            onChange({...data, amenities: [...(data.amenities || []), ...newItems]});
+                            e.target.value = '';
+                        }
+                    }}
+                 />
              </div>
         </div>
     );
@@ -176,10 +374,19 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const [newAttrKey, setNewAttrKey] = useState('');
   const [newAttrValue, setNewAttrValue] = useState('');
 
-  // Default empty objects for schemas
-  const defaultEvent: EventData = { scheduleType: 'weekly', days: [], startTime: '09:00', endTime: '18:00', location: '', ageMin: 0, ageMax: 99, isPaid: false, requiresReservation: false };
-  const defaultDining: DiningData = { cuisine: '', mealType: [], openingTime: '18:00', closingTime: '22:00', dressCode: 'Casual', reservationRequired: false, isPaid: true };
-  const defaultRoom: RoomData = { sizeSqM: 30, bedType: 'King', maxOccupancy: 2, view: '', hasBalcony: true, amenities: [] };
+  // Initial Data Objects
+  const defaultEvent: EventData = { 
+      schedule: { frequency: 'weekly', activeDays: [], startTime: '21:30' },
+      location: '', ageGroup: 'all', isPaid: false, requiresReservation: false, status: 'active', tags: [] 
+  };
+  const defaultDining: DiningData = { 
+      type: 'buffet', cuisine: '', concept: 'all_inclusive', reservationRequired: false, dressCode: 'Smart Casual', 
+      shifts: [], features: { hasKidsMenu: true, hasVeganOptions: true, hasGlutenFreeOptions: false, hasBabyChair: true, hasTerrace: true },
+      menuHighlights: [], beverageHighlights: []
+  };
+  const defaultRoom: RoomData = { 
+      sizeSqM: 35, maxOccupancy: { adults: 2, children: 1, total: 3 }, bedConfiguration: '', view: 'land', hasBalcony: true, hasJacuzzi: false, pillowMenuAvailable: false, amenities: [], minibarContent: [], bathroomDetails: '' 
+  };
 
   useEffect(() => {
     setNewAttrKey('');
@@ -215,15 +422,13 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
      if (schema === 'event') newData = defaultEvent;
      else if (schema === 'dining') newData = defaultDining;
      else if (schema === 'room') newData = defaultRoom;
-     else newData = {}; // Generic
+     else newData = {};
 
      onUpdate(node.id, { schemaType: schema, data: newData });
   };
 
   const handleDataUpdate = (newData: any) => {
       onUpdate(node.id, { data: newData });
-      // Optional: Auto-generate the 'value' summary string so the tree view looks nice
-      // This keeps the "human readable" part in sync with the "structured" part
   };
 
   const handleDeleteClick = (e: React.MouseEvent) => {
@@ -316,7 +521,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
         </div>
         
         <div className="flex items-center gap-3">
-           {/* TYPE SELECTOR */}
            <div className="flex flex-col items-end">
               <select value={node.type} onChange={(e) => handleChange('type', e.target.value)} className="text-xs font-bold uppercase tracking-wide border border-slate-200 rounded px-2 py-1.5 bg-slate-50 text-slate-700 outline-none">
                   <optgroup label="Containers"><option value="category">Category</option><option value="list">List</option><option value="menu">Menu</option></optgroup>
