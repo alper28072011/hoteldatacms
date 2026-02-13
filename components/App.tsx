@@ -180,7 +180,7 @@ const App: React.FC = () => {
     setTimeout(() => setNotification(null), 2000);
   };
 
-  // --- ROBUST AI ARCHITECT HANDLER WITH ID VALIDATION ---
+  // --- ROBUST AI ARCHITECT HANDLER WITH ID VALIDATION AND FEATURE MAPPING ---
   const handleArchitectActions = (actions: ArchitectAction[]) => {
     let successCount = 0;
     let fallbackTriggered = false;
@@ -199,14 +199,62 @@ const App: React.FC = () => {
                     fallbackTriggered = true;
                 }
 
-                const newNode = { ...action.data, id: action.data?.id || generateId('ai') } as HotelNode;
+                // 3. TRANSFORM FEATURES TO ATTRIBUTES FOR NEW NODE
+                let newNodeData = { ...action.data };
+                if ((newNodeData as any).features) {
+                    const features = (newNodeData as any).features;
+                    const newAttributes = Object.entries(features).map(([key, value]) => ({
+                        id: generateId('attr'),
+                        key: key,
+                        value: String(value),
+                        type: 'text' as const
+                    }));
+                    newNodeData.attributes = newAttributes;
+                    delete (newNodeData as any).features;
+                }
+
+                const newNode = { ...newNodeData, id: newNodeData.id || generateId('ai') } as HotelNode;
                 return addChildToNode(prev, finalTargetId, newNode);
             });
             successCount++;
          } else if (action.type === 'update' && action.data) {
             // Check existence for updates too
-            if (findNodeById(hotelData, action.targetId)) {
-                updateNode(action.targetId, action.data);
+            const targetNode = findNodeById(hotelData, action.targetId);
+            if (targetNode) {
+                let updates = { ...action.data };
+                
+                // 4. TRANSFORM FEATURES TO ATTRIBUTES (MERGE LOGIC)
+                if ((updates as any).features) {
+                    const features = (updates as any).features as Record<string, string>;
+                    // Clone existing attributes or init empty
+                    const currentAttributes = targetNode.attributes ? [...targetNode.attributes] : [];
+                    
+                    Object.entries(features).forEach(([key, value]) => {
+                        const existingIdx = currentAttributes.findIndex(attr => attr.key === key);
+                        if (existingIdx > -1) {
+                             // Update existing attribute
+                             currentAttributes[existingIdx] = { 
+                                 ...currentAttributes[existingIdx], 
+                                 value: String(value) 
+                             };
+                        } else {
+                             // Add new attribute
+                             currentAttributes.push({
+                                 id: generateId('attr'),
+                                 key: key,
+                                 value: String(value),
+                                 type: 'text'
+                             });
+                        }
+                    });
+                    
+                    // Replace the attributes array in updates
+                    updates.attributes = currentAttributes;
+                    // Remove the 'features' key so it doesn't pollute the node
+                    delete (updates as any).features;
+                }
+
+                updateNode(action.targetId, updates);
                 successCount++;
             }
          } else if (action.type === 'delete') {
@@ -220,7 +268,7 @@ const App: React.FC = () => {
 
     if (successCount > 0) {
         if (fallbackTriggered) {
-             setNotification({ message: "Bazı öğeler ana dizine eklendi (Hedef bulunamadı).", type: 'loading' }); // Yellow/Loading warning style
+             setNotification({ message: "Bazı öğeler ana dizine eklendi (Hedef bulunamadı).", type: 'loading' }); 
              setTimeout(() => setNotification(null), 3000);
         } else {
              setNotification({ message: "Yapı başarıyla güncellendi.", type: 'success' });

@@ -151,7 +151,9 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
        - If it exists and matches the user's request: Return NO actions and explain in 'summary'.
        - If it exists but needs modification: Return an 'update' action instead of 'create'.
     2. **HIERARCHY**: Find the most logical 'targetId' (parent ID) for new items.
-    3. **JSON ONLY**: Return strictly valid JSON matching the schema.
+    3. **PROPERTY UPDATES**: To set or update properties like 'Price', 'Opening Hours', 'Stars', or 'Cuisine', use a special "features" object inside "data".
+       - Example: "data": { "name": "Steakhouse", "features": { "Price": "50$", "Dress Code": "Casual" } }
+    4. **JSON ONLY**: Return strictly valid JSON matching the schema.
     
     User Command: "${userCommand}"
     
@@ -167,7 +169,7 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
         {
           "type": "add" | "update" | "delete",
           "targetId": "ID of parent (for add) or ID of node (for update/delete)",
-          "data": { "name": "...", "type": "...", "value": "..." },
+          "data": { "name": "...", "type": "...", "value": "...", "features": { "Key": "Value" } },
           "reason": "Why this action is taken"
         }
       ]
