@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, EventData, DiningData, RoomData } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId } from '../utils/treeUtils';
@@ -33,7 +34,7 @@ const EventForm: React.FC<{ data: EventData, onChange: (d: EventData) => void }>
               <button 
                 key={day} 
                 onClick={() => toggleDay(day)}
-                className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${data.days?.includes(day) ? 'bg-purple-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-500'}`}
+                className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${data.days?.includes(day) ? 'bg-purple-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
               >
                 {day.charAt(0)}
               </button>
@@ -45,11 +46,11 @@ const EventForm: React.FC<{ data: EventData, onChange: (d: EventData) => void }>
        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase">Start Time</label>
-            <input type="time" value={data.startTime || ''} onChange={e => onChange({...data, startTime: e.target.value})} className="w-full mt-1 border border-purple-200 rounded px-2 py-1.5 text-sm"/>
+            <input type="time" value={data.startTime || ''} onChange={e => onChange({...data, startTime: e.target.value})} className="w-full mt-1 border border-purple-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
           </div>
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase">End Time</label>
-            <input type="time" value={data.endTime || ''} onChange={e => onChange({...data, endTime: e.target.value})} className="w-full mt-1 border border-purple-200 rounded px-2 py-1.5 text-sm"/>
+            <input type="time" value={data.endTime || ''} onChange={e => onChange({...data, endTime: e.target.value})} className="w-full mt-1 border border-purple-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
           </div>
        </div>
 
@@ -60,20 +61,20 @@ const EventForm: React.FC<{ data: EventData, onChange: (d: EventData) => void }>
             <span className="text-purple-600">{data.ageMin || 0} - {data.ageMax || 99} yrs</span>
           </label>
           <div className="flex gap-4 items-center mt-1">
-             <input type="number" placeholder="Min" value={data.ageMin} onChange={e => onChange({...data, ageMin: parseInt(e.target.value)})} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm"/>
+             <input type="number" placeholder="Min" value={data.ageMin} onChange={e => onChange({...data, ageMin: parseInt(e.target.value)})} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
              <span className="text-slate-400">-</span>
-             <input type="number" placeholder="Max" value={data.ageMax} onChange={e => onChange({...data, ageMax: parseInt(e.target.value)})} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm"/>
+             <input type="number" placeholder="Max" value={data.ageMax} onChange={e => onChange({...data, ageMax: parseInt(e.target.value)})} className="w-20 border border-slate-200 rounded px-2 py-1 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
           </div>
        </div>
 
        {/* Price */}
        <div className="flex items-center gap-4 border-t border-purple-200 pt-3">
-           <label className="flex items-center gap-2 text-sm text-slate-700 font-medium">
+           <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer">
              <input type="checkbox" checked={data.isPaid} onChange={e => onChange({...data, isPaid: e.target.checked})} className="rounded text-purple-600 focus:ring-purple-500"/>
              Paid Event
            </label>
            {data.isPaid && (
-              <input type="text" placeholder="Price (e.g. 20$)" value={data.price || ''} onChange={e => onChange({...data, price: e.target.value})} className="flex-1 border border-slate-200 rounded px-2 py-1 text-sm"/>
+              <input type="text" placeholder="Price (e.g. 20$)" value={data.price || ''} onChange={e => onChange({...data, price: e.target.value})} className="flex-1 border border-slate-200 rounded px-2 py-1 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-purple-200 outline-none"/>
            )}
        </div>
     </div>
@@ -88,11 +89,11 @@ const DiningForm: React.FC<{ data: DiningData, onChange: (d: DiningData) => void
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Cuisine</label>
-                    <input type="text" value={data.cuisine || ''} onChange={e => onChange({...data, cuisine: e.target.value})} placeholder="e.g. Italian" className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm"/>
+                    <input type="text" value={data.cuisine || ''} onChange={e => onChange({...data, cuisine: e.target.value})} placeholder="e.g. Italian" className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-orange-200 outline-none"/>
                 </div>
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Dress Code</label>
-                    <select value={data.dressCode || ''} onChange={e => onChange({...data, dressCode: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white">
+                    <select value={data.dressCode || ''} onChange={e => onChange({...data, dressCode: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-orange-200 outline-none">
                         <option value="Casual">Casual</option>
                         <option value="Smart Casual">Smart Casual</option>
                         <option value="Formal">Formal</option>
@@ -104,11 +105,11 @@ const DiningForm: React.FC<{ data: DiningData, onChange: (d: DiningData) => void
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Opens</label>
-                    <input type="time" value={data.openingTime || ''} onChange={e => onChange({...data, openingTime: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm"/>
+                    <input type="time" value={data.openingTime || ''} onChange={e => onChange({...data, openingTime: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-orange-200 outline-none"/>
                 </div>
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Closes</label>
-                    <input type="time" value={data.closingTime || ''} onChange={e => onChange({...data, closingTime: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm"/>
+                    <input type="time" value={data.closingTime || ''} onChange={e => onChange({...data, closingTime: e.target.value})} className="w-full mt-1 border border-orange-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-orange-200 outline-none"/>
                 </div>
             </div>
             
@@ -130,15 +131,15 @@ const RoomForm: React.FC<{ data: RoomData, onChange: (d: RoomData) => void }> = 
              <div className="grid grid-cols-3 gap-3">
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Size (m²)</label>
-                    <input type="number" value={data.sizeSqM || ''} onChange={e => onChange({...data, sizeSqM: parseFloat(e.target.value)})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm"/>
+                    <input type="number" value={data.sizeSqM || ''} onChange={e => onChange({...data, sizeSqM: parseFloat(e.target.value)})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 outline-none"/>
                 </div>
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Occupancy</label>
-                    <input type="number" value={data.maxOccupancy || ''} onChange={e => onChange({...data, maxOccupancy: parseInt(e.target.value)})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm"/>
+                    <input type="number" value={data.maxOccupancy || ''} onChange={e => onChange({...data, maxOccupancy: parseInt(e.target.value)})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 outline-none"/>
                 </div>
                  <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Bed Type</label>
-                    <select value={data.bedType || ''} onChange={e => onChange({...data, bedType: e.target.value})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white">
+                    <select value={data.bedType || ''} onChange={e => onChange({...data, bedType: e.target.value})} className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 outline-none">
                         <option value="King">King</option>
                         <option value="Queen">Queen</option>
                         <option value="Twin">Twin</option>
@@ -149,7 +150,7 @@ const RoomForm: React.FC<{ data: RoomData, onChange: (d: RoomData) => void }> = 
 
              <div>
                 <label className="text-xs font-bold text-slate-500 uppercase">View</label>
-                <input type="text" value={data.view || ''} onChange={e => onChange({...data, view: e.target.value})} placeholder="Sea, Garden, Land..." className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm"/>
+                <input type="text" value={data.view || ''} onChange={e => onChange({...data, view: e.target.value})} placeholder="Sea, Garden, Land..." className="w-full mt-1 border border-indigo-200 rounded px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 outline-none"/>
              </div>
         </div>
     );
