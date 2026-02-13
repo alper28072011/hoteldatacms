@@ -27,7 +27,8 @@ import {
   FileText,
   CircleHelp,
   MoreVertical,
-  X
+  X,
+  FolderOpen
 } from 'lucide-react';
 
 interface NodeEditorProps {
@@ -37,14 +38,19 @@ interface NodeEditorProps {
   onDelete: (id: string) => void;
 }
 
-// Helper for type descriptions
+// Helper for type descriptions - NORMALIZED LABELS
 const getTypeInfo = (type: string) => {
   switch (type) {
-    case 'category': return { label: 'Category', desc: 'A folder to organize items.', icon: <Box size={14} /> };
+    case 'category': return { label: 'Category', desc: 'A folder to organize items.', icon: <FolderOpen size={14} /> };
+    case 'list': return { label: 'List', desc: 'A collection of similar items.', icon: <List size={14} /> };
+    case 'menu': return { label: 'Menu', desc: 'A menu containing items with prices.', icon: <List size={14} /> };
     case 'item': return { label: 'Item / Service', desc: 'A specific entity (e.g. Pool, Butler).', icon: <Box size={14} /> };
+    case 'menu_item': return { label: 'Menu Item', desc: 'An item within a menu (often with price).', icon: <Box size={14} /> };
+    case 'field': return { label: 'Data Field', desc: 'A simple data point or property.', icon: <Tag size={14} /> };
     case 'qa_pair': return { label: 'Q&A', desc: 'A specific question and answer.', icon: <CircleHelp size={14} /> };
     case 'note': return { label: 'Internal Note', desc: 'Information for staff or AI context.', icon: <FileText size={14} /> };
-    default: return { label: type, desc: 'Generic data node.', icon: <Box size={14} /> };
+    case 'root': return { label: 'Root', desc: 'The main container.', icon: <LayoutDashboard size={14} /> };
+    default: return { label: type.charAt(0).toUpperCase() + type.slice(1), desc: 'Generic data node.', icon: <Box size={14} /> };
   }
 };
 
@@ -228,13 +234,24 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                   onChange={(e) => handleChange('type', e.target.value)}
                   className="text-xs font-bold uppercase tracking-wide border border-slate-200 rounded px-2 py-1.5 bg-slate-50 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors cursor-pointer text-right appearance-none pl-6"
               >
-                  <option value="category">Category</option>
-                  <option value="item">Item / Service</option>
-                  <option value="qa_pair">Q&A Pair</option>
-                  <option value="note">Internal Note</option>
-                  <option value="list">List Container</option>
+                  <optgroup label="Containers">
+                    <option value="category">Category (Folder)</option>
+                    <option value="list">List (Collection)</option>
+                    <option value="menu">Menu (Priced List)</option>
+                  </optgroup>
+                  <optgroup label="Items & Data">
+                    <option value="item">Item / Service</option>
+                    <option value="menu_item">Menu Item</option>
+                    <option value="field">Data Field</option>
+                  </optgroup>
+                  <optgroup label="Meta">
+                    <option value="qa_pair">Q&A Pair</option>
+                    <option value="note">Internal Note</option>
+                  </optgroup>
               </select>
-              <span className="text-[10px] text-slate-400 mt-1">{typeInfo.label} Node</span>
+              <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
+                 {typeInfo.icon} {typeInfo.label} Node
+              </div>
            </div>
            <div className="h-8 w-px bg-slate-200 mx-1"></div>
            <button 
@@ -266,10 +283,10 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 />
                 
                 {/* Primary Value (if applicable) */}
-                {['qa_pair', 'note', 'field'].includes(String(node.type)) && (
+                {['qa_pair', 'note', 'field', 'item', 'menu_item'].includes(String(node.type)) && (
                     <div className="mt-4">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                             {node.type === 'qa_pair' ? 'Answer / Response' : 'Main Content'}
+                             {node.type === 'qa_pair' ? 'Answer / Response' : 'Main Content / Value'}
                         </label>
                         <textarea 
                             value={node.type === 'qa_pair' ? (node.answer || '') : (node.value || '')}

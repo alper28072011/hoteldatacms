@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { HotelNode } from '../types';
-import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield } from 'lucide-react';
+import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield, Tag, Box } from 'lucide-react';
 
 interface TreeViewNodeProps {
   node: HotelNode;
@@ -21,10 +21,14 @@ const getNodeIcon = (type: string) => {
     case 'root': return <Folder size={14} className="text-slate-500" />;
     case 'category': return <Folder size={14} className="text-blue-500" />;
     case 'list': return <List size={14} className="text-indigo-500" />;
-    case 'item': return <FileText size={14} className="text-slate-500" />;
+    case 'menu': return <List size={14} className="text-indigo-500" />;
+    case 'field': return <Tag size={14} className="text-teal-500" />;
+    case 'item': return <Box size={14} className="text-slate-500" />;
+    case 'menu_item': return <Box size={14} className="text-slate-500" />;
     case 'event': return <Calendar size={14} className="text-purple-500" />;
     case 'qa_pair': return <CircleHelp size={14} className="text-green-500" />;
     case 'policy': return <Shield size={14} className="text-red-500" />;
+    case 'note': return <FileText size={14} className="text-amber-500" />;
     default: return <FileText size={14} className="text-gray-400" />;
   }
 };
