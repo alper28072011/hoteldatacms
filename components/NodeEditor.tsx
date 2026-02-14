@@ -1,5 +1,6 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, EventData, DiningData, RoomData } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId } from '../utils/treeUtils';
 import { generateNodeContext, generateValueFromAttributes } from '../services/geminiService';
@@ -12,25 +13,64 @@ import {
   Clock, Users, DollarSign, GripVertical, Type, Layers
 } from 'lucide-react';
 
-// --- HELPER COMPONENT: EDUCATIONAL TOOLTIP (FIXED Z-INDEX) ---
+// --- HELPER COMPONENT: PORTAL-BASED EDUCATIONAL TOOLTIP ---
+// This component renders the tooltip into document.body to escape any overflow:hidden containers
 const InfoTooltip: React.FC<{ title: string; content: React.ReactNode }> = ({ title, content }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseEnter = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setCoords({
+        top: rect.top - 8, // Position slightly above the icon
+        left: rect.left + (rect.width / 2) // Center horizontally relative to icon
+      });
+      setIsVisible(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setIsVisible(false);
+  };
+
   return (
-    <div className="group relative inline-flex items-center ml-2 align-middle">
-      <div className="text-slate-400 hover:text-indigo-600 transition-colors cursor-help">
-        <CircleHelp size={15} />
+    <>
+      <div 
+        ref={triggerRef}
+        onMouseEnter={handleMouseEnter} 
+        onMouseLeave={handleMouseLeave}
+        className="group relative inline-flex items-center ml-2 align-middle cursor-help"
+      >
+        <div className="text-slate-400 hover:text-indigo-600 transition-colors">
+          <CircleHelp size={15} />
+        </div>
       </div>
-      {/* Tooltip Container - Fixed Z-Index and Width */}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-72 bg-slate-800 text-white text-xs rounded-lg shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-[9999]">
-         <div className="bg-slate-900/80 px-3 py-2 font-bold border-b border-white/10 text-indigo-200 flex items-center gap-2">
-            <Info size={12} /> {title}
-         </div>
-         <div className="p-3 text-slate-300 leading-relaxed whitespace-normal text-left">
-            {content}
-         </div>
-         {/* Arrow */}
-         <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45 border-r border-b border-slate-700"></div>
-      </div>
-    </div>
+
+      {isVisible && createPortal(
+        <div 
+            className="fixed z-[9999] w-72 pointer-events-none animate-in fade-in zoom-in-95 duration-200"
+            style={{ 
+                top: coords.top, 
+                left: coords.left,
+                transform: 'translate(-50%, -100%)' // Shift up and center
+            }}
+        >
+            <div className="bg-slate-800 text-white text-xs rounded-lg shadow-2xl border border-slate-700 overflow-hidden mb-2">
+                <div className="bg-slate-900/90 px-3 py-2.5 font-bold border-b border-white/10 text-indigo-200 flex items-center gap-2">
+                    <Info size={12} className="shrink-0" /> {title}
+                </div>
+                <div className="p-3 text-slate-300 leading-relaxed whitespace-normal text-left">
+                    {content}
+                </div>
+            </div>
+            {/* Arrow Tip */}
+            <div className="absolute left-1/2 -bottom-1 w-3 h-3 bg-slate-800 border-r border-b border-slate-700 rotate-45 -translate-x-1/2 -translate-y-1/2"></div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 };
 
@@ -105,7 +145,6 @@ const EventForm: React.FC<{ data: EventData, onChange: (d: EventData) => void }>
 };
 
 const DiningForm: React.FC<{ data: DiningData, onChange: (d: DiningData) => void }> = ({ data, onChange }) => {
-    // ... Existing logic
     const updateFeature = (key: keyof typeof data.features, val: boolean) => { onChange({ ...data, features: { ...data.features, [key]: val } }); };
     const addShift = () => { onChange({ ...data, shifts: [...(data.shifts || []), { name: 'Akşam', start: '19:00', end: '21:30' }] }); };
     const updateShift = (index: number, field: string, value: string) => { const newShifts = [...(data.shifts || [])]; newShifts[index] = { ...newShifts[index], [field]: value }; onChange({ ...data, shifts: newShifts }); };
@@ -135,7 +174,6 @@ const DiningForm: React.FC<{ data: DiningData, onChange: (d: DiningData) => void
 };
 
 const RoomForm: React.FC<{ data: RoomData, onChange: (d: RoomData) => void }> = ({ data, onChange }) => {
-    // ... Existing logic
     const toggleAmenity = (item: string) => { const current = data.amenities || []; const updated = current.includes(item) ? current.filter(i => i !== item) : [...current, item]; onChange({ ...data, amenities: updated }); };
     const commonAmenities = ["Hızlı Wifi", "Akıllı TV", "Espresso Makinesi", "Ütü & Masası", "Kasa", "Bornoz", "Saç Kurutma", "Kettle"];
 
