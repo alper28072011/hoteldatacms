@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from './types';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
@@ -14,8 +14,10 @@ import DataHealthModal from './components/DataHealthModal';
 import CreateHotelModal from './components/CreateHotelModal';
 import TemplateModal from './components/TemplateModal';
 import DataCheckModal from './components/DataCheckModal'; 
+import AIPersonaModal from './components/AIPersonaModal';
 import { fetchHotelById, getHotelsList, createNewHotel } from './services/firestoreService';
-import { useHotel } from './contexts/HotelContext'; // CONTEXT BAĞLANTISI
+import { useHotel } from './contexts/HotelContext'; 
+import { AutoFixAction } from './services/geminiService'; // Import the correct type
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
@@ -23,7 +25,6 @@ import {
   FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench
 } from 'lucide-react';
 
-// Basit Bildirim Bileşeni
 const Toast = ({ message, type }: { message: string, type: 'success' | 'error' | 'loading' }) => (
   <div className={`
     fixed bottom-14 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-6 py-3 rounded-full shadow-lg border animate-in fade-in slide-in-from-bottom-4 duration-300
@@ -39,8 +40,6 @@ const Toast = ({ message, type }: { message: string, type: 'success' | 'error' |
 );
 
 const App: React.FC = () => {
-  // --- GLOBAL STATE (CONTEXT) ---
-  // Artık tüm veri yönetimi ve kayıt işlemleri buradan geliyor
   const { 
     hotelData, 
     setHotelData, 
@@ -49,27 +48,29 @@ const App: React.FC = () => {
     updateNode, 
     addChild, 
     deleteNode, 
-    moveNode,
+    moveNode, // Context action for moving
     saveStatus, 
     hasUnsavedChanges,
     forceSave 
   } = useHotel();
 
-  // --- LOCAL UI STATE ---
   const [selectedNodeId, setSelectedNodeId] = useState<string>('root');
   const [hotelsList, setHotelsList] = useState<HotelSummary[]>([]);
   const [isHotelSelectorOpen, setIsHotelSelectorOpen] = useState(false);
   
-  // Modallar ve Menüler
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [mobileStatsOpen, setMobileStatsOpen] = useState(false);
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  
+  // Modals
   const [isArchitectOpen, setIsArchitectOpen] = useState(false);
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isDataCheckOpen, setIsDataCheckOpen] = useState(false);
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false); 
+  
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -80,11 +81,9 @@ const App: React.FC = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Seçili düğüm ve İstatistikler (Memoized)
   const selectedNode = findNodeById(hotelData, selectedNodeId) || hotelData;
   const stats = useMemo(() => analyzeHotelStats(hotelData), [hotelData]);
 
-  // Arama Filtresi
   const filteredData = useMemo(() => {
     if (!searchQuery.trim()) return hotelData;
     return filterHotelTree(hotelData, searchQuery) || hotelData;
@@ -98,7 +97,6 @@ const App: React.FC = () => {
     });
   };
 
-  // --- Başlangıç Yüklemesi ---
   useEffect(() => {
     const initApp = async () => {
       try {
@@ -118,12 +116,11 @@ const App: React.FC = () => {
     initApp();
   }, []);
 
-  // Otel Verisi Çekme
   const loadHotelData = async (id: string) => {
     try {
       const data = await fetchHotelById(id);
       if (data) {
-        setHotelData(data); // Context'i güncelle
+        setHotelData(data); 
         setHotelId(id);
         setSelectedNodeId(data.id || 'root');
       }
@@ -133,7 +130,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Otel Değiştirme
   const handleSwitchHotel = async (id: string) => {
     setIsHotelSelectorOpen(false);
     if (id === hotelId) return;
@@ -142,7 +138,6 @@ const App: React.FC = () => {
     setNotification(null);
   };
 
-  // Yeni Otel Oluşturma
   const handleCreateNewHotel = async (name: string, templateData?: HotelNode, isStructureOnly?: boolean) => {
     setIsHotelSelectorOpen(false);
     setNotification({ message: "Otel oluşturuluyor...", type: 'loading' });
@@ -177,46 +172,133 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Aksiyonlar ---
-
   const handleDeleteNodeWrapper = async (id: string) => {
     if (id === 'root') return;
     if (!window.confirm("Bu öğeyi silmek istediğinize emin misiniz?")) return;
-    deleteNode(id); // Context action
+    deleteNode(id); 
     if (selectedNodeId === id) setSelectedNodeId('root');
     setNotification({ message: "Öğe silindi.", type: 'success' });
     setTimeout(() => setNotification(null), 2000);
   };
 
-  // AI Architect Aksiyonları
+  // --- HANDLE AUTO-FIX ACTIONS (FROM HEALTH MODAL) ---
+  const handleAutoFixAction = (action: AutoFixAction) => {
+      try {
+          if (action.type === 'update' && action.payload) {
+              updateNode(action.targetId, action.payload);
+          } 
+          else if (action.type === 'changeType' && action.payload) {
+              updateNode(action.targetId, action.payload);
+          }
+          else if (action.type === 'move' && action.destinationId) {
+              // Ensure we aren't trying to move to self or null
+              if (action.targetId !== action.destinationId) {
+                  moveNode(action.targetId, action.destinationId, 'inside');
+              }
+          }
+      } catch (e) {
+          console.error("AutoFix failed:", e);
+          setNotification({ message: "Düzeltme uygulanırken hata oluştu.", type: 'error' });
+      }
+  };
+
+  // --- ROBUST AI ARCHITECT HANDLER ---
   const handleArchitectActions = (actions: ArchitectAction[]) => {
+    let successCount = 0;
+    let fallbackTriggered = false;
+
     actions.forEach(action => {
        try {
          if (action.type === 'add' && action.data) {
-            // Toplu işlem için context state'i doğrudan güncelliyoruz
             setHotelData(prev => {
-                const newNode = { ...action.data, id: action.data?.id || generateId('ai') } as HotelNode;
-                return addChildToNode(prev, action.targetId, newNode);
+                const targetNode = findNodeById(prev, action.targetId);
+                let finalTargetId = action.targetId;
+
+                if (!targetNode) {
+                    finalTargetId = prev.id; 
+                    fallbackTriggered = true;
+                }
+
+                let newNodeData = { ...action.data };
+                if ((newNodeData as any).features) {
+                    const features = (newNodeData as any).features;
+                    const newAttributes = Object.entries(features).map(([key, value]) => ({
+                        id: generateId('attr'),
+                        key: key,
+                        value: String(value),
+                        type: 'text' as const
+                    }));
+                    newNodeData.attributes = newAttributes;
+                    delete (newNodeData as any).features;
+                }
+
+                const newNode = { ...newNodeData, id: newNodeData.id || generateId('ai') } as HotelNode;
+                return addChildToNode(prev, finalTargetId, newNode);
             });
+            successCount++;
          } else if (action.type === 'update' && action.data) {
-            updateNode(action.targetId, action.data);
+            const targetNode = findNodeById(hotelData, action.targetId);
+            if (targetNode) {
+                let updates = { ...action.data };
+                
+                if ((updates as any).features) {
+                    const features = (updates as any).features as Record<string, string>;
+                    const currentAttributes = targetNode.attributes ? [...targetNode.attributes] : [];
+                    
+                    Object.entries(features).forEach(([key, value]) => {
+                        const existingIdx = currentAttributes.findIndex(attr => attr.key === key);
+                        if (existingIdx > -1) {
+                             currentAttributes[existingIdx] = { 
+                                 ...currentAttributes[existingIdx], 
+                                 value: String(value) 
+                             };
+                        } else {
+                             currentAttributes.push({
+                                 id: generateId('attr'),
+                                 key: key,
+                                 value: String(value),
+                                 type: 'text'
+                             });
+                        }
+                    });
+                    
+                    updates.attributes = currentAttributes;
+                    delete (updates as any).features;
+                }
+
+                updateNode(action.targetId, updates);
+                successCount++;
+            }
          } else if (action.type === 'delete') {
-            deleteNode(action.targetId);
+            if (findNodeById(hotelData, action.targetId)) {
+                deleteNode(action.targetId);
+                successCount++;
+            }
          }
-       } catch (e) { console.error(e); }
+       } catch (e) { console.error("Architect Action Failed:", e); }
     });
+
+    if (successCount > 0) {
+        if (fallbackTriggered) {
+             setNotification({ message: "Bazı öğeler ana dizine eklendi (Hedef bulunamadı).", type: 'loading' }); 
+             setTimeout(() => setNotification(null), 3000);
+        } else {
+             setNotification({ message: "Yapı başarıyla güncellendi.", type: 'success' });
+             setTimeout(() => setNotification(null), 2000);
+        }
+    }
   };
 
-  // Drag and Drop Logic
+  // --- DRAG AND DROP HANDLERS ---
   const handleDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData('nodeId', id);
+    e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e: React.DragEvent, id: string) => {
     e.preventDefault();
   };
 
-  // UPDATED: Now correctly handles the position argument ('inside' | 'before' | 'after')
   const handleDrop = (e: React.DragEvent, targetId: string, position: 'inside' | 'before' | 'after') => {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData('nodeId');
@@ -225,7 +307,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Dosya Dışa Aktarma (Export)
   const handleExport = async (format: 'json' | 'clean-json' | 'csv' | 'txt') => {
     setIsExportMenuOpen(false);
     setMobileToolsOpen(false);
@@ -283,7 +364,7 @@ const App: React.FC = () => {
       try {
         const parsed = JSON.parse(ev.target?.result as string);
         if (parsed._metadata) delete parsed._metadata;
-        setHotelData(parsed); // Context update
+        setHotelData(parsed); 
         setSelectedNodeId(parsed.id || 'root');
         setNotification({ message: "Dosya içe aktarıldı.", type: 'success' });
       } catch (err) { alert("Geçersiz JSON dosyası"); }
@@ -292,12 +373,11 @@ const App: React.FC = () => {
     e.target.value = '';
   };
 
-  // Manuel Kayıt
   const handleManualSave = async () => {
       setMobileToolsOpen(false);
       setNotification({ message: "Kaydediliyor...", type: 'loading' });
       try {
-          await forceSave(); // Context action
+          await forceSave(); 
           setNotification({ message: "Kaydedildi!", type: 'success' });
       } catch (e) {
           setNotification({ message: "Kayıt hatası.", type: 'error' });
@@ -305,6 +385,10 @@ const App: React.FC = () => {
           setTimeout(() => setNotification(null), 2000);
       }
   };
+
+  const handleOpenPersonaModal = useCallback(() => {
+    setIsPersonaModalOpen(true);
+  }, []);
 
   if (isInitializing) {
     return (
@@ -319,7 +403,6 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen overflow-hidden bg-white text-slate-800 font-sans relative">
       {notification && <Toast message={notification.message} type={notification.type} />}
 
-      {/* EXPORT LOADING */}
       {isExporting && exportProgress !== null && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full text-center">
@@ -332,7 +415,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* DIALOGS */}
       <AIArchitectModal isOpen={isArchitectOpen} onClose={() => setIsArchitectOpen(false)} data={hotelData} onApplyActions={handleArchitectActions} />
       
       <DataHealthModal 
@@ -340,6 +422,7 @@ const App: React.FC = () => {
         onClose={() => setIsHealthModalOpen(false)} 
         data={hotelData} 
         onApplyFix={updateNode} 
+        onAutoFixApply={handleAutoFixAction} // CONNECTED THE HANDLER HERE
         onLocate={(id) => setSelectedNodeId(id)}
       />
       
@@ -355,15 +438,14 @@ const App: React.FC = () => {
       }} />
       <CreateHotelModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onCreate={handleCreateNewHotel} />
       <TemplateModal isOpen={isTemplateModalOpen} onClose={() => setIsTemplateModalOpen(false)} data={hotelData} />
+      <AIPersonaModal isOpen={isPersonaModalOpen} onClose={() => setIsPersonaModalOpen(false)} />
 
-      {/* HEADER */}
       <header className="h-20 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-30 shrink-0 shadow-sm relative">
         <div className="flex items-center gap-3">
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden text-slate-600"><Menu size={20} /></button>
           <div className="flex items-center gap-4">
              <div className="bg-blue-600 p-1.5 rounded-md text-white shadow-sm"><Layout size={18} /></div>
              
-             {/* OTEL SEÇİCİ */}
              <div className="relative">
                 <button onClick={() => setIsHotelSelectorOpen(!isHotelSelectorOpen)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 rounded-lg transition-colors group">
                    <div className="flex flex-col items-start">
@@ -395,13 +477,11 @@ const App: React.FC = () => {
                 )}
              </div>
              
-             {/* DURUM GÖSTERGELERİ */}
              <div className="hidden md:flex items-center gap-3">
                  <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${hotelId ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                     {hotelId ? <Wifi size={10} /> : <WifiOff size={10} />} {hotelId ? 'Online' : 'Offline'}
                  </div>
                  
-                 {/* MANUEL KAYIT UYARISI */}
                  {hotelId && (
                      <div className="flex items-center gap-2 transition-all duration-300">
                          {saveStatus === 'saving' ? (
@@ -425,7 +505,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* ACTIONS */}
         <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center">
               <button onClick={() => setIsDataCheckOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-cyan-700 bg-cyan-100 rounded hover:bg-cyan-200 mr-2"><Scale size={14} className="mr-1.5" /> Veri Kontrol</button>
@@ -434,7 +513,6 @@ const App: React.FC = () => {
               
               <div className="w-px h-6 bg-slate-200 mx-2"></div>
               
-              {/* Force Save Button (Redundant but good for UX) */}
               <button onClick={handleManualSave} className={`p-2 rounded transition-colors ${hasUnsavedChanges ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100'}`} title="Kaydet">
                   <Save size={18} />
               </button>
@@ -471,9 +549,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* ANA İÇERİK */}
       <div className="flex-1 grid grid-cols-12 overflow-hidden relative">
-        {/* Sol Menü (Ağaç) */}
         <div className={`absolute inset-0 z-20 bg-slate-50 border-r border-slate-200 transition-transform duration-300 lg:static lg:translate-x-0 lg:col-span-2 lg:block lg:h-full lg:min-h-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
             <div className="h-full flex flex-col">
                 <div className="p-3 border-b border-slate-100 bg-white sticky top-0 z-10">
@@ -488,7 +564,7 @@ const App: React.FC = () => {
                         node={filteredData} 
                         selectedId={selectedNodeId}
                         onSelect={(id) => { setSelectedNodeId(id); setMobileMenuOpen(false); }}
-                        onAddChild={(parentId) => addChild(parentId)} // Context Action
+                        onAddChild={(parentId) => addChild(parentId)} 
                         forceExpand={!!searchQuery}
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
@@ -498,23 +574,24 @@ const App: React.FC = () => {
             </div>
         </div>
 
-        {/* Orta Alan (Editör) */}
         <div className="col-span-12 lg:col-span-7 bg-white h-full relative z-0 overflow-hidden min-h-0">
              <NodeEditor 
                 node={selectedNode} 
                 root={hotelData}
-                onUpdate={updateNode} // Context Action
+                onUpdate={updateNode} 
                 onDelete={handleDeleteNodeWrapper}
              />
         </div>
 
-        {/* Sağ Menü (ChatBot) */}
         <div className={`absolute inset-0 z-20 bg-white transition-transform duration-300 lg:static lg:translate-x-0 lg:col-span-3 lg:block lg:h-full lg:min-h-0 ${mobileChatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-             <ChatBot key={hotelId || 'default'} data={hotelData} />
+             <ChatBot 
+                key={hotelId || 'default'} 
+                data={hotelData} 
+                onOpenPersonaModal={handleOpenPersonaModal}
+             />
         </div>
       </div>
 
-      {/* FOOTER */}
       <footer className="bg-slate-50 border-t border-slate-200 text-xs text-slate-600 relative z-30 shrink-0">
         <div className="lg:hidden h-10 flex items-center justify-between px-4 cursor-pointer hover:bg-slate-100 border-b border-slate-100" onClick={() => setMobileStatsOpen(!mobileStatsOpen)}>
           <div className="flex items-center gap-2"><Activity size={14} /><span className="font-semibold">Doluluk: %{stats.completionRate}</span></div>

@@ -7,18 +7,17 @@ import { generateId } from './treeUtils';
  * Returns an error string if invalid, or null if valid.
  */
 export const validateNodeInput = (node: HotelNode): string | null => {
-  // RULE 1: Categories/Lists should not have main values (only description)
+  // KURAL 1: Kategori/Liste/Menu tiplerinde uzun "Value" (açıklama) olmamalı
   if (['category', 'list', 'menu', 'root'].includes(String(node.type))) {
-     if (node.value && node.value.length > 5 && !node.value.includes('http')) { 
-        // We allow short codes or URLs, but prevent long text in 'Value' for containers
-        return "Kategoriler/Listeler için 'Main Value' alanı kullanılmaz. Lütfen 'Internal Note' veya açıklama kullanın.";
+     if (node.value && node.value.length > 50 && !node.value.includes('http')) { 
+        return "Kategoriler veya Listeler için 'Ana Değer' alanı kısa tutulmalı veya boş bırakılmalıdır. Detaylar için açıklama veya alt öğe kullanın.";
      }
   }
 
-  // RULE 2: Structural Integrity
+  // KURAL 2: Yapısal Bütünlük (Leaf node'ların çocuğu olamaz)
   if (node.children && node.children.length > 0) {
       if (['item', 'field', 'menu_item', 'qa_pair'].includes(String(node.type))) {
-          return "Bu öğenin alt öğeleri var. Tipi 'Item' yerine 'Category' veya 'List' olmalı.";
+          return "Bu öğenin alt öğeleri var. Tipi 'Öğe' (Item) yerine 'Kategori' veya 'Liste' olmalı.";
       }
   }
 
@@ -31,7 +30,7 @@ export const validateNodeInput = (node: HotelNode): string | null => {
 export const runLocalValidation = (root: HotelNode): HealthIssue[] => {
   const issues: HealthIssue[] = [];
   
-  // Build a set of known definitions for Relational Checks
+  // Referans kontrolleri için tanımlı terimleri topla
   const definedTerms = new Set<string>();
   const collectDefinitions = (node: HotelNode) => {
       if (['list', 'menu', 'policy', 'category'].includes(String(node.type)) && node.name) {
@@ -41,19 +40,19 @@ export const runLocalValidation = (root: HotelNode): HealthIssue[] => {
   };
   collectDefinitions(root);
 
-  // 1. Empty/Missing Data Check
+  // 1. Boş/Eksik Veri Kontrolü
   issues.push(...findEmptyNodes(root));
 
-  // 2. Structural Depth & Logic Check
+  // 2. Yapısal Derinlik ve Mantık
   issues.push(...findStructuralIssues(root));
 
-  // 3. Duplicate Siblings Check
+  // 3. Tekrarlanan Kardeş Öğeler
   issues.push(...findDuplicateSiblings(root));
 
-  // 4. Relational Integrity (Broken Links)
+  // 4. İlişkisel Bütünlük (Kırık Linkler - Basit)
   issues.push(...findBrokenReferences(root, definedTerms));
 
-  // 5. Missing Service Details
+  // 5. Eksik Hizmet Detayları (Saat, Konum vb.)
   issues.push(...findMissingServiceDetails(root));
 
   return issues;
@@ -68,7 +67,7 @@ const createIssue = (
 ): HealthIssue => ({
   id: `local_issue_${generateId()}`,
   nodeId: node.id,
-  nodeName: node.name || 'Unnamed Node',
+  nodeName: node.name || 'İsimsiz Öğe',
   severity,
   message,
   fix: fixAction ? {
@@ -81,26 +80,30 @@ const createIssue = (
 
 const findEmptyNodes = (node: HotelNode, issues: HealthIssue[] = []): HealthIssue[] => {
   if (!node.name || node.name.trim() === '') {
-    issues.push(createIssue(node, 'critical', 'Node has no name.', 'Set Name', { name: 'New Item' }));
-  } else if (node.name.toLowerCase() === 'new item' || node.name.toLowerCase() === 'untitled') {
-    issues.push(createIssue(node, 'warning', 'Node has default placeholder name.', 'Rename', {}));
+    issues.push(createIssue(node, 'critical', 'Öğenin bir ismi yok.', 'İsim Ata', { name: 'Yeni Öğe' }));
+  } else if (['new item', 'untitled', 'isimsiz', 'yeni öğe'].some(s => node.name?.toLowerCase().includes(s))) {
+    issues.push(createIssue(node, 'warning', 'Öğe varsayılan (placeholder) isme sahip.', 'Yeniden Adlandır', {}));
   }
 
+  // Değer Kontrolü (Sadece Leaf Node'lar için)
   if (['item', 'field'].includes(String(node.type))) {
-    if ((!node.value || node.value.trim() === '') && (!node.attributes || node.attributes.length === 0)) {
-      issues.push(createIssue(node, 'warning', `Field "${node.name}" is empty.`, 'Set Placeholder', { value: 'TBD' }));
+    // Eğer şeması yoksa ve değeri boşsa
+    if (!node.schemaType || node.schemaType === 'generic') {
+        if ((!node.value || node.value.trim() === '') && (!node.attributes || node.attributes.length === 0)) {
+            issues.push(createIssue(node, 'warning', `"${node.name}" alanı boş görünüyor.`, 'Yer Tutucu Ekle', { value: 'Detaylar eklenecek.' }));
+        }
     }
   }
 
   if (node.type === 'menu_item') {
     if (!node.price && node.price !== 0) {
-      issues.push(createIssue(node, 'warning', `Menu item "${node.name}" has no price.`, 'Set Price', { price: '0' }));
+      issues.push(createIssue(node, 'warning', `Menü öğesi "${node.name}" için fiyat girilmemiş.`, 'Fiyat Ata', { price: 0 }));
     }
   }
 
   if (node.type === 'qa_pair') {
     if (!node.answer || node.answer.trim() === '') {
-      issues.push(createIssue(node, 'critical', `Question "${node.question || 'Unknown'}" has no answer.`, 'Set Answer', { answer: 'Answer pending.' }));
+      issues.push(createIssue(node, 'critical', `"${node.question || 'Bilinmeyen'}" sorusunun cevabı yok.`, 'Cevap Ata', { answer: 'Bu konuda bilgi resepsiyondan alınabilir.' }));
     }
   }
 
@@ -112,12 +115,13 @@ const findEmptyNodes = (node: HotelNode, issues: HealthIssue[] = []): HealthIssu
 };
 
 const findStructuralIssues = (node: HotelNode, depth: number = 0, issues: HealthIssue[] = []): HealthIssue[] => {
-  if (depth > 5) {
-    issues.push(createIssue(node, 'optimization', `Nesting level (${depth}) is too deep for good UX.`, undefined));
+  if (depth > 6) {
+    issues.push(createIssue(node, 'optimization', `İç içe klasör derinliği (${depth}) kullanıcı deneyimi için çok fazla.`, undefined));
   }
 
-  if (node.type === 'field' && node.children && node.children.length > 0) {
-    issues.push(createIssue(node, 'warning', `Node "${node.name}" is a 'field' type but has children. Should it be a 'category'?`, 'Convert to Category', { type: 'category' }));
+  // Alt öğesi olan 'field' veya 'item' uyarısı
+  if (['field', 'item', 'menu_item', 'qa_pair'].includes(String(node.type)) && node.children && node.children.length > 0) {
+    issues.push(createIssue(node, 'critical', `"${node.name}" bir '${node.type}' ama alt öğeleri var.`, 'Kategoriye Çevir', { type: 'category' }));
   }
 
   if (node.children) {
@@ -141,7 +145,7 @@ const findDuplicateSiblings = (node: HotelNode, issues: HealthIssue[] = []): Hea
     node.children.forEach(child => {
       const name = (child.name || '').trim().toLowerCase();
       if (nameMap.get(name)! > 1) {
-        issues.push(createIssue(child, 'critical', `Duplicate name "${child.name}" found in same category.`, 'Rename', { name: `${child.name} (Copy)` }));
+        issues.push(createIssue(child, 'warning', `Aynı kategoride "${child.name}" isminde birden fazla öğe var.`, 'Yeniden Adlandır', { name: `${child.name} (Kopya)` }));
       }
     });
     
@@ -152,20 +156,8 @@ const findDuplicateSiblings = (node: HotelNode, issues: HealthIssue[] = []): Hea
 };
 
 const findBrokenReferences = (node: HotelNode, definedTerms: Set<string>, issues: HealthIssue[] = []): HealthIssue[] => {
-    if (node.type === 'field' || node.type === 'item') {
-        const value = node.value?.trim();
-        if (value && value.length > 3 && /^[A-Z]/.test(value)) {
-             const isCommonWord = ['Yes', 'No', 'Available', 'Free', 'Paid', 'Included'].includes(value);
-             if (!isCommonWord && !definedTerms.has(value)) {
-                 issues.push(createIssue(
-                     node, 
-                     'warning', 
-                     `Potential Broken Reference: Value "${value}" looks like a named entity but is not defined in the system.`, 
-                     undefined
-                 ));
-             }
-        }
-    }
+    // Basit heuristic: Büyük harfle başlayan ve tırnak içinde olmayan kelimeler başka bir servise referans olabilir.
+    // Şimdilik false-positive riskinden dolayı devre dışı bırakıldı veya çok basit tutuldu.
     if (node.children) {
         node.children.forEach(c => findBrokenReferences(c, definedTerms, issues));
     }
@@ -173,22 +165,38 @@ const findBrokenReferences = (node: HotelNode, definedTerms: Set<string>, issues
 }
 
 const findMissingServiceDetails = (node: HotelNode, issues: HealthIssue[] = []): HealthIssue[] => {
-    const isService = node.name?.toLowerCase().includes('service') || 
-                      node.name?.toLowerCase().includes('restaurant') || 
-                      node.name?.toLowerCase().includes('bar') ||
-                      node.type === 'item'; 
+    // SADECE FİZİKSEL HİZMETLERİ TARA (QA, Not, Politika HARİÇ)
+    if (['qa_pair', 'note', 'policy', 'field'].includes(String(node.type))) return issues;
+
+    const name = (node.name || '').toLowerCase();
+    const isService = name.includes('restoran') || 
+                      name.includes('bar') ||
+                      name.includes('pool') ||
+                      name.includes('havuz') ||
+                      name.includes('spa') ||
+                      name.includes('club');
     
-    if (isService && node.children && node.children.length === 0) { 
-        const hasTime = node.attributes?.some(a => a.key.toLowerCase().includes('time') || a.key.toLowerCase().includes('open') || a.key.toLowerCase().includes('hour'));
-        const hasLocation = node.attributes?.some(a => a.key.toLowerCase().includes('location') || a.key.toLowerCase().includes('where'));
+    // Eğer bir hizmetse (item veya category olabilir) ve alt öğesi yoksa
+    // Veya category ise ama içinde 'saat', 'time', 'open' geçen bir şey yoksa
+    if (isService) {
+        const hasTime = node.attributes?.some(a => a.key.toLowerCase().includes('saat') || a.key.toLowerCase().includes('açılış') || a.key.toLowerCase().includes('kapanış'));
+        const hasLocation = node.attributes?.some(a => a.key.toLowerCase().includes('konum') || a.key.toLowerCase().includes('yer'));
         
-        if (!hasTime && !hasLocation && !node.value?.includes(':') && (!node.attributes || node.attributes.length === 0)) {
+        // Veri şeması (dining/event) doluysa sorun yok
+        if (node.data && (node.data.shifts || node.data.schedule)) return issues;
+
+        // Metin içinde saat geçiyor mu?
+        const textContent = (node.value || '').toLowerCase();
+        const hasTimeInText = textContent.includes(':') && /\d/.test(textContent); // Basit saat kontrolü örn: 10:00
+
+        if (!hasTime && !hasTimeInText && !hasLocation && !node.children?.length) {
              issues.push(createIssue(
                  node, 
                  'optimization', 
-                 `Service "${node.name}" lacks details (Time, Location, etc).`, 
-                 'Add Attribute', 
-                 { attributes: [...(node.attributes || []), { id: `attr_${Date.now()}`, key: 'Opening Hours', value: '09:00 - 18:00', type: 'text' }] }
+                 `"${node.name}" önemli bir hizmet ancak saat veya konum bilgisi eksik görünüyor.`, 
+                 'Saat Bilgisi Ekle', 
+                 // Fix Payload: Mevcut attributelara ekleme yap
+                 { attributes: [...(node.attributes || []), { id: `attr_${Date.now()}`, key: 'Çalışma Saatleri', value: '09:00 - 18:00', type: 'text' }] }
              ));
         }
     }

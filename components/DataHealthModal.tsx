@@ -11,7 +11,7 @@ interface DataHealthModalProps {
   data: HotelNode;
   onApplyFix: (nodeId: string, updates: Partial<HotelNode>) => void;
   onLocate?: (nodeId: string) => void;
-  onAutoFixApply?: (action: AutoFixAction) => void; // New prop for complex actions (move/type)
+  onAutoFixApply?: (action: AutoFixAction) => void; // Robust action handler
 }
 
 const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data, onApplyFix, onLocate, onAutoFixApply }) => {
@@ -22,7 +22,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
   const [activeTab, setActiveTab] = useState<'local' | 'autofix'>('local');
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
 
-  // Run Local Validation Immediately on Open
+  // Modalı açınca yerel doğrulamayı çalıştır
   useEffect(() => {
     if (isOpen) {
       const issues = runLocalValidation(data);
@@ -32,7 +32,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
 
   const runAutoFixScan = async () => {
     setIsScanning(true);
-    setFixedIds(new Set());
+    setFixedIds(new Set()); // Reset fixed state on new scan
     try {
       const result = await autoFixDatabase(data);
       setAutoFixes(result);
@@ -51,12 +51,18 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
     }
   };
 
-  const handleMagicWand = () => {
-      // Apply all remaining fixes
+  const handleMagicWand = async () => {
+      // Hepsini uygula (Sıralı işlem yaparak React state update'lerini garantiye alalım)
       const pending = autoFixes.filter(f => !fixedIds.has(f.id));
-      pending.forEach(action => {
-          if (onAutoFixApply) onAutoFixApply(action);
-      });
+      
+      for (const action of pending) {
+          if (onAutoFixApply) {
+              onAutoFixApply(action);
+              // Kısa bir gecikme ekleyerek state çakışmalarını önleyelim
+              await new Promise(resolve => setTimeout(resolve, 50)); 
+          }
+      }
+      
       const allIds = pending.map(p => p.id);
       setFixedIds(prev => new Set([...prev, ...allIds]));
   };
@@ -88,8 +94,8 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                 <Activity size={24} />
              </div>
              <div>
-                <h2 className="text-xl font-bold text-slate-800">Auto-Pilot Center</h2>
-                <p className="text-sm text-slate-500">Validation & Automated Repair</p>
+                <h2 className="text-xl font-bold text-slate-800">Sağlık ve Onarım Merkezi</h2>
+                <p className="text-sm text-slate-500">Doğrulama & Otomatik Düzeltme</p>
              </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition-colors">
@@ -110,11 +116,11 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                            <Zap size={16} className="text-amber-500" /> Validation
+                            <Zap size={16} className="text-amber-500" /> Hızlı Doğrulama
                         </span>
                         <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs font-bold">{localReport.length}</span>
                     </div>
-                    <div className="text-xs text-slate-500">Real-time check for empty fields and structure depth.</div>
+                    <div className="text-xs text-slate-500">Boş alanlar, eksik değerler ve yapısal derinlik için anlık kontrol.</div>
                 </div>
 
                 {/* Auto-Fix Status */}
@@ -124,26 +130,26 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                            <Sparkles size={16} className="text-violet-500" /> Auto-Fixer
+                            <Sparkles size={16} className="text-violet-500" /> Derin AI Analiz
                         </span>
                         {autoFixes.length > 0 ? (
                             <span className="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full text-xs font-bold">{autoFixes.length}</span>
                         ) : (
-                            <span className="text-[10px] uppercase text-slate-400 font-bold">Ready</span>
+                            <span className="text-[10px] uppercase text-slate-400 font-bold">Hazır</span>
                         )}
                     </div>
-                    <div className="text-xs text-slate-500 mb-4">Deep scan to fix types, values, and placement.</div>
+                    <div className="text-xs text-slate-500 mb-4">Veri ağacını tarar, anlamsal hataları ve yanlış tipleri bulur.</div>
                     
                     {!isScanning ? (
                          <button 
                             onClick={(e) => { e.stopPropagation(); runAutoFixScan(); }}
-                            className="w-full py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+                            className="w-full py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
                         >
-                            <BrainCircuit size={14} /> Scan & Repair
+                            <BrainCircuit size={14} /> Taramayı Başlat
                         </button>
                     ) : (
                         <button disabled className="w-full py-2 bg-violet-50 text-violet-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-wait">
-                            <Loader2 size={14} className="animate-spin" /> Analyzing...
+                            <Loader2 size={14} className="animate-spin" /> Veri Analiz Ediliyor...
                         </button>
                     )}
                 </div>
@@ -153,7 +159,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
            <div className="flex-1 bg-white flex flex-col overflow-hidden">
                 <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                     <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                        {activeTab === 'local' ? 'Structural Issues' : 'AI Suggested Repairs'}
+                        {activeTab === 'local' ? 'Tespit Edilen Yapısal Sorunlar' : 'Yapay Zeka Onarım Önerileri'}
                     </h3>
                     
                     {activeTab === 'autofix' && autoFixes.length > 0 && (
@@ -161,7 +167,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                             onClick={handleMagicWand}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-lg text-xs font-bold hover:shadow-md transition-all"
                         >
-                            <Wand2 size={14} /> Fix All (Magic Wand)
+                            <Wand2 size={14} /> Tümünü Düzelt
                         </button>
                     )}
                 </div>
@@ -172,7 +178,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                         autoFixes.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
                                 <Sparkles size={48} className="mb-2 text-violet-300" />
-                                <p>Run the Auto-Fixer scan to see suggestions.</p>
+                                <p>Derin analiz sonuçlarını görmek için taramayı başlatın.</p>
                             </div>
                         ) : (
                             autoFixes.map(action => {
@@ -185,9 +191,9 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                                                     action.severity === 'critical' ? 'bg-red-100 text-red-700' :
                                                     action.type === 'move' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                                                 }`}>
-                                                    {action.type}
+                                                    {action.type === 'move' ? 'TAŞI (Semantik)' : action.type === 'update' ? 'GÜNCELLE' : 'TİP DEĞİŞTİR'}
                                                 </span>
-                                                <span className="font-mono text-xs text-slate-400">Target: {action.targetId}</span>
+                                                <span className="font-mono text-xs text-slate-400">ID: {action.targetId}</span>
                                             </div>
                                         </div>
                                         
@@ -199,10 +205,10 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                                                     onClick={() => handleApplyFix(action)}
                                                     className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100"
                                                 >
-                                                    <Wand2 size={12} /> Apply Fix
+                                                    <Wand2 size={12} /> Düzeltmeyi Uygula
                                                 </button>
                                             ) : (
-                                                <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check size={12}/> APPLIED</span>
+                                                <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check size={12}/> UYGULANDI</span>
                                             )}
                                         </div>
                                     </div>
@@ -216,7 +222,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                         localReport.length === 0 ? (
                              <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
                                 <Check size={48} className="mb-2 text-emerald-500" />
-                                <p>No immediate validation errors.</p>
+                                <p>Harika! Hızlı taramada sorun bulunamadı.</p>
                             </div>
                         ) : (
                             localReport.map(issue => {
@@ -228,21 +234,21 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                                                     issue.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                                                 }`}>
-                                                    {issue.severity}
+                                                    {issue.severity === 'critical' ? 'KRİTİK' : issue.severity === 'warning' ? 'UYARI' : 'ÖNERİ'}
                                                 </span>
-                                                <span className="font-mono text-xs text-slate-400">Node: {issue.nodeName}</span>
+                                                <span className="font-mono text-xs text-slate-400">Öğe: {issue.nodeName}</span>
                                             </div>
                                             {onLocate && (
-                                                <button onClick={() => handleLocate(issue.nodeId)} className="text-xs text-blue-600 hover:underline flex items-center gap-1"><Search size={12} /> Locate</button>
+                                                <button onClick={() => handleLocate(issue.nodeId)} className="text-xs text-blue-600 hover:underline flex items-center gap-1"><Search size={12} /> Göster</button>
                                             )}
                                         </div>
                                         <p className="text-slate-700 text-sm mb-3 font-medium">{issue.message}</p>
                                         {issue.fix && !isFixed && (
                                             <button onClick={() => handleLocalFix(issue)} className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100">
-                                                <Sparkles size={12} /> Fix: {issue.fix.description}
+                                                <Sparkles size={12} /> Düzelt: {issue.fix.description}
                                             </button>
                                         )}
-                                        {isFixed && <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check size={12}/> FIXED</span>}
+                                        {isFixed && <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check size={12}/> DÜZELDİ</span>}
                                     </div>
                                 )
                             })

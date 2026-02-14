@@ -176,21 +176,21 @@ export const moveNode = (root: HotelNode, sourceId: string, targetId: string, po
 export const getInitialData = (): HotelNode => ({
   id: "root",
   type: "root",
-  name: "New Hotel",
+  name: "Yeni Otel",
   attributes: [],
   children: [
     {
       id: "gen-info",
       type: "category",
-      name: "General Information",
+      name: "Genel Bilgiler",
       children: [
         {
           id: "g1",
           type: "field",
-          name: "Hotel Name",
+          name: "Otel Adı",
           value: "Grand React Hotel",
           attributes: [
-            { id: 'attr-1', key: 'Stars', value: '5', type: 'number' }
+            { id: 'attr-1', key: 'Yıldız', value: '5', type: 'number' }
           ]
         }
       ]
@@ -352,8 +352,7 @@ const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
 };
 
 /**
- * TRANSLATOR: Converts structured Schema Data (JSON) into Natural Language
- * This allows the AI to "read" the database as if it were written by a human.
+ * TRANSLATOR: Converts structured Schema Data (JSON) into Natural Language (TURKISH)
  */
 const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
     if (!node.schemaType || !node.data) return '';
@@ -365,55 +364,55 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
         const d = data as EventData;
         
         // Status Check
-        if (d.status === 'cancelled') return `[EVENT CANCELLED] This event is cancelled. Reason: ${d.statusReason || 'Unspecified'}.`;
-        if (d.status === 'moved') return `[EVENT MOVED] Location changed to ${d.location}.`;
+        if (d.status === 'cancelled') return `[ETKİNLİK İPTAL] Bu etkinlik iptal edildi. Neden: ${d.statusReason || 'Belirtilmedi'}.`;
+        if (d.status === 'moved') return `[ETKİNLİK TAŞINDI] Yeni yer: ${d.location}.`;
 
         // Schedule Logic
         let scheduleText = "";
         const s = d.schedule;
         
         if (s.frequency === 'daily') {
-            scheduleText = "Runs DAILY.";
+            scheduleText = "HER GÜN.";
         } else if (s.frequency === 'weekly') {
-            scheduleText = `Runs WEEKLY on ${s.activeDays?.join(', ')}.`;
+            scheduleText = `HAFTALIK: ${s.activeDays?.join(', ')} günleri.`;
         } else if (s.frequency === 'biweekly') {
-            scheduleText = `Runs BI-WEEKLY (Every 2 weeks) on ${s.activeDays?.join(', ')}. Cycle Anchor: ${s.cycleAnchorDate || 'Unknown'}. (AI: Calculate week offset from anchor)`;
+            scheduleText = `İKİ HAFTADA BİR: ${s.activeDays?.join(', ')} günleri.`;
         } else if (s.frequency === 'once') {
-            scheduleText = `ONE-TIME Event on ${s.validFrom}.`;
+            scheduleText = `TEK SEFERLİK: Tarih ${s.validFrom}.`;
         }
 
         // Validity
-        if (s.validFrom && s.validUntil) scheduleText += ` Valid between ${s.validFrom} and ${s.validUntil}.`;
+        if (s.validFrom && s.validUntil) scheduleText += ` Geçerlilik: ${s.validFrom} - ${s.validUntil} arası.`;
         
-        const time = s.startTime ? `${s.startTime}${s.endTime ? ` - ${s.endTime}` : ''}` : 'Time varies';
-        const cost = d.isPaid ? `PAID EVENT (${d.price || 'Check price'})` : 'FREE';
-        const audience = d.ageGroup === 'all' ? 'All Ages' : d.ageGroup === 'kids' ? 'KIDS ONLY (4-12)' : d.ageGroup === 'adults' ? 'ADULTS ONLY (18+)' : 'Teens';
+        const time = s.startTime ? `${s.startTime}${s.endTime ? ` - ${s.endTime}` : ''}` : 'Saat değişebilir';
+        const cost = d.isPaid ? `ÜCRETLİ (${d.price || 'Fiyat sorunuz'})` : 'ÜCRETSİZ';
+        const audience = d.ageGroup === 'all' ? 'Herkes' : d.ageGroup === 'kids' ? 'SADECE ÇOCUK (4-12)' : d.ageGroup === 'adults' ? 'SADECE YETİŞKİN (18+)' : 'Genç';
 
-        return `[ACTIVITY: ${node.name}] ${scheduleText} Time: ${time}. Location: ${d.location}. Audience: ${audience}. ${cost}. ${d.requiresReservation ? 'Reservation Required.' : ''}`;
+        return `[AKTİVİTE: ${node.name}] ${scheduleText} Saat: ${time}. Konum: ${d.location}. Kitle: ${audience}. ${cost}. ${d.requiresReservation ? 'Rezervasyon Gerekli.' : ''}`;
     }
 
     // --- DINING TRANSLATOR ---
     if (schemaType === 'dining') {
         const d = data as DiningData;
         const shifts = d.shifts?.map(s => `${s.name}: ${s.start}-${s.end}`).join(', ');
-        const concept = d.concept === 'all_inclusive' ? 'Included in All-Inclusive' : 'Extra Charge';
+        const concept = d.concept === 'all_inclusive' ? 'Her Şey Dahil Kapsamında' : 'Ekstra Ücretli';
         
         // Dietary features
         const feats = [];
-        if (d.features?.hasKidsMenu) feats.push("Kids Menu");
-        if (d.features?.hasVeganOptions) feats.push("Vegan Options");
-        if (d.features?.hasGlutenFreeOptions) feats.push("Gluten Free Available");
+        if (d.features?.hasKidsMenu) feats.push("Çocuk Menüsü");
+        if (d.features?.hasVeganOptions) feats.push("Vegan Seçenek");
+        if (d.features?.hasGlutenFreeOptions) feats.push("Glutensiz");
         
-        return `[RESTAURANT: ${node.name}] Type: ${d.type}. Cuisine: ${d.cuisine}. Hours: ${shifts}. Concept: ${concept}. Dress Code: ${d.dressCode}. Facilities: ${feats.join(', ')}. Highlights: ${d.menuHighlights?.join(', ')}.`;
+        return `[RESTORAN: ${node.name}] Tip: ${d.type}. Mutfak: ${d.cuisine}. Saatler: ${shifts}. Konsept: ${concept}. Kıyafet: ${d.dressCode}. İmkanlar: ${feats.join(', ')}. Öne Çıkanlar: ${d.menuHighlights?.join(', ')}.`;
     }
 
     // --- ROOM TRANSLATOR ---
     if (schemaType === 'room') {
         const d = data as RoomData;
-        const balc = d.hasBalcony ? 'Balcony' : 'No Balcony';
-        const occ = `Max: ${d.maxOccupancy?.adults} Adult + ${d.maxOccupancy?.children} Child`;
+        const balc = d.hasBalcony ? 'Balkonlu' : 'Balkonsuz';
+        const occ = `Kapasite: ${d.maxOccupancy?.adults} Yetişkin + ${d.maxOccupancy?.children} Çocuk`;
         
-        return `[ROOM TYPE: ${node.name}] Size: ${d.sizeSqM}m². ${occ}. View: ${d.view}. Bed: ${d.bedConfiguration}. ${balc}. Amenities: ${d.amenities?.join(', ')}. Minibar: ${d.minibarContent?.join(', ')}.`;
+        return `[ODA TİPİ: ${node.name}] Boyut: ${d.sizeSqM}m². ${occ}. Manzara: ${d.view}. Yatak: ${d.bedConfiguration}. ${balc}. Donanım: ${d.amenities?.join(', ')}. Minibar: ${d.minibarContent?.join(', ')}.`;
     }
 
     return '';
@@ -451,7 +450,7 @@ export const generateAIText = async (
   for (let i = 0; i < totalNodes; i++) {
     const { node, depth } = flatNodes[i];
     const type = String(node.type);
-    const name = node.name || 'Untitled';
+    const name = node.name || 'İsimsiz';
     const value = node.value || node.answer || '';
     
     // Indentation based on depth
@@ -479,7 +478,7 @@ export const generateAIText = async (
       
       const definition = globalIndex.definitions.get(value.trim());
       if (definition && type !== 'list' && type !== 'menu') {
-        line += ` _(System Definition: ${definition}...)_`;
+        line += ` _(Sistem Tanımı: ${definition}...)_`;
       }
     }
 
@@ -487,13 +486,13 @@ export const generateAIText = async (
     if (node.schemaType && node.data) {
         const translatedText = translateSchemaToNaturalLanguage(node);
         if (translatedText) {
-            line += `\n${indent}  > AI_NOTE: ${translatedText}`;
+            line += `\n${indent}  > AI_NOTU: ${translatedText}`;
         }
     }
 
     // D. Attribute Injection
     const attributesParts: string[] = [];
-    if (node.price) attributesParts.push(`Price: ${node.price}`);
+    if (node.price) attributesParts.push(`Fiyat: ${node.price}`);
     if (node.attributes && node.attributes.length > 0) {
        node.attributes.forEach(attr => {
           if (attr.key && attr.value) {
@@ -506,9 +505,9 @@ export const generateAIText = async (
     }
 
     // E. Global Rule Injection for Rooms (Context Awareness)
-    if (type === 'category' && (name.toLowerCase().includes('room') || name.toLowerCase().includes('suite'))) {
+    if (type === 'category' && (name.toLowerCase().includes('oda') || name.toLowerCase().includes('room'))) {
        if (globalIndex.globalRules.length > 0) {
-         line += `\n${indent}  > *Implicit Global Amenities applied: ${globalIndex.globalRules.length} items included.*`;
+         line += `\n${indent}  > *Global Kurallar Uygulandı: ${globalIndex.globalRules.length} madde.*`;
        }
     }
 
@@ -516,7 +515,7 @@ export const generateAIText = async (
 
     // F. Note/Q&A Handling (Visual Grouping)
     if (node.description) {
-       lines.push(`${indent}  > Note: ${node.description}`);
+       lines.push(`${indent}  > Not: ${node.description}`);
     }
 
     // Progress Update
@@ -572,7 +571,7 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
      }
   });
 
-  const currentPath = parentPath ? `${parentPath} > ${node.name || 'Untitled'}` : (node.name || 'Untitled');
+  const currentPath = parentPath ? `${parentPath} > ${node.name || 'İsimsiz'}` : (node.name || 'İsimsiz');
   semanticData._path = currentPath;
 
   if (node.attributes && Array.isArray(node.attributes) && node.attributes.length > 0) {
@@ -600,7 +599,7 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
   const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[] }[] => {
     const result: { node: HotelNode, path: string[] }[] = [];
     const traverse = (node: HotelNode, path: string[]) => {
-      const currentPath = [...path, node.name || 'Untitled'];
+      const currentPath = [...path, node.name || 'İsimsiz'];
       result.push({ node, path: currentPath });
       if (node.children) node.children.forEach(child => traverse(child, currentPath));
     };
@@ -611,7 +610,7 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
   const flatNodes = flattenTreeForExport(root);
   const totalNodes = flatNodes.length;
   
-  const headers = ['System_ID', 'Path', 'Type', 'Schema', 'Name', 'Value', 'Attributes', 'Structured_Data'];
+  const headers = ['Sistem_ID', 'Yol', 'Tip', 'Şema', 'İsim', 'Değer', 'Özellikler', 'Yapısal_Veri'];
   const rows: string[] = ['\uFEFF' + headers.join(',')]; 
 
   const safeCSV = (val: any) => {

@@ -18,7 +18,7 @@ export interface AutoFixAction {
   type: 'move' | 'update' | 'changeType';
   targetId: string; // The node ID being modified
   destinationId?: string; // For 'move' actions (new parent)
-  payload?: Partial<HotelNode>; // For updates
+  payload?: Partial<HotelNode>; // For updates (name, value, etc.)
   reasoning: string;
   severity: 'critical' | 'structural' | 'content';
 }
@@ -30,10 +30,12 @@ export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
         textContext = textContext.substring(0, MAX_CONTEXT_LENGTH);
     }
     
-    const prompt = `You are an expert Hotel Data Analyst. Review the following structured hotel data and provide a summary of the hotel's offerings, identifying any key strengths or missing categories.
+    const prompt = `Sen uzman bir Otel Veri Analistisin. Aşağıdaki yapılandırılmış otel verilerini incele ve otelin sunduğu hizmetlerin bir özetini çıkar. Eksik kategorileri veya güçlü yanları belirle.
     
-    Data (Markdown Format with Definition Injection):
+    Veri (Markdown Formatında):
     ${textContext}
+    
+    ÇIKTIYI TÜRKÇE OLARAK VER.
     `;
 
     const response = await ai.models.generateContent({
@@ -41,40 +43,12 @@ export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
       contents: prompt
     });
 
-    return response.text || "No response generated.";
+    return response.text || "Yanıt oluşturulamadı.";
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
-    throw new Error("Failed to analyze data. Please check your network or API key.");
+    throw new Error("Analiz başarısız. Lütfen API anahtarını veya ağ bağlantısını kontrol edin.");
   }
 };
-
-export const auditStructureDeeply = async (data: HotelNode): Promise<string> => {
-  try {
-     const jsonString = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
-     
-     const prompt = `Act as a Senior Data Architect. Audit this hotel data structure for UX logic flaws.
-     Focus on:
-     1. Nested depth (is it too deep for a guest?)
-     2. Missing prices in menus.
-     3. Logical grouping errors.
-     
-     Data:
-     \`\`\`json
-     ${jsonString}
-     \`\`\`
-     `;
-
-    const response = await ai.models.generateContent({
-      model: modelConfig.model,
-      contents: prompt
-    });
-
-    return response.text || "No audit generated.";
-  } catch (error) {
-    console.error(error);
-    throw new Error("Failed to perform audit.");
-  }
-}
 
 export const chatWithData = async (
   data: HotelNode, 
@@ -83,7 +57,6 @@ export const chatWithData = async (
   activePersona?: AIPersona | null
 ): Promise<string> => {
   try {
-    // Uses the new Natural Language translation logic from treeUtils
     let textContext = await generateAIText(data, () => {}); 
     
     if (textContext.length > MAX_CONTEXT_LENGTH) {
@@ -91,40 +64,38 @@ export const chatWithData = async (
     }
     
     const now = new Date();
-    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' }); // "Monday"
-    const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }); // "14:30"
+    const dayName = now.toLocaleDateString('tr-TR', { weekday: 'long' }); 
+    const timeStr = now.toLocaleTimeString('tr-TR', { hour12: false, hour: '2-digit', minute: '2-digit' }); 
     
-    let identityBlock = "IDENTITY: You are an Advanced Hotel Guest Assistant (AI). You are helpful, polite, and neutral.";
-    let toneBlock = "TONE: Professional, Helpful, Clear.";
+    let identityBlock = "KİMLİK: Sen Gelişmiş bir Otel Asistanısın (Yapay Zeka). Kibar, yardımsever ve profesyonelsin.";
+    let toneBlock = "TON: Profesyonel, Yardımcı, Net.";
     let rulesBlock = "";
     
     if (activePersona) {
-        identityBlock = `IDENTITY: You are ${activePersona.name}, acting as the ${activePersona.role} at ${data.name || 'this hotel'}.`;
-        toneBlock = `TONE: ${activePersona.tone}. LANGUAGE STYLE: ${activePersona.languageStyle}.`;
+        identityBlock = `KİMLİK: Sen ${activePersona.name}, bu oteldeki rolün: ${activePersona.role}.`;
+        toneBlock = `TON: ${activePersona.tone}. DİL STİLİ: ${activePersona.languageStyle}.`;
         
         if (activePersona.instructions && activePersona.instructions.length > 0) {
-            rulesBlock = `CRITICAL BEHAVIOR RULES:\n${activePersona.instructions.map(i => `- ${i}`).join('\n')}`;
+            rulesBlock = `KRİTİK DAVRANIŞ KURALLARI:\n${activePersona.instructions.map(i => `- ${i}`).join('\n')}`;
         }
     }
 
     const systemInstruction = `
     ${identityBlock}
     
-    CURRENT CONTEXT:
-    - Date/Day: ${dayName}, ${now.toLocaleDateString()}
-    - Time: ${timeStr}
+    GÜNCEL BAĞLAM:
+    - Gün/Tarih: ${dayName}, ${now.toLocaleDateString('tr-TR')}
+    - Saat: ${timeStr}
     
     ${toneBlock}
     ${rulesBlock}
 
-    CRITICAL INSTRUCTIONS:
-    1. Answer solely based on the provided HOTEL DATABASE below. Do not invent information.
-    2. **TIME AWARENESS**: If a user asks "What can I do now?", check the 'Current Context' against the 'Event Schedules' or 'Restaurant Hours' in the database.
-       - Example: If it's Monday 14:00, do not suggest an event that is "Fridays only".
-    3. **AGE AWARENESS**: If a user mentions children, check the 'Target Age Range' in the data (e.g. Min Age).
-    4. **DEFINITIONS**: Use the "System Definitions" injected in the data to answer questions about specific packages (e.g. Minibar content).
+    TALİMATLAR:
+    1. Sadece aşağıda verilen OTEL VERİTABANI bilgilerini kullanarak cevap ver. Bilgi uydurma.
+    2. **ZAMAN FARKINDALIĞI**: Kullanıcı "Şu an ne yapabilirim?" diye sorarsa, veritabanındaki etkinlik saatlerini ve restoran açılış saatlerini şu anki saat (${timeStr}) ile karşılaştır.
+    3. **TÜRKÇE**: Cevapların tamamı akıcı ve doğal Türkçe olmalı.
     
-    HOTEL DATABASE (Natural Language Translated):
+    OTEL VERİTABANI (Okunabilir Format):
     ${textContext}
     `;
 
@@ -141,10 +112,10 @@ export const chatWithData = async (
     });
 
     const result = await chat.sendMessage({ message: userMessage });
-    return result.text || "I'm not sure how to answer that.";
+    return result.text || "Buna nasıl cevap vereceğimi bilemiyorum.";
   } catch (error) {
     console.error(error);
-    return "I'm having trouble accessing the hotel database right now (Network Error).";
+    return "Otel veritabanına erişirken bir sorun yaşadım (Bağlantı Hatası).";
   }
 };
 
@@ -152,36 +123,33 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
-    const prompt = `You are an AI Architect.
+    const prompt = `Sen bir Yapay Zeka Veri Mimarısın (AI Architect).
     
-    TASK:
-    Analyze the "Current Structure" against the "User Command".
+    GÖREV:
+    "Mevcut Yapı"yı analiz et ve "Kullanıcı Komutu"na göre JSON yapısını güncellemek için gereken işlemleri belirle.
     
-    CRITICAL RULES:
-    1. **DUPLICATE CHECK**: Before creating anything, check if it already exists in the JSON.
-       - If it exists and matches the user's request: Return NO actions and explain in 'summary'.
-       - If it exists but needs modification: Return an 'update' action instead of 'create'.
-    2. **HIERARCHY**: Find the most logical 'targetId' (parent ID) for new items.
-    3. **PROPERTY UPDATES**: To set or update properties like 'Price', 'Opening Hours', 'Stars', or 'Cuisine', use a special "features" object inside "data".
-       - Example: "data": { "name": "Steakhouse", "features": { "Price": "50$", "Dress Code": "Casual" } }
-    4. **JSON ONLY**: Return strictly valid JSON matching the schema.
+    KURALLAR:
+    1. **TEKRAR KONTROLÜ**: Bir şey oluşturmadan önce var olup olmadığına bak. Varsa 'update' (güncelle) döndür.
+    2. **HİYERARŞİ**: Yeni öğeler için en mantıklı 'targetId' (ebeveyn) değerini bul.
+    3. **TÜRKÇE**: 'reason' ve 'summary' alanları Türkçe olmalı. Oluşturulan verilerin (name, value) içeriği Türkçe olmalı.
+    4. **ÖZELLİKLER**: Fiyat, Saat vb. özellikleri "features" nesnesi içine ekle. Örn: "data": { "name": "Steakhouse", "features": { "Fiyat": "50$", "Kıyafet": "Spor" } }
     
-    User Command: "${userCommand}"
+    Kullanıcı Komutu: "${userCommand}"
     
-    Current Structure:
+    Mevcut Yapı:
     \`\`\`json
     ${jsonContext}
     \`\`\`
     
-    RETURN JSON FORMAT:
+    DÖNÜŞ FORMATI (JSON):
     {
-      "summary": "Explanation of what will be done (e.g. 'Found existing item, updating price' or 'Creating new category').",
+      "summary": "Yapılacak işlemin özeti (Türkçe).",
       "actions": [
         {
           "type": "add" | "update" | "delete",
-          "targetId": "ID of parent (for add) or ID of node (for update/delete)",
+          "targetId": "Hedef ID",
           "data": { "name": "...", "type": "...", "value": "...", "features": { "Key": "Value" } },
-          "reason": "Why this action is taken"
+          "reason": "Bu işlem neden yapıldı (Türkçe)"
         }
       ]
     }
@@ -199,8 +167,7 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     try {
         parsed = JSON.parse(rawText);
     } catch (e) {
-        console.error("JSON Parse Error", e);
-        return { summary: "Error parsing AI response.", actions: [] };
+        return { summary: "AI cevabı işlenirken hata oluştu.", actions: [] };
     }
 
     if (!parsed.actions || !Array.isArray(parsed.actions)) {
@@ -210,7 +177,7 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     return parsed as ArchitectResponse;
   } catch (error) {
     console.error(error);
-    throw new Error("Architect error (Possible Network/Size Limit).");
+    throw new Error("Mimar hatası.");
   }
 };
 
@@ -218,15 +185,15 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
-    const prompt = `Analyze this uploaded image/PDF and extract hotel data to merge into the current structure.
+    const prompt = `Bu yüklenen dosyayı (Resim/PDF) analiz et ve otel verilerini çıkararak mevcut yapıya entegre et.
     
-    Current Data:
+    Mevcut Veri:
     \`\`\`json
     ${jsonContext}
     \`\`\`
     
-    Return JSON format compatible with ArchitectResponse (summary, actions array).
-    Ensure you check for existing data to avoid duplicates.
+    Çıktı JSON formatında olmalı (ArchitectResponse: summary, actions).
+    Özet ve veriler TÜRKÇE olmalı.
     `;
 
     const response = await ai.models.generateContent({
@@ -244,17 +211,13 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
     try {
         parsed = JSON.parse(rawText);
     } catch (e) {
-        return { summary: "Error parsing AI file response.", actions: [] };
-    }
-
-    if (!parsed.actions || !Array.isArray(parsed.actions)) {
-        parsed.actions = [];
+        return { summary: "Dosya işleme hatası.", actions: [] };
     }
 
     return parsed as ArchitectResponse;
   } catch (error) {
     console.error(error);
-    throw new Error("File process error.");
+    throw new Error("Dosya işleme hatası.");
   }
 };
 
@@ -266,36 +229,36 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
     }
     
     const prompt = `
-    You are a "Data Relationship Expert" and "Semantic Logic Auditor" for a Hotel Database.
+    Sen bir Otel Veritabanı için "Veri İlişkisi ve Mantık Denetçisi"sin.
     
-    YOUR TASK:
-    Analyze the data (provided in enriched Markdown) for relational and logical inconsistencies.
+    GÖREV:
+    Aşağıdaki otel verilerini (Markdown formatında) ilişkisel ve mantıksal tutarsızlıklar açısından analiz et.
     
-    LOOK FOR:
-    1. **Broken References / Undefined Services**: (e.g., A room mentions "VIP Breakfast" but "VIP Breakfast" is not defined anywhere in the lists or menus).
-    2. **Contradictions**: (e.g., "Pool Bar open 24h" but "Pool closes at 20:00").
-    3. **Logical Gaps**: (e.g., A "Steakhouse" exists but has no opening hours or dress code).
-    4. **Spelling/Typos**: In public facing names.
+    ŞUNLARA BAK:
+    1. **Kırık Referanslar**: (Örn: Bir oda "VIP Kahvaltı" içeriyor diyor ama "VIP Kahvaltı" listelerde yok).
+    2. **Çelişkiler**: (Örn: "Havuz Bar 24 saat açık" diyor ama başka yerde "Havuz 20:00'de kapanır" yazıyor).
+    3. **Mantıksal Boşluklar**: (Örn: Bir "Steakhouse" var ama açılış saati veya kıyafet kuralı girilmemiş).
+    4. **Yazım Hataları**: İsimlerdeki bariz hatalar.
     
-    INPUT DATA:
+    GİRDİ VERİSİ:
     ${textContext}
     
-    OUTPUT SCHEMA (JSON):
+    ÇIKTI ŞEMASI (JSON) - TÜM METİNLER TÜRKÇE OLMALI:
     {
-      "score": number (0-100, purely based on relational/semantic quality),
-      "summary": "Short analysis summary focusing on data relationships.",
+      "score": number (0-100),
+      "summary": "Kısa analiz özeti (Türkçe).",
       "issues": [
         {
           "id": "ai_issue_x",
-          "nodeId": "Use the exact ID from the data if possible, or describe the path",
-          "nodeName": "Name of the item",
+          "nodeId": "Bulabildiğin en yakın ID veya öğe ismi",
+          "nodeName": "Öğe ismi",
           "severity": "critical" | "warning" | "optimization",
-          "message": "Description of the relational flaw",
-          "fix": { // OPTIONAL
-             "targetId": "approximate ID",
+          "message": "Sorunun Türkçe açıklaması",
+          "fix": { // OPSİYONEL
+             "targetId": "ilgili ID",
              "action": "update",
              "data": { "key": "value" },
-             "description": "Suggestion"
+             "description": "Öneri (Türkçe)"
           }
         }
       ]
@@ -311,7 +274,7 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
     return JSON.parse(response.text || "{}") as HealthReport;
   } catch (error) {
     console.error("Health Audit Error:", error);
-    throw new Error("Failed to generate semantic health report (Network Limit).");
+    throw new Error("Sağlık raporu oluşturulamadı.");
   }
 };
 
@@ -319,17 +282,17 @@ export const generateNodeContext = async (node: HotelNode, contextPath: string =
     const cleanNode = generateCleanAIJSON(node);
     
     const prompt = `
-    You are an AI Data Enricher for a Hotel CMS.
+    Bir Otel CMS'i için AI Veri Zenginleştiricisin.
     
-    CONTEXT:
-    Path: ${contextPath}
-    Item Data: ${JSON.stringify(cleanNode, null, 2)}
+    BAĞLAM:
+    Yol: ${contextPath}
+    Öğe Verisi: ${JSON.stringify(cleanNode, null, 2)}
     
-    TASK:
-    1. Generate 5-8 relevant "Search Tags" (synonyms, categories, related concepts) that a guest might use to find this.
-    2. Write a "Hidden Description" (max 2 sentences) that explains implicit context, rules, or connections for an AI chatbot.
+    GÖREV:
+    1. Bir misafirin bunu bulmak için kullanabileceği 5-8 alakalı "Arama Etiketi" (Eş anlamlılar, Türkçe) oluştur.
+    2. Bir AI chatbot için "Gizli Açıklama" (max 2 cümle, Türkçe) yaz. Bağlamı, kuralları açıkla.
     
-    RETURN JSON ONLY.
+    SADECE JSON DÖNDÜR.
     `;
     
     const response = await ai.models.generateContent({
@@ -356,18 +319,17 @@ export const generateNodeContext = async (node: HotelNode, contextPath: string =
     return JSON.parse(response.text || "{}");
 };
 
-// NEW: Value Assistant Generator
 export const generateValueFromAttributes = async (nodeName: string, attributes: NodeAttribute[]): Promise<string> => {
     const attrsStr = attributes.map(a => `${a.key}: ${a.value}`).join(', ');
     const prompt = `
-    Based on the following attributes for a hotel item named "${nodeName}", write a concise, attractive "Main Value" summary sentence.
+    "${nodeName}" adlı otel öğesinin özelliklerine dayanarak, kısa, çekici bir "Ana Değer" cümlesi yaz (Türkçe).
     
-    Attributes: ${attrsStr}
+    Özellikler: ${attrsStr}
     
-    Example Input: Name: Airport Transfer, Attrs: Distance: 15km, Time: 20min
-    Example Output: Located 15km away, approximately 20 minutes by car.
+    Örnek Girdi: İsim: Havalimanı Transfer, Özellikler: Mesafe: 15km, Süre: 20dk
+    Örnek Çıktı: Havalimanına 15km uzaklıkta olup araçla yaklaşık 20 dakika sürmektedir.
     
-    Output strictly the sentence string.
+    Sadece cümleyi döndür.
     `;
     
     const response = await ai.models.generateContent({
@@ -378,39 +340,44 @@ export const generateValueFromAttributes = async (nodeName: string, attributes: 
     return response.text?.trim() || "";
 }
 
-// NEW: Auto-Fix Database Engine
+// --- DEEP ANALYSIS & AUTO FIX ---
 export const autoFixDatabase = async (rootNode: HotelNode): Promise<AutoFixAction[]> => {
-    // We send a simplified tree structure to save tokens
     const cleanJson = JSON.stringify(generateCleanAIJSON(rootNode), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
     const prompt = `
-    You are a "Deep Structure Auto-Fix Engine" for a Hotel Database.
-    Analyze the JSON structure below and identify structural and logical errors.
+    Sen bir "Derin Veri Yapısı ve Anlamsal Bütünlük Denetçisi"sin (AI Architect).
+    Göresin, aşağıdaki Otel CMS verisini (JSON) tarayarak bir AI Dil Modelinin (LLM) bu veriyi anlamasını zorlaştıracak hataları bulmak ve düzeltme önerileri sunmaktır.
     
-    DETECT THESE SCENARIOS:
-    1. **Empty Value with Attributes**: An item has no 'value' description but has attributes. 
-       -> ACTION: 'update' the value with a summary of attributes.
-    2. **Wrong Type**: An 'item' or 'field' has children. 
-       -> ACTION: 'changeType' to 'category' or 'list'.
-    3. **Semantic Misplacement**: An item is in the wrong category (e.g. 'Pool Hours' inside 'Restaurants'). 
-       -> ACTION: 'move' to a better category (find the ID of a better parent).
-    4. **Empty Containers**: A category or list has no children and no content.
-       -> ACTION: ignore or mark as 'structural' warning.
+    GÖREVLER:
+    1. **YAPISAL DENETİM**:
+       - Eğer bir 'item', 'field' veya 'menu_item' tipindeki öğenin altında çocuklar (children) varsa, bu bir hatadır. Tip 'category' veya 'list' olmalıdır.
+       -> AKSİYON: type: 'changeType', payload: { type: 'category' }
     
-    INPUT DATA:
+    2. **ANLAMSAL (SEMANTİK) TUTARSIZLIK**:
+       - Öğelerin bulundukları kategoriye uygun olup olmadığını kontrol et.
+       - Örn: "Oda Servisi Menüsü" içinde "Yüzme Havuzu Kuralları" varsa, bu yanlıştır.
+       -> AKSİYON: type: 'move', destinationId: 'İlgili en uygun Kategori ID'si (yoksa root ID)'
+    
+    3. **İÇERİK ZENGİNLEŞTİRME**:
+       - Eğer bir öğenin ismi var ama 'value' (değer/açıklama) kısmı boşsa ve özellikleri (attributes) varsa; özelliklerden yola çıkarak Türkçe bir özet cümle yaz.
+       -> AKSİYON: type: 'update', payload: { value: 'Oluşturulan Türkçe Cümle' }
+    
+    GİRDİ VERİSİ:
     \`\`\`json
     ${cleanJson}
     \`\`\`
     
-    RETURN JSON ARRAY of Action Objects:
+    ÇIKTI FORMATI:
+    Aşağıdaki JSON şemasına uygun bir dizi (Array) döndür. Sadece JSON döndür.
+    
     [
       {
-        "id": "fix_1",
+        "id": "benzersiz_bir_id",
         "type": "move" | "update" | "changeType",
-        "targetId": "ID of the node to fix",
-        "destinationId": "ID of new parent (only for move)",
-        "payload": { "value": "New Summary", "type": "category" }, 
-        "reasoning": "Explanation why",
+        "targetId": "Sorunlu Öğenin ID'si (Input JSON'dan al)",
+        "destinationId": "Sadece 'move' işlemi için hedef ID",
+        "payload": { "key": "value" }, // 'update' veya 'changeType' için değişecek alanlar
+        "reasoning": "Neden bu düzeltmeyi öneriyorsun? (Türkçe)",
         "severity": "critical" | "structural" | "content"
       }
     ]
@@ -430,10 +397,11 @@ export const runDataCheck = async (data: HotelNode, inputType: 'url' | 'text' | 
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
-    const basePrompt = `Compare the Hotel Database JSON with the provided Source Material.
-    Identify discrepancies (Price mismatches, missing items, wrong hours).
+    const basePrompt = `Otel Veritabanı JSON'ını sağlanan Kaynak Materyal ile karşılaştır.
+    Uyuşmazlıkları (Fiyat farkları, eksik öğeler, yanlış saatler) tespit et.
+    Çıktı TÜRKÇE olmalı.
     
-    Database:
+    Veritabanı:
     \`\`\`json
     ${jsonContext}
     \`\`\`
@@ -441,14 +409,14 @@ export const runDataCheck = async (data: HotelNode, inputType: 'url' | 'text' | 
     
     let contents = [];
     if (inputType === 'url') {
-        contents = [{ text: `${basePrompt}\n\nSource URL: ${inputValue} (Please browse this URL content if enabled, otherwise infer from structure)` }];
+        contents = [{ text: `${basePrompt}\n\nKaynak URL: ${inputValue} (Lütfen bu URL içeriğini tara)` }];
     } else if (inputType === 'file') {
         contents = [
             { text: basePrompt }, 
             { inlineData: { mimeType: mimeType || 'application/pdf', data: inputValue } }
         ];
     } else {
-        contents = [{ text: `${basePrompt}\n\nSource Text: "${inputValue}"` }];
+        contents = [{ text: `${basePrompt}\n\nKaynak Metin: "${inputValue}"` }];
     }
     
     const response = await ai.models.generateContent({
@@ -460,6 +428,6 @@ export const runDataCheck = async (data: HotelNode, inputType: 'url' | 'text' | 
     return JSON.parse(response.text || "{}") as DataComparisonReport;
   } catch (error) {
     console.error(error);
-    throw new Error("Data check error.");
+    throw new Error("Veri kontrolü hatası.");
   }
 };
