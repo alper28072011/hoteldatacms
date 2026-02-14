@@ -10,7 +10,7 @@ import {
   Tag, Trash2, LayoutDashboard, Box, BrainCircuit, Sparkles, Loader2, 
   ChevronRight, Database, Check, Settings, List, FileText, CircleHelp, 
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
-  Clock, Users, DollarSign, GripVertical, Type, Layers
+  Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: PORTAL-BASED EDUCATIONAL TOOLTIP WITH PLACEMENT ---
@@ -114,6 +114,118 @@ const InfoTooltip: React.FC<{ title: string; content: React.ReactNode; placement
     </>
   );
 };
+
+// --- LIVE PREVIEW COMPONENT (DOCUMENT STYLE) ---
+
+const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, level = 0 }) => {
+    const hasChildren = node.children && node.children.length > 0;
+    const isContainer = ['category', 'list', 'menu', 'root'].includes(String(node.type));
+    
+    // Schema renderers (simplified badges/cards)
+    const renderSchema = () => {
+        if (!node.data) return null;
+        if (node.schemaType === 'room') return <div className="inline-flex gap-2 items-center text-[10px] text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 mt-1 font-medium"><BedDouble size={12}/> {node.data.sizeSqM}m² • {node.data.view} • {node.data.maxOccupancy?.adults + node.data.maxOccupancy?.children} Kişi</div>
+        if (node.schemaType === 'dining') return <div className="inline-flex gap-2 items-center text-[10px] text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-100 mt-1 font-medium"><Utensils size={12}/> {node.data.cuisine} • {node.data.type}</div>
+        if (node.schemaType === 'event') return <div className="inline-flex gap-2 items-center text-[10px] text-purple-600 bg-purple-50 px-2 py-1 rounded border border-purple-100 mt-1 font-medium"><Calendar size={12}/> {node.data.schedule?.frequency} • {node.data.location}</div>
+        return null;
+    }
+
+    // LEVEL 0: TITLE (The Root of the Preview)
+    if (level === 0) {
+        return (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="border-b border-slate-200 pb-6 mb-8">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="bg-slate-800 text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider">{node.type}</span>
+                        {node.schemaType && <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider">{node.schemaType}</span>}
+                    </div>
+                    <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">{node.name || 'İsimsiz Başlık'}</h1>
+                    {node.description && <p className="text-lg text-slate-500 mt-4 leading-relaxed font-light">{node.description}</p>}
+                </div>
+                <div className="space-y-12">
+                    {hasChildren ? (
+                        node.children?.map(child => <LivePreview key={child.id} node={child} level={level + 1} />)
+                    ) : (
+                        <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400 italic">
+                            Henüz içerik eklenmemiş...
+                        </div>
+                    )}
+                </div>
+            </div>
+        )
+    }
+
+    // CONTAINER LEVELS (Categories, Lists)
+    if (isContainer) {
+        return (
+            <div className="break-inside-avoid relative">
+                 {/* Visual Connector Line for hierarchy */}
+                 {level > 1 && <div className="absolute left-0 top-3 bottom-0 w-px bg-slate-200 -ml-4"></div>}
+                 
+                 <div className="mb-4">
+                    <div className="flex items-baseline gap-3 mb-2 group">
+                        {level === 1 ? (
+                             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                                <span className="w-1.5 h-6 bg-indigo-500 rounded-full inline-block"></span>
+                                {node.name}
+                             </h2>
+                        ) : level === 2 ? (
+                             <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full inline-block"></span>
+                                {node.name}
+                             </h3>
+                        ) : (
+                             <h4 className="text-md font-bold text-slate-600 uppercase tracking-wide text-xs mt-2 border-b border-slate-100 pb-1">{node.name}</h4>
+                        )}
+                    </div>
+                    {node.value && <p className="text-sm text-slate-500 mb-2 italic pl-4 border-l-2 border-slate-100">{node.value}</p>}
+                    
+                    {/* Render Children */}
+                    <div className={`grid gap-3 ${level === 1 ? 'mt-4 pl-1' : 'mt-2 pl-2'}`}>
+                        {hasChildren ? (
+                            node.children?.map(child => <LivePreview key={child.id} node={child} level={level + 1} />)
+                        ) : (
+                            <span className="text-xs text-slate-300 pl-2">...</span>
+                        )}
+                    </div>
+                 </div>
+            </div>
+        )
+    }
+
+    // LEAF NODES (Items, Fields)
+    return (
+        <div className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-lg hover:border-indigo-200 hover:shadow-sm transition-all group break-inside-avoid">
+            <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${node.type === 'item' ? 'bg-indigo-400' : 'bg-slate-300'}`}></div>
+            <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-slate-800">{node.name}</span>
+                    {node.value && <span className="text-sm text-slate-600 font-normal border-l border-slate-200 pl-2 ml-1">{node.value}</span>}
+                </div>
+                
+                {/* Badges/Attributes */}
+                {(node.attributes && node.attributes.length > 0) && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                        {node.attributes.map(attr => (
+                            <span key={attr.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-50 text-slate-500 border border-slate-200 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-100 transition-colors">
+                                <span className="opacity-70 mr-1">{attr.key}:</span> {attr.value}
+                            </span>
+                        ))}
+                    </div>
+                )}
+                
+                {renderSchema()}
+                
+                {node.type === 'qa_pair' && node.answer && (
+                    <div className="mt-2 text-sm text-slate-600 bg-slate-50 p-2 rounded italic relative">
+                        <Quote size={12} className="absolute -top-1.5 -left-1 text-slate-300 bg-white rounded-full" />
+                        "{node.answer}"
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
 
 // --- SUB-COMPONENTS FOR SCHEMAS ---
 
@@ -362,24 +474,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       onUpdate(node.id, { attributes: currentAttributes.filter(a => a.id !== attrId) });
   };
 
-  if (node.type === 'root') {
-      return (
-      <div className="h-full flex flex-col bg-slate-50/50">
-        <div className="h-20 border-b border-slate-200 px-6 flex items-center justify-between bg-white shrink-0">
-          <div>
-             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard size={20} className="text-blue-600"/> Dashboard</h2>
-             <div className="flex items-center gap-3 text-xs text-slate-400 mt-1"><span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold uppercase tracking-wider">ROOT</span></div>
-          </div>
-          <div className="text-right">
-             <div className="text-sm font-medium text-slate-600">Toplam Öğe</div>
-             <div className="text-2xl font-bold text-slate-800 leading-none">{stats?.totalNodes || 0}</div>
-          </div>
-        </div>
-        <div className="p-10 flex items-center justify-center text-slate-400"><p>Düzenlemek için bir öğe seçin.</p></div>
-      </div>
-    );
-  }
-
   // --- EDUCATIONAL CONTENT FOR TOOLTIPS ---
   const nodeTypeContent = (
     <ul className="space-y-2">
@@ -405,6 +499,33 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
         </li>
     </ul>
   );
+
+  if (node.type === 'root') {
+      return (
+      <div className="h-full flex flex-col bg-slate-50/30">
+        <div className="h-20 border-b border-slate-200 px-6 flex items-center justify-between bg-white shrink-0">
+          <div>
+             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard size={20} className="text-blue-600"/> Dashboard</h2>
+             <div className="flex items-center gap-3 text-xs text-slate-400 mt-1"><span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold uppercase tracking-wider">ROOT</span></div>
+          </div>
+          <div className="text-right">
+             <div className="text-sm font-medium text-slate-600">Toplam Öğe</div>
+             <div className="text-2xl font-bold text-slate-800 leading-none">{stats?.totalNodes || 0}</div>
+          </div>
+        </div>
+        
+        {/* ROOT PREVIEW (THESIS VIEW) */}
+        <div className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-4xl mx-auto bg-white shadow-xl border border-slate-200 rounded-xl p-10 min-h-[600px] print:shadow-none print:border-none">
+                <LivePreview node={node} level={0} />
+            </div>
+            <div className="text-center text-slate-400 text-xs mt-8 pb-4">
+                © {new Date().getFullYear()} Generated Knowledge Base Preview
+            </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -465,7 +586,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
 
       {/* EDITOR BODY */}
       <div className="flex-1 overflow-y-auto bg-slate-50/30">
-        <div className="max-w-5xl mx-auto p-6 lg:p-8 space-y-8">
+        <div className="max-w-5xl mx-auto p-6 lg:p-8 space-y-8 pb-32">
             {validationError && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3"><TriangleAlert size={18} className="text-amber-600 shrink-0 mt-0.5" /><div><h4 className="text-sm font-bold text-amber-800">Doğrulama Uyarısı</h4><p className="text-xs text-amber-700 mt-1">{validationError}</p></div></div>
             )}
@@ -552,6 +673,22 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             </div>
             
             <div className="border-t border-slate-200 pt-6 flex justify-between items-center text-xs text-slate-400"><div className="flex items-center gap-4"><div className="flex items-center gap-1 group cursor-pointer" onClick={() => handleCopyId(node.id)}><Database size={12} /> ID: <code className="bg-slate-100 px-1 rounded">{node.id}</code>{copiedId === node.id && <Check size={10} className="text-emerald-500"/>}</div></div></div>
+            
+            {/* CONTAINER CONTENT PREVIEW (DOCUMENT VIEW) */}
+            {['category', 'list', 'menu'].includes(String(node.type)) && (
+                <div className="mt-8 border-t border-slate-200 pt-8 animate-in fade-in slide-in-from-bottom-2">
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="bg-indigo-50 p-1.5 rounded text-indigo-600"><BookOpen size={16} /></div>
+                        <div>
+                            <h3 className="font-bold text-slate-800 text-sm">İçerik Önizlemesi</h3>
+                            <p className="text-xs text-slate-500">Bu kategorinin altındaki verilerin belge görünümü.</p>
+                        </div>
+                    </div>
+                    <div className="bg-white shadow-lg border border-slate-100 rounded-xl p-8 min-h-[300px] ring-4 ring-slate-50">
+                        <LivePreview node={node} level={1} />
+                    </div>
+                </div>
+            )}
         </div>
       </div>
     </div>
