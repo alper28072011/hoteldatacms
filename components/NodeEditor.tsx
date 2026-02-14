@@ -1,7 +1,8 @@
+
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, EventData, DiningData, RoomData } from '../types';
-import { analyzeHotelStats, findPathToNode, generateId } from '../utils/treeUtils';
+import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes } from '../utils/treeUtils';
 import { generateNodeContext, generateValueFromAttributes } from '../services/geminiService';
 import { validateNodeInput } from '../utils/validationUtils';
 import { useHotel } from '../contexts/HotelContext';
@@ -364,7 +365,6 @@ export interface NodeEditorProps {
 }
 
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
-  const { addChild } = useHotel();
   
   const nodeTypeContent = (
       <div className="space-y-2 text-[11px] font-normal">
@@ -400,6 +400,17 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
     if (!node || !root) return [];
     return findPathToNode(root, node.id) || [];
   }, [root, node]);
+
+  // Determine allowed types based on parent
+  const parentNode = useMemo(() => {
+      if (breadcrumbs.length < 2) return null;
+      return breadcrumbs[breadcrumbs.length - 2];
+  }, [breadcrumbs]);
+
+  const allowedTypes = useMemo(() => {
+      if (!parentNode) return getAllowedTypes('root'); // Root can be anything mostly
+      return getAllowedTypes(String(parentNode.type));
+  }, [parentNode]);
 
   if (!node) {
     return (
@@ -529,6 +540,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
     }
   };
 
+  const renderOption = (value: string, label: string) => {
+      // If allowed types are defined (not empty) and current value is NOT allowed
+      // we disable it or check if it's the current selection (to avoid UI glitches)
+      const isAllowed = allowedTypes.length === 0 || allowedTypes.includes(value);
+      if (!isAllowed && node.type !== value) return null;
+      
+      return <option value={value} disabled={!isAllowed}>{label}</option>;
+  };
+
   if (node.type === 'root') {
       return (
       <div className="h-full flex flex-col bg-slate-50/30">
@@ -579,7 +599,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 <h2 className="text-lg font-bold text-slate-800 truncate leading-none pb-0.5">{node.name || 'İsimsiz Öğe'}</h2>
                 <InfoTooltip 
                     title="Hiyerarşi Konumu" 
-                    content="Bu alan, verinin ağaç yapısındaki yerini gösterir. Doğru klasörleme (Örn: 'Ana Havuz' öğesinin 'Havuzlar' kategorisi altında olması) Yapay Zeka'nın konuyu anlaması için kritiktir." 
+                    content={`Ebeveyn: ${parentNode?.type || 'Root'}. Bu öğe sadece izin verilen tiplerde olabilir.`}
                     placement="bottom"
                 />
            </div>
@@ -596,19 +616,20 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                   />
               </div>
               <select value={node.type} onChange={(e) => handleChange('type', e.target.value)} className="text-xs font-bold uppercase tracking-wide border-0 bg-white shadow-sm rounded px-2 py-1.5 text-slate-700 outline-none cursor-pointer hover:text-blue-600 focus:ring-2 focus:ring-blue-100 transition-all">
-                  <optgroup label="Kapsayıcılar (Gruplama)">
-                      <option value="category">Category (Kategori)</option>
-                      <option value="list">List (Liste)</option>
-                      <option value="menu">Menu (Fiyatlı Liste)</option>
+                  <optgroup label="Kapsayıcılar">
+                      {renderOption('category', 'Category (Kategori)')}
+                      {renderOption('list', 'List (Liste)')}
+                      {renderOption('menu', 'Menu (Fiyatlı Liste)')}
                   </optgroup>
                   <optgroup label="Veri (İçerik)">
-                      <option value="item">Item (Öğe / Hizmet)</option>
-                      <option value="menu_item">Menu Item (Ürün)</option>
-                      <option value="field">Field (Veri Alanı)</option>
+                      {renderOption('item', 'Item (Öğe)')}
+                      {renderOption('menu_item', 'Menu Item (Ürün)')}
+                      {renderOption('field', 'Field (Veri Alanı)')}
                   </optgroup>
                   <optgroup label="Meta (Bilgi)">
-                      <option value="qa_pair">Q&A (Soru-Cevap)</option>
-                      <option value="note">Note (Not)</option>
+                      {renderOption('qa_pair', 'Q&A (Soru-Cevap)')}
+                      {renderOption('note', 'Note (Not)')}
+                      {renderOption('policy', 'Policy (Politika)')}
                   </optgroup>
               </select>
            </div>
@@ -649,17 +670,24 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 <input type="text" value={node.name || ''} onChange={(e) => handleChange('name', e.target.value)} className="w-full bg-white text-xl font-bold text-slate-900 border-b-2 border-slate-100 px-2 py-2 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300" placeholder="Örn: Butler Servisi"/>
                 
                 {(!node.schemaType || node.schemaType === 'generic') ? (
-                    ['qa_pair', 'note', 'field', 'item', 'menu_item'].includes(String(node.type)) && (
+                    ['qa_pair', 'note', 'field', 'item', 'menu_item', 'policy'].includes(String(node.type)) && (
                         <div className="mt-4 relative animate-in fade-in slide-in-from-top-2">
                             <div className="flex justify-between items-center mb-2">
                                 <div className="flex items-center gap-2">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{node.type === 'qa_pair' ? 'Cevap' : 'Ana Değer / Açıklama'}</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{node.type === 'qa_pair' ? 'Cevap' : node.type === 'menu_item' ? 'Ürün Detayı' : 'Ana Değer / Açıklama'}</label>
                                     <InfoTooltip title="Ana İçerik" content="Bu alan AI'ın okuyacağı temel bilgidir. 'Kategori' veya 'Liste' tipleri için bu alanı boş bırakıp, alt öğeler eklemek daha doğrudur." />
                                 </div>
                                 <button onClick={handleAutoGenerateValue} disabled={isGeneratingValue} className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded border border-violet-100 transition-colors">{isGeneratingValue ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12} />} AI ile Yaz</button>
                             </div>
                             <textarea value={node.type === 'qa_pair' ? (node.answer || '') : (node.value || '')} onChange={(e) => handleChange(node.type === 'qa_pair' ? 'answer' : 'value', e.target.value)} rows={4} className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y" placeholder="İçerik açıklaması..."/>
                             {node.type === 'qa_pair' && <input type="text" value={node.question || node.name || ''} onChange={(e) => handleChange('question', e.target.value)} className="hidden" />}
+                            
+                            {node.type === 'menu_item' && (
+                                <div className="mt-3 bg-slate-50 p-2 rounded flex items-center gap-2 border border-slate-200">
+                                    <span className="text-xs font-bold text-slate-500">Fiyat:</span>
+                                    <input type="text" value={node.price || ''} onChange={(e) => handleChange('price', e.target.value)} className="bg-white border border-slate-200 rounded px-2 py-1 text-sm font-mono w-32 outline-none" placeholder="150 TL" />
+                                </div>
+                            )}
                         </div>
                     )
                 ) : (

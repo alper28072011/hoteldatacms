@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HotelNode } from '../types';
 import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield, Tag, Box } from 'lucide-react';
+import { isLeafNode } from '../utils/treeUtils';
 
 interface TreeViewNodeProps {
   node: HotelNode;
@@ -54,6 +55,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
 
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === node.id;
+  const isLeaf = isLeafNode(String(node.type));
 
   useEffect(() => {
     if (forceExpand && hasChildren) {
@@ -100,6 +102,9 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     } else if (y > height * 0.75) {
         setDragOverPosition('bottom');
     } else {
+        // If it's a leaf node, we shouldn't allow 'inside' drop technically, 
+        // but maybe the user wants to convert it to a folder? 
+        // For now, let's allow it but the moveNode logic might block strict types if we enforced it deeply.
         setDragOverPosition('inside');
     }
   };
@@ -175,22 +180,24 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
           </span>
         </div>
 
-        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 backdrop-blur-[2px] rounded p-0.5 z-10 shadow-sm">
-          <button 
-            type="button"
-            onClick={(e) => { 
-              e.preventDefault();
-              e.stopPropagation(); 
-              onAddChild(node.id); 
-              setIsExpanded(true); 
-              setHasRenderedChildren(true);
-            }}
-            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm border border-slate-200 bg-white transition-colors pointer-events-auto"
-            title="Add Child"
-          >
-            <Plus size={12} />
-          </button>
-        </div>
+        {!isLeaf && (
+            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 backdrop-blur-[2px] rounded p-0.5 z-10 shadow-sm">
+            <button 
+                type="button"
+                onClick={(e) => { 
+                e.preventDefault();
+                e.stopPropagation(); 
+                onAddChild(node.id); 
+                setIsExpanded(true); 
+                setHasRenderedChildren(true);
+                }}
+                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm border border-slate-200 bg-white transition-colors pointer-events-auto"
+                title="Add Child"
+            >
+                <Plus size={12} />
+            </button>
+            </div>
+        )}
       </div>
 
       <div 

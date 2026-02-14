@@ -1,5 +1,5 @@
 
-import { HotelNode, EventData, DiningData, RoomData } from "../types";
+import { HotelNode, EventData, DiningData, RoomData, NodeType } from "../types";
 
 // Generate a simple unique ID with high collision resistance
 export const generateId = (prefix: string = 'node'): string => {
@@ -12,6 +12,40 @@ export const deepClone = <T>(obj: T): T => {
     return structuredClone(obj);
   }
   return JSON.parse(JSON.stringify(obj));
+};
+
+// --- TYPE CONSTRAINTS & LOGIC ---
+
+export const isLeafNode = (type: string): boolean => {
+    return ['item', 'field', 'menu_item', 'qa_pair', 'note', 'policy'].includes(type);
+};
+
+export const getSmartDefaultChildType = (parentType: string): string => {
+    switch (parentType) {
+        case 'menu': return 'menu_item';
+        case 'list': return 'item';
+        case 'category': return 'item';
+        case 'root': return 'category';
+        default: return 'item';
+    }
+};
+
+export const getAllowedTypes = (parentType?: string): string[] => {
+    // If no parent (root level editing) or root parent
+    if (!parentType || parentType === 'root') {
+        return ['category', 'list', 'menu', 'policy', 'note', 'qa_pair'];
+    }
+
+    switch (parentType) {
+        case 'category':
+            return ['category', 'list', 'menu', 'item', 'field', 'note', 'policy', 'event', 'qa_pair'];
+        case 'list':
+            return ['item'];
+        case 'menu':
+            return ['menu_item']; // Menus should strictly contain menu items (or subsections if really needed, but sticking to strict for now)
+        default:
+            return []; // Leaf nodes shouldn't have children types
+    }
 };
 
 // Find a node by ID - Optimized for read-only access
@@ -164,6 +198,29 @@ export const moveNode = (root: HotelNode, sourceId: string, targetId: string, po
     return root;
   }
 
+  // VALIDATE PARENT CONSTRAINT FOR MOVE
+  // If moving 'inside', target is the parent. If 'before/after', target's parent is the parent.
+  let newParent: HotelNode | null = null;
+  if (position === 'inside') {
+      newParent = findNodeById(root, targetId);
+  } else {
+      const path = findPathToNode(root, targetId);
+      if (path && path.length > 1) {
+          newParent = path[path.length - 2];
+      }
+  }
+
+  // STRICT TYPE CHECK ON MOVE
+  if (newParent) {
+      const allowedTypes = getAllowedTypes(String(newParent.type));
+      if (!allowedTypes.includes(String(sourceNode.type)) && allowedTypes.length > 0) {
+          // If the type is not allowed, we block the move logic by returning original root.
+          // In a real app, we might want to throw an error or return a status.
+          console.warn(`Move blocked: ${sourceNode.type} cannot be inside ${newParent.type}`);
+          return root;
+      }
+  }
+
   const treeWithoutSource = deleteNodeFromTree(root, sourceId);
 
   if (position === 'inside') {
@@ -310,7 +367,7 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
 // --- DATA PROCESSING HELPERS FOR GENERATE AI TEXT ---
 
 interface GlobalIndex {
-  definitions: Map<string, string>; // Maps "Standard Minibar" -> "Coke, Water, Beer..."
+  definitions: Map<string, string>; 
   globalRules: string[];
 }
 
@@ -351,9 +408,6 @@ const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
   return index;
 };
 
-/**
- * TRANSLATOR: Converts structured Schema Data (JSON) into Natural Language (TURKISH)
- */
 const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
     if (!node.schemaType || !node.data) return '';
 
@@ -363,14 +417,14 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
     if (schemaType === 'event') {
         const d = data as EventData;
         
-        // Status Check
         if (d.status === 'cancelled') return `[ETKİNLİK İPTAL] Bu etkinlik iptal edildi. Neden: ${d.statusReason || 'Belirtilmedi'}.`;
         if (d.status === 'moved') return `[ETKİNLİK TAŞINDI] Yeni yer: ${d.location}.`;
 
-        // Schedule Logic
         let scheduleText = "";
         const s = d.schedule;
         
+        if (!s) return `[AKTİVİTE: ${node.name}] Takvim bilgisi eksik.`;
+
         if (s.frequency === 'daily') {
             scheduleText = "HER GÜN.";
         } else if (s.frequency === 'weekly') {
@@ -381,7 +435,6 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
             scheduleText = `TEK SEFERLİK: Tarih ${s.validFrom}.`;
         }
 
-        // Validity
         if (s.validFrom && s.validUntil) scheduleText += ` Geçerlilik: ${s.validFrom} - ${s.validUntil} arası.`;
         
         const time = s.startTime ? `${s.startTime}${s.endTime ? ` - ${s.endTime}` : ''}` : 'Saat değişebilir';
@@ -397,7 +450,6 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
         const shifts = d.shifts?.map(s => `${s.name}: ${s.start}-${s.end}`).join(', ');
         const concept = d.concept === 'all_inclusive' ? 'Her Şey Dahil Kapsamında' : 'Ekstra Ücretli';
         
-        // Dietary features
         const feats = [];
         if (d.features?.hasKidsMenu) feats.push("Çocuk Menüsü");
         if (d.features?.hasVeganOptions) feats.push("Vegan Seçenek");
@@ -418,19 +470,11 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
     return '';
 }
 
-/**
- * SMART WEAVING ALGORITHM (generateAIText)
- * 1. Indexes the tree to understand what "things" are.
- * 2. Generates Markdown where undefined references (like "Standard Minibar") 
- *    are automatically enriched with their definition found elsewhere in the tree.
- * 3. NEW: Translates structured Schema Data into Natural Language paragraphs.
- */
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
 ): Promise<string> => {
   
-  // Phase 1: Build Knowledge Graph
   const globalIndex = buildGlobalIndex(root);
   
   const flattenTree = (node: HotelNode, depth: number): { node: HotelNode, depth: number }[] => {
@@ -446,33 +490,27 @@ export const generateAIText = async (
   const lines: string[] = [];
   const CHUNK_SIZE = 50;
 
-  // Phase 2: Enriched Generation
   for (let i = 0; i < totalNodes; i++) {
     const { node, depth } = flatNodes[i];
     const type = String(node.type);
     const name = node.name || 'İsimsiz';
     const value = node.value || node.answer || '';
     
-    // Indentation based on depth
     const indent = "  ".repeat(depth);
     let line = "";
 
-    // A. Structural Formatting
     const isContainer = ['root', 'category', 'list', 'menu'].includes(type);
     
     if (isContainer) {
-       // Headers for high level, bullets for deep nested lists
        if (depth < 3) {
          line = `\n${"#".repeat(depth + 1)} ${name}`;
        } else {
          line = `${indent}- **[${type.toUpperCase()}] ${name}**`;
        }
     } else {
-       // Items / Fields
        line = `${indent}- ${name}`;
     }
 
-    // B. Value & Definition Injection (Smart Weaving)
     if (value) {
       line += `: ${value}`;
       
@@ -482,7 +520,6 @@ export const generateAIText = async (
       }
     }
 
-    // C. NEW: Schema Translation (Structured Data -> Natural Language)
     if (node.schemaType && node.data) {
         const translatedText = translateSchemaToNaturalLanguage(node);
         if (translatedText) {
@@ -490,7 +527,6 @@ export const generateAIText = async (
         }
     }
 
-    // D. Attribute Injection
     const attributesParts: string[] = [];
     if (node.price) attributesParts.push(`Fiyat: ${node.price}`);
     if (node.attributes && node.attributes.length > 0) {
@@ -504,7 +540,6 @@ export const generateAIText = async (
        line += ` [${attributesParts.join(', ')}]`;
     }
 
-    // E. Global Rule Injection for Rooms (Context Awareness)
     if (type === 'category' && (name.toLowerCase().includes('oda') || name.toLowerCase().includes('room'))) {
        if (globalIndex.globalRules.length > 0) {
          line += `\n${indent}  > *Global Kurallar Uygulandı: ${globalIndex.globalRules.length} madde.*`;
@@ -513,12 +548,10 @@ export const generateAIText = async (
 
     lines.push(line);
 
-    // F. Note/Q&A Handling (Visual Grouping)
     if (node.description) {
        lines.push(`${indent}  > Not: ${node.description}`);
     }
 
-    // Progress Update
     if (i % CHUNK_SIZE === 0) {
       onProgress(Math.round((i / totalNodes) * 100));
       await new Promise(resolve => setTimeout(resolve, 5));
@@ -552,14 +585,12 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   if (node.type) semanticData.type = node.type;
   if (node.name) semanticData.name = node.name;
   if (node.value) semanticData.value = node.value;
-  if (node.description) semanticData.description = node.description; // INCLUDE DESCRIPTION
+  if (node.description) semanticData.description = node.description; 
   if (node.tags) semanticData.tags = node.tags;
   
-  // Include Schema Data in JSON export
   if (node.schemaType) semanticData.schemaType = node.schemaType;
   if (node.data) semanticData.data = safeCopy(node.data, 0);
 
-  // INCLUDE ATTRIBUTES EXPLICITLY FOR GEMINI TO SEE
   if (node.attributes && Array.isArray(node.attributes)) {
       semanticData.attributes = node.attributes.map(a => ({
           key: a.key,

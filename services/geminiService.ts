@@ -131,6 +131,12 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     
     KULLANICI KOMUTU: "${userCommand}"
     
+    **TİP ÇIKARIM KURALLARI (TYPE INFERENCE RULES - CRITICAL):**
+    1. **POLİTİKALAR/KURALLAR**: Eğer kullanıcı bir "Politika", "Kural", "Şart" veya "Not" ekliyorsa, tip **'policy'** veya **'note'** olmalıdır. ASLA 'category' yapma (kırmızı uyarı ikonu çıkıyor).
+    2. **MENÜLER**: "Menü" oluşturuluyorsa tip **'menu'**. Menüye yemek/içecek ekleniyorsa tip **'menu_item'**.
+    3. **LİSTELER**: Sadece isim listesi ise (örn: TV Kanalları) tip **'list'** ve alt öğeler **'item'**.
+    4. **KLASÖRLER**: Sadece ve sadece başka şeyleri gruplamak içinse **'category'**.
+    
     İŞLEM ADIMLARI (DÜŞÜNME SÜRECİ):
     1. **ARAMA & TESPİT**: Komutta geçen anahtar kelimeleri (Örn: "Kapalı Havuz") tüm JSON içinde ara. İsimleri, açıklamaları, etiketleri ve özellikleri (attributes) kontrol et.
     2. **MEVCUT DURUM ANALİZİ**:
@@ -162,6 +168,7 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
           "targetId": "Hedef ID (Mevcut bir ID olmalı, kök dizine ekliyorsan root ID)",
           "data": { 
              "name": "...", 
+             "type": "...", // YUKARIDAKİ TİP KURALLARINA UY
              "value": "...", 
              "description": "...",
              "features": { "Key": "Value" }, // Özellik güncellemeleri için

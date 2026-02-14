@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { HotelNode, AIPersona } from '../types';
-import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree } from '../utils/treeUtils';
+import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree, findNodeById, getSmartDefaultChildType } from '../utils/treeUtils';
 import { updateHotelData, getPersonas, savePersona as savePersonaToDb, deletePersona as deletePersonaFromDb } from '../services/firestoreService';
 
 interface HotelContextType {
@@ -87,14 +87,24 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSaveStatus('idle');
   }, []);
 
-  const addChild = useCallback((parentId: string, type: string = 'item') => {
-    const newChild: HotelNode = {
-      id: generateId(),
-      type: type,
-      name: 'New Item',
-      value: ''
-    };
-    setHotelDataState((prev) => addChildToNode(prev, parentId, newChild));
+  const addChild = useCallback((parentId: string, type?: string) => {
+    setHotelDataState((prev) => {
+      // SMART DEFAULT TYPE
+      let finalType = type;
+      if (!finalType) {
+          const parentNode = findNodeById(prev, parentId);
+          finalType = parentNode ? getSmartDefaultChildType(String(parentNode.type)) : 'item';
+      }
+
+      const newChild: HotelNode = {
+        id: generateId(),
+        type: finalType,
+        name: finalType === 'menu_item' ? 'Yeni Ürün' : 'Yeni Öğe',
+        value: ''
+      };
+      
+      return addChildToNode(prev, parentId, newChild);
+    });
     setHasUnsavedChanges(true);
     setSaveStatus('idle');
   }, []);
