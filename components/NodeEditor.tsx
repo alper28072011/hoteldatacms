@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, EventData, DiningData, RoomData } from '../types';
@@ -10,7 +9,7 @@ import {
   Tag, Trash2, LayoutDashboard, Box, BrainCircuit, Sparkles, Loader2, 
   ChevronRight, Database, Check, Settings, List, FileText, CircleHelp, 
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
-  Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote
+  Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: PORTAL-BASED EDUCATIONAL TOOLTIP WITH PLACEMENT ---
@@ -157,28 +156,32 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
 
     // CONTAINER LEVELS (Categories, Lists)
     if (isContainer) {
+        // IMPORTANT: Removed 'break-inside-avoid' from the outer div. 
+        // Added 'break-after-avoid' to the header section to sticky it to content.
         return (
-            <div className="break-inside-avoid relative">
-                 {/* Visual Connector Line for hierarchy */}
-                 {level > 1 && <div className="absolute left-0 top-3 bottom-0 w-px bg-slate-200 -ml-4"></div>}
+            <div className="relative print:block">
+                 {/* Visual Connector Line for hierarchy - Hidden in print to avoid confusion on page breaks */}
+                 {level > 1 && <div className="absolute left-0 top-3 bottom-0 w-px bg-slate-200 -ml-4 print:hidden"></div>}
                  
                  <div className="mb-4">
-                    <div className="flex items-baseline gap-3 mb-2 group">
-                        {level === 1 ? (
-                             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                                <span className="w-1.5 h-6 bg-indigo-500 rounded-full inline-block"></span>
-                                {node.name}
-                             </h2>
-                        ) : level === 2 ? (
-                             <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full inline-block"></span>
-                                {node.name}
-                             </h3>
-                        ) : (
-                             <h4 className="text-md font-bold text-slate-600 uppercase tracking-wide text-xs mt-2 border-b border-slate-100 pb-1">{node.name}</h4>
-                        )}
+                    <div className="break-after-avoid">
+                        <div className="flex items-baseline gap-3 mb-2 group">
+                            {level === 1 ? (
+                                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2 mt-6">
+                                    <span className="w-1.5 h-6 bg-indigo-500 rounded-full inline-block print:hidden"></span>
+                                    {node.name}
+                                 </h2>
+                            ) : level === 2 ? (
+                                 <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2 mt-4">
+                                    <span className="w-1.5 h-1.5 bg-slate-300 rounded-full inline-block print:bg-slate-500"></span>
+                                    {node.name}
+                                 </h3>
+                            ) : (
+                                 <h4 className="text-md font-bold text-slate-600 uppercase tracking-wide text-xs mt-2 border-b border-slate-100 pb-1">{node.name}</h4>
+                            )}
+                        </div>
+                        {node.value && <p className="text-sm text-slate-500 mb-2 italic pl-4 border-l-2 border-slate-100">{node.value}</p>}
                     </div>
-                    {node.value && <p className="text-sm text-slate-500 mb-2 italic pl-4 border-l-2 border-slate-100">{node.value}</p>}
                     
                     {/* Render Children */}
                     <div className={`grid gap-3 ${level === 1 ? 'mt-4 pl-1' : 'mt-2 pl-2'}`}>
@@ -195,8 +198,8 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
 
     // LEAF NODES (Items, Fields)
     return (
-        <div className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-lg hover:border-indigo-200 hover:shadow-sm transition-all group break-inside-avoid">
-            <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${node.type === 'item' ? 'bg-indigo-400' : 'bg-slate-300'}`}></div>
+        <div className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-lg hover:border-indigo-200 hover:shadow-sm transition-all group break-inside-avoid print:border-slate-300 print:shadow-none" style={{ pageBreakInside: 'avoid' }}>
+            <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${node.type === 'item' ? 'bg-indigo-400' : 'bg-slate-300'} print:bg-slate-800`}></div>
             <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-slate-800">{node.name}</span>
@@ -207,7 +210,7 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
                 {(node.attributes && node.attributes.length > 0) && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
                         {node.attributes.map(attr => (
-                            <span key={attr.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-50 text-slate-500 border border-slate-200 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-100 transition-colors">
+                            <span key={attr.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-50 text-slate-500 border border-slate-200 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-100 transition-colors print:border-slate-400 print:text-slate-700">
                                 <span className="opacity-70 mr-1">{attr.key}:</span> {attr.value}
                             </span>
                         ))}
@@ -217,8 +220,8 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
                 {renderSchema()}
                 
                 {node.type === 'qa_pair' && node.answer && (
-                    <div className="mt-2 text-sm text-slate-600 bg-slate-50 p-2 rounded italic relative">
-                        <Quote size={12} className="absolute -top-1.5 -left-1 text-slate-300 bg-white rounded-full" />
+                    <div className="mt-2 text-sm text-slate-600 bg-slate-50 p-2 rounded italic relative print:bg-transparent print:p-0">
+                        <Quote size={12} className="absolute -top-1.5 -left-1 text-slate-300 bg-white rounded-full print:hidden" />
                         "{node.answer}"
                     </div>
                 )}
@@ -228,7 +231,6 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
 }
 
 // --- SUB-COMPONENTS FOR SCHEMAS ---
-
 const EventForm: React.FC<{ data: EventData, onChange: (d: EventData) => void }> = ({ data, onChange }) => {
   const days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
   const updateSchedule = (field: string, value: any) => {
@@ -363,6 +365,16 @@ export interface NodeEditorProps {
 
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
   const { addChild } = useHotel();
+  
+  const nodeTypeContent = (
+      <div className="space-y-2 text-[11px] font-normal">
+          <div><strong className="text-indigo-300 block mb-0.5">Category (Kategori):</strong> Alt öğeleri gruplamak için kullanılan klasör yapısı (Örn: "Restoranlar", "Havuzlar").</div>
+          <div><strong className="text-indigo-300 block mb-0.5">List / Menu:</strong> Öğeleri listeleyen yapılar. Menu, fiyat bilgisi içerir.</div>
+          <div><strong className="text-indigo-300 block mb-0.5">Item (Öğe):</strong> Somut bir hizmet veya varlık (Örn: "Ana Havuz", "Bali Masajı").</div>
+          <div><strong className="text-indigo-300 block mb-0.5">Field (Alan):</strong> Tekil veri noktası (Örn: "Giriş Saati", "Wifi Şifresi").</div>
+      </div>
+  );
+
   const stats = useMemo(() => node ? analyzeHotelStats(node) : null, [node]);
   
   const [isGeneratingContext, setIsGeneratingContext] = useState(false);
@@ -371,8 +383,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [newAttrKey, setNewAttrKey] = useState('');
   const [newAttrValue, setNewAttrValue] = useState('');
+  
+  const previewRef = useRef<HTMLDivElement>(null);
 
-  // Initial Data Objects
   const defaultEvent: EventData = { schedule: { frequency: 'weekly', activeDays: [], startTime: '21:30' }, location: '', ageGroup: 'all', isPaid: false, requiresReservation: false, status: 'active', tags: [] };
   const defaultDining: DiningData = { type: 'buffet', cuisine: '', concept: 'all_inclusive', reservationRequired: false, dressCode: 'Smart Casual', shifts: [], features: { hasKidsMenu: true, hasVeganOptions: true, hasGlutenFreeOptions: false, hasBabyChair: true, hasTerrace: true }, menuHighlights: [], beverageHighlights: [] };
   const defaultRoom: RoomData = { sizeSqM: 35, maxOccupancy: { adults: 2, children: 1, total: 3 }, bedConfiguration: '', view: 'land', hasBalcony: true, hasJacuzzi: false, pillowMenuAvailable: false, amenities: [], minibarContent: [], bathroomDetails: '' };
@@ -474,31 +487,47 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       onUpdate(node.id, { attributes: currentAttributes.filter(a => a.id !== attrId) });
   };
 
-  // --- EDUCATIONAL CONTENT FOR TOOLTIPS ---
-  const nodeTypeContent = (
-    <ul className="space-y-2">
-        <li>
-            <strong className="text-indigo-300 block mb-0.5">📂 Category (Kategori):</strong>
-            İçine başka öğeler koyacağınız klasörler.
-            <div className="text-slate-400 italic mt-0.5">Örnek: "Restoranlar", "Oda Tipleri", "Spa Hizmetleri".</div>
-        </li>
-        <li>
-            <strong className="text-indigo-300 block mb-0.5">📋 List (Liste):</strong>
-            Maddeler halinde sıralanacak benzer öğeler grubu.
-            <div className="text-slate-400 italic mt-0.5">Örnek: "Havuz Kuralları", "Dahil Olan Hizmetler", "İletişim Bilgileri".</div>
-        </li>
-        <li>
-            <strong className="text-indigo-300 block mb-0.5">📦 Item (Öğe):</strong>
-            Somut bir hizmet, mekan veya nesne.
-            <div className="text-slate-400 italic mt-0.5">Örnek: "Ana Havuz", "Lobi Bar", "Havalimanı Transferi".</div>
-        </li>
-        <li>
-            <strong className="text-indigo-300 block mb-0.5">🏷️ Field (Veri Alanı):</strong>
-            Tek bir bilgi parçası.
-            <div className="text-slate-400 italic mt-0.5">Örnek: "Telefon Numarası", "Wifi Şifresi", "Giriş Saati".</div>
-        </li>
-    </ul>
-  );
+  const handlePrint = () => {
+    const printContent = document.getElementById('live-preview-content');
+    if (!printContent) return;
+
+    const printWindow = window.open('', '', 'height=800,width=800');
+    if (printWindow) {
+      printWindow.document.write('<html><head><title>Print Preview</title>');
+      printWindow.document.write('<script src="https://cdn.tailwindcss.com"></script>');
+      printWindow.document.write(`
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+          body { font-family: 'Inter', sans-serif; -webkit-print-color-adjust: exact; padding: 20px; }
+          h1, h2, h3, h4 { page-break-after: avoid; }
+          .break-after-avoid { page-break-after: avoid; }
+          .break-inside-avoid { page-break-inside: avoid; }
+          @media print {
+            @page { size: A4; margin: 2cm; }
+            body { padding: 0; }
+            .print\\:hidden { display: none !important; }
+            .print\\:border-slate-300 { border-color: #cbd5e1 !important; }
+            .print\\:shadow-none { box-shadow: none !important; }
+            .print\\:bg-slate-800 { background-color: #1e293b !important; }
+            .print\\:text-slate-700 { color: #334155 !important; }
+            .print\\:border-slate-400 { border-color: #94a3b8 !important; }
+            .print\\:bg-slate-500 { background-color: #64748b !important; }
+            .print\\:block { display: block !important; }
+          }
+        </style>
+      `);
+      printWindow.document.write('</head><body>');
+      printWindow.document.write(printContent.innerHTML);
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+      printWindow.focus();
+      
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    }
+  };
 
   if (node.type === 'root') {
       return (
@@ -514,9 +543,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
           </div>
         </div>
         
-        {/* ROOT PREVIEW (THESIS VIEW) */}
         <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-4xl mx-auto bg-white shadow-xl border border-slate-200 rounded-xl p-10 min-h-[600px] print:shadow-none print:border-none">
+            <div className="flex justify-end max-w-4xl mx-auto mb-4">
+                <button 
+                  onClick={handlePrint}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-sm transition-colors"
+                >
+                  <Printer size={16} /> Save as PDF
+                </button>
+            </div>
+            <div id="live-preview-content" className="max-w-4xl mx-auto bg-white shadow-xl border border-slate-200 rounded-xl p-10 min-h-[600px] print:shadow-none print:border-none print:p-0">
                 <LivePreview node={node} level={0} />
             </div>
             <div className="text-center text-slate-400 text-xs mt-8 pb-4">
@@ -529,7 +565,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
 
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* HEADER */}
       <div className="h-20 border-b border-slate-200 px-6 flex items-center justify-between bg-white shrink-0 z-10">
         <div className="flex-1 min-w-0 mr-4">
            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 mb-1 font-medium">
@@ -551,7 +586,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
         </div>
         
         <div className="flex items-center gap-3">
-           {/* REORGANIZED DATA TYPE SELECTOR */}
            <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
               <div className="flex items-center gap-1.5 pl-2">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Veri Tipi</span>
@@ -584,14 +618,12 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
         </div>
       </div>
 
-      {/* EDITOR BODY */}
       <div className="flex-1 overflow-y-auto bg-slate-50/30">
         <div className="max-w-5xl mx-auto p-6 lg:p-8 space-y-8 pb-32">
             {validationError && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3"><TriangleAlert size={18} className="text-amber-600 shrink-0 mt-0.5" /><div><h4 className="text-sm font-bold text-amber-800">Doğrulama Uyarısı</h4><p className="text-xs text-amber-700 mt-1">{validationError}</p></div></div>
             )}
 
-            {/* 1. MAIN IDENTITY & SCHEMA SELECTION */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -599,7 +631,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <InfoTooltip title="İsimlendirme" content="Anlaşılır ve benzersiz isimler kullanın. 'Havuz' yerine 'Ana Açık Havuz' demek, karışıklığı önler." placement="bottom" />
                     </div>
                     
-                    {/* SCHEMA SELECTOR */}
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-400 uppercase">Akıllı Şablon:</span>
                         <select 
@@ -617,7 +648,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 </div>
                 <input type="text" value={node.name || ''} onChange={(e) => handleChange('name', e.target.value)} className="w-full bg-white text-xl font-bold text-slate-900 border-b-2 border-slate-100 px-2 py-2 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300" placeholder="Örn: Butler Servisi"/>
                 
-                {/* 2. DYNAMIC FORM OR GENERIC TEXT AREA */}
                 {(!node.schemaType || node.schemaType === 'generic') ? (
                     ['qa_pair', 'note', 'field', 'item', 'menu_item'].includes(String(node.type)) && (
                         <div className="mt-4 relative animate-in fade-in slide-in-from-top-2">
@@ -642,7 +672,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 )}
             </div>
 
-            {/* 3. DYNAMIC ATTRIBUTES (For extra metadata not in schema) */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                     <div className="flex items-center gap-2">
@@ -660,7 +689,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 </div>
             </div>
 
-            {/* 4. AI & METADATA */}
             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 border-dashed">
                  <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center gap-2">
@@ -674,17 +702,24 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             
             <div className="border-t border-slate-200 pt-6 flex justify-between items-center text-xs text-slate-400"><div className="flex items-center gap-4"><div className="flex items-center gap-1 group cursor-pointer" onClick={() => handleCopyId(node.id)}><Database size={12} /> ID: <code className="bg-slate-100 px-1 rounded">{node.id}</code>{copiedId === node.id && <Check size={10} className="text-emerald-500"/>}</div></div></div>
             
-            {/* CONTAINER CONTENT PREVIEW (DOCUMENT VIEW) */}
             {['category', 'list', 'menu'].includes(String(node.type)) && (
                 <div className="mt-8 border-t border-slate-200 pt-8 animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex items-center gap-2 mb-6">
-                        <div className="bg-indigo-50 p-1.5 rounded text-indigo-600"><BookOpen size={16} /></div>
-                        <div>
-                            <h3 className="font-bold text-slate-800 text-sm">İçerik Önizlemesi</h3>
-                            <p className="text-xs text-slate-500">Bu kategorinin altındaki verilerin belge görünümü.</p>
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                            <div className="bg-indigo-50 p-1.5 rounded text-indigo-600"><BookOpen size={16} /></div>
+                            <div>
+                                <h3 className="font-bold text-slate-800 text-sm">İçerik Önizlemesi</h3>
+                                <p className="text-xs text-slate-500">Bu kategorinin altındaki verilerin belge görünümü.</p>
+                            </div>
                         </div>
+                        <button 
+                            onClick={handlePrint}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors"
+                        >
+                            <Printer size={14} /> Download PDF
+                        </button>
                     </div>
-                    <div className="bg-white shadow-lg border border-slate-100 rounded-xl p-8 min-h-[300px] ring-4 ring-slate-50">
+                    <div id="live-preview-content" className="bg-white shadow-lg border border-slate-100 rounded-xl p-8 min-h-[300px] ring-4 ring-slate-50 print:shadow-none print:border-none print:p-0">
                         <LivePreview node={node} level={1} />
                     </div>
                 </div>
