@@ -181,28 +181,7 @@ const App: React.FC = () => {
     setTimeout(() => setNotification(null), 2000);
   };
 
-  // --- HANDLE AUTO-FIX ACTIONS (FROM HEALTH MODAL) ---
-  const handleAutoFixAction = (action: AutoFixAction) => {
-      try {
-          if (action.type === 'update' && action.payload) {
-              updateNode(action.targetId, action.payload);
-          } 
-          else if (action.type === 'changeType' && action.payload) {
-              updateNode(action.targetId, action.payload);
-          }
-          else if (action.type === 'move' && action.destinationId) {
-              // Ensure we aren't trying to move to self or null
-              if (action.targetId !== action.destinationId) {
-                  moveNode(action.targetId, action.destinationId, 'inside');
-              }
-          }
-      } catch (e) {
-          console.error("AutoFix failed:", e);
-          setNotification({ message: "Düzeltme uygulanırken hata oluştu.", type: 'error' });
-      }
-  };
-
-  // --- ROBUST AI ARCHITECT HANDLER ---
+  // --- ROBUST AI ARCHITECT HANDLER WITH SMART MERGING ---
   const handleArchitectActions = (actions: ArchitectAction[]) => {
     let successCount = 0;
     let fallbackTriggered = false;
@@ -214,12 +193,16 @@ const App: React.FC = () => {
                 const targetNode = findNodeById(prev, action.targetId);
                 let finalTargetId = action.targetId;
 
+                // Fallback: If AI targets a non-existent ID, default to Root
                 if (!targetNode) {
                     finalTargetId = prev.id; 
                     fallbackTriggered = true;
                 }
 
+                // Prepare new node
                 let newNodeData = { ...action.data };
+                
+                // Map 'features' from AI to 'attributes'
                 if ((newNodeData as any).features) {
                     const features = (newNodeData as any).features;
                     const newAttributes = Object.entries(features).map(([key, value]) => ({
@@ -241,12 +224,13 @@ const App: React.FC = () => {
             if (targetNode) {
                 let updates = { ...action.data };
                 
+                // 1. SMART MERGE: FEATURES -> ATTRIBUTES
                 if ((updates as any).features) {
                     const features = (updates as any).features as Record<string, string>;
                     const currentAttributes = targetNode.attributes ? [...targetNode.attributes] : [];
                     
                     Object.entries(features).forEach(([key, value]) => {
-                        const existingIdx = currentAttributes.findIndex(attr => attr.key === key);
+                        const existingIdx = currentAttributes.findIndex(attr => attr.key.toLowerCase() === key.toLowerCase());
                         if (existingIdx > -1) {
                              currentAttributes[existingIdx] = { 
                                  ...currentAttributes[existingIdx], 
@@ -261,9 +245,33 @@ const App: React.FC = () => {
                              });
                         }
                     });
-                    
                     updates.attributes = currentAttributes;
                     delete (updates as any).features;
+                }
+
+                // 2. SMART MERGE: SCHEMA DATA
+                // If AI sends a 'data' object (e.g. updated schedule), merge it with existing data
+                // instead of wiping out the entire data structure.
+                if (updates.data && targetNode.data) {
+                    // Deep merge logic simplified: 
+                    // We only support 1 level deep merge for safety (e.g. data.schedule)
+                    const mergedData = { ...targetNode.data };
+                    Object.keys(updates.data).forEach(key => {
+                        // If both are objects (like 'schedule'), merge them
+                        if (
+                            typeof updates.data[key] === 'object' && 
+                            updates.data[key] !== null && 
+                            !Array.isArray(updates.data[key]) &&
+                            typeof mergedData[key] === 'object' &&
+                            !Array.isArray(mergedData[key])
+                        ) {
+                            mergedData[key] = { ...mergedData[key], ...updates.data[key] };
+                        } else {
+                            // Otherwise direct replace (strings, numbers, arrays)
+                            mergedData[key] = updates.data[key];
+                        }
+                    });
+                    updates.data = mergedData;
                 }
 
                 updateNode(action.targetId, updates);
@@ -304,6 +312,24 @@ const App: React.FC = () => {
     const sourceId = e.dataTransfer.getData('nodeId');
     if (sourceId && sourceId !== targetId) {
       moveNode(sourceId, targetId, position);
+    }
+  };
+
+  const handleAutoFixAction = (action: AutoFixAction) => {
+    try {
+        if (action.type === 'move' && action.destinationId) {
+            moveNode(action.targetId, action.destinationId, 'inside');
+        } else if (action.type === 'update' && action.payload) {
+            updateNode(action.targetId, action.payload);
+        } else if (action.type === 'changeType' && action.payload) {
+             updateNode(action.targetId, action.payload);
+        }
+        setNotification({ message: "Otomatik düzeltme uygulandı.", type: 'success' });
+        setTimeout(() => setNotification(null), 2000);
+    } catch (e) {
+        console.error("AutoFix Error", e);
+        setNotification({ message: "Düzeltme uygulanamadı.", type: 'error' });
+        setTimeout(() => setNotification(null), 2000);
     }
   };
 
@@ -422,7 +448,7 @@ const App: React.FC = () => {
         onClose={() => setIsHealthModalOpen(false)} 
         data={hotelData} 
         onApplyFix={updateNode} 
-        onAutoFixApply={handleAutoFixAction} // CONNECTED THE HANDLER HERE
+        onAutoFixApply={handleAutoFixAction} 
         onLocate={(id) => setSelectedNodeId(id)}
       />
       

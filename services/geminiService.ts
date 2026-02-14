@@ -119,37 +119,55 @@ export const chatWithData = async (
   }
 };
 
+// --- ARCHITECT COMMAND PROCESSOR (Enhanced) ---
 export const processArchitectCommand = async (data: HotelNode, userCommand: string): Promise<ArchitectResponse> => {
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
-    const prompt = `Sen bir Yapay Zeka Veri Mimarısın (AI Architect).
+    const prompt = `Sen bir Otel CMS (İçerik Yönetim Sistemi) için "Akıllı Veri Mimarı ve Sistem Yöneticisi"sin.
     
-    GÖREV:
-    "Mevcut Yapı"yı analiz et ve "Kullanıcı Komutu"na göre JSON yapısını güncellemek için gereken işlemleri belirle.
+    GÖREVİN:
+    Aşağıdaki tam otel veri ağacını (JSON) tara ve kullanıcının doğal dil ile verdiği komutu uygulamak için gerekli teknik işlemleri belirle.
+    
+    KULLANICI KOMUTU: "${userCommand}"
+    
+    İŞLEM ADIMLARI (DÜŞÜNME SÜRECİ):
+    1. **ARAMA & TESPİT**: Komutta geçen anahtar kelimeleri (Örn: "Kapalı Havuz") tüm JSON içinde ara. İsimleri, açıklamaları, etiketleri ve özellikleri (attributes) kontrol et.
+    2. **MEVCUT DURUM ANALİZİ**:
+       - Bulduğun öğenin özelliklerinde (attributes) istenen bilgi zaten var mı? (Örn: Key: "Çalışma Saatleri", Value: "09:00-18:00").
+       - Yoksa, ana değerinde (value) veya açıklamasında (description) mı yazıyor?
+       - Yoksa, bu bir 'schemaType' (event/dining) verisi içinde mi? (data objesi).
+    3. **EYLEM BELİRLEME**:
+       - **GÜNCELLEME (Update)**: Eğer veri varsa, onu güncelle.
+       - **EKLEME (Add)**: Eğer veri yoksa ama uygun bir kategori varsa (Örn: "Havuzlar" kategorisi), yeni bir öğe ekle.
+       - **SİLME (Delete)**: Kullanıcı istediyse sil.
     
     KURALLAR:
-    1. **TEKRAR KONTROLÜ**: Bir şey oluşturmadan önce var olup olmadığına bak. Varsa 'update' (güncelle) döndür.
-    2. **HİYERARŞİ**: Yeni öğeler için en mantıklı 'targetId' (ebeveyn) değerini bul.
-    3. **TÜRKÇE**: 'reason' ve 'summary' alanları Türkçe olmalı. Oluşturulan verilerin (name, value) içeriği Türkçe olmalı.
-    4. **ÖZELLİKLER**: Fiyat, Saat vb. özellikleri "features" nesnesi içine ekle. Örn: "data": { "name": "Steakhouse", "features": { "Fiyat": "50$", "Kıyafet": "Spor" } }
+    - **ID KULLANIMI**: İşlemler için mutlaka mevcut öğelerin 'id'lerini kullan. Uydurma ID kullanma (ekleme hariç).
+    - **ÖZELLİK (ATTRIBUTE) GÜNCELLEME**: Eğer bir özelliği (key-value) değiştireceksen, "features" objesi içinde gönder. Örn: "features": { "Çalışma Saatleri": "08:00 - 20:00" }.
+    - **ŞEMA (SCHEMA) GÜNCELLEME**: Eğer 'data' objesini (Örn: Event saatleri) değiştireceksen, sadece değişen kısımları değil, o yapının tutarlı halini gönder.
+    - **TÜRKÇE**: Özet (summary) ve neden (reason) alanları kesinlikle Türkçe olmalı.
     
-    Kullanıcı Komutu: "${userCommand}"
-    
-    Mevcut Yapı:
+    VERİTABANI (JSON):
     \`\`\`json
     ${jsonContext}
     \`\`\`
     
     DÖNÜŞ FORMATI (JSON):
     {
-      "summary": "Yapılacak işlemin özeti (Türkçe).",
+      "summary": "Kullanıcıya ne yapacağını anlatan detaylı Türkçe özet.",
       "actions": [
         {
           "type": "add" | "update" | "delete",
-          "targetId": "Hedef ID",
-          "data": { "name": "...", "type": "...", "value": "...", "features": { "Key": "Value" } },
-          "reason": "Bu işlem neden yapıldı (Türkçe)"
+          "targetId": "Hedef ID (Mevcut bir ID olmalı, kök dizine ekliyorsan root ID)",
+          "data": { 
+             "name": "...", 
+             "value": "...", 
+             "description": "...",
+             "features": { "Key": "Value" }, // Özellik güncellemeleri için
+             "data": { ... } // Schema tipi veriler için (Event, Dining)
+          },
+          "reason": "Teknik açıklama (Türkçe)"
         }
       ]
     }
@@ -167,7 +185,7 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     try {
         parsed = JSON.parse(rawText);
     } catch (e) {
-        return { summary: "AI cevabı işlenirken hata oluştu.", actions: [] };
+        return { summary: "AI cevabı işlenirken hata oluştu. Lütfen komutu daha açık yazın.", actions: [] };
     }
 
     if (!parsed.actions || !Array.isArray(parsed.actions)) {

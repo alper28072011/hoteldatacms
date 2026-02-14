@@ -552,41 +552,23 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   if (node.type) semanticData.type = node.type;
   if (node.name) semanticData.name = node.name;
   if (node.value) semanticData.value = node.value;
-  if (node.description) semanticData.description = node.description;
+  if (node.description) semanticData.description = node.description; // INCLUDE DESCRIPTION
   if (node.tags) semanticData.tags = node.tags;
   
   // Include Schema Data in JSON export
   if (node.schemaType) semanticData.schemaType = node.schemaType;
   if (node.data) semanticData.data = safeCopy(node.data, 0);
 
-  const excludeKeys = new Set([
-      'id', 'type', 'name', 'value', 'description', 'tags', 'question', 
-      'answer', 'price', 'children', 'attributes', 'uiState', 'lastSaved', 'isExpanded', 'data', 'schemaType'
-  ]);
-  
-  Object.keys(node).forEach(key => {
-     if (!excludeKeys.has(key) && !key.startsWith('_')) {
-         const safe = safeCopy(node[key], 0);
-         if (safe !== undefined) semanticData[key] = safe;
-     }
-  });
+  // INCLUDE ATTRIBUTES EXPLICITLY FOR GEMINI TO SEE
+  if (node.attributes && Array.isArray(node.attributes)) {
+      semanticData.attributes = node.attributes.map(a => ({
+          key: a.key,
+          value: a.value
+      }));
+  }
 
   const currentPath = parentPath ? `${parentPath} > ${node.name || 'İsimsiz'}` : (node.name || 'İsimsiz');
   semanticData._path = currentPath;
-
-  if (node.attributes && Array.isArray(node.attributes) && node.attributes.length > 0) {
-    const features: Record<string, string> = {};
-    node.attributes.forEach((attr: any) => {
-        const safeKey = (attr.key || '').trim();
-        if (safeKey) {
-            features[safeKey] = attr.value || '';
-        }
-    });
-    
-    if (Object.keys(features).length > 0) {
-        semanticData.features = features;
-    }
-  }
 
   if (node.children && node.children.length > 0) {
     semanticData.contains = node.children.map((child: HotelNode) => generateCleanAIJSON(child, currentPath));
