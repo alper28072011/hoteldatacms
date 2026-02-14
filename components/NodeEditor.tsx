@@ -13,20 +13,41 @@ import {
   Clock, Users, DollarSign, GripVertical, Type, Layers
 } from 'lucide-react';
 
-// --- HELPER COMPONENT: PORTAL-BASED EDUCATIONAL TOOLTIP ---
-// This component renders the tooltip into document.body to escape any overflow:hidden containers
-const InfoTooltip: React.FC<{ title: string; content: React.ReactNode }> = ({ title, content }) => {
+// --- HELPER COMPONENT: PORTAL-BASED EDUCATIONAL TOOLTIP WITH PLACEMENT ---
+type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
+
+const InfoTooltip: React.FC<{ title: string; content: React.ReactNode; placement?: TooltipPlacement }> = ({ title, content, placement = 'top' }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const [style, setStyle] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
 
   const handleMouseEnter = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setCoords({
-        top: rect.top - 8, // Position slightly above the icon
-        left: rect.left + (rect.width / 2) // Center horizontally relative to icon
-      });
+      let top = 0;
+      let left = 0;
+      
+      // Calculate position based on placement prop
+      switch(placement) {
+          case 'top':
+              top = rect.top - 10;
+              left = rect.left + (rect.width / 2);
+              break;
+          case 'bottom':
+              top = rect.bottom + 10;
+              left = rect.left + (rect.width / 2);
+              break;
+          case 'left':
+              top = rect.top + (rect.height / 2);
+              left = rect.left - 10;
+              break;
+          case 'right':
+              top = rect.top + (rect.height / 2);
+              left = rect.right + 10;
+              break;
+      }
+      
+      setStyle({ top, left });
       setIsVisible(true);
     }
   };
@@ -35,13 +56,33 @@ const InfoTooltip: React.FC<{ title: string; content: React.ReactNode }> = ({ ti
     setIsVisible(false);
   };
 
+  // Dynamic transform styles for the tooltip container
+  const getTransform = () => {
+      switch(placement) {
+          case 'top': return 'translate(-50%, -100%)';
+          case 'bottom': return 'translate(-50%, 0)';
+          case 'left': return 'translate(-100%, -50%)';
+          case 'right': return 'translate(0, -50%)';
+      }
+  };
+
+  // Dynamic arrow styles
+  const getArrowStyle = () => {
+      switch(placement) {
+          case 'top': return 'left-1/2 -bottom-1 -translate-x-1/2 border-r border-b';
+          case 'bottom': return 'left-1/2 -top-1 -translate-x-1/2 border-l border-t';
+          case 'left': return 'top-1/2 -right-1 -translate-y-1/2 border-t border-r';
+          case 'right': return 'top-1/2 -left-1 -translate-y-1/2 border-b border-l';
+      }
+  };
+
   return (
     <>
       <div 
         ref={triggerRef}
         onMouseEnter={handleMouseEnter} 
         onMouseLeave={handleMouseLeave}
-        className="group relative inline-flex items-center ml-2 align-middle cursor-help"
+        className="group relative inline-flex items-center ml-1.5 align-middle cursor-help"
       >
         <div className="text-slate-400 hover:text-indigo-600 transition-colors">
           <CircleHelp size={15} />
@@ -52,12 +93,12 @@ const InfoTooltip: React.FC<{ title: string; content: React.ReactNode }> = ({ ti
         <div 
             className="fixed z-[9999] w-72 pointer-events-none animate-in fade-in zoom-in-95 duration-200"
             style={{ 
-                top: coords.top, 
-                left: coords.left,
-                transform: 'translate(-50%, -100%)' // Shift up and center
+                top: style.top, 
+                left: style.left,
+                transform: getTransform()
             }}
         >
-            <div className="bg-slate-800 text-white text-xs rounded-lg shadow-2xl border border-slate-700 overflow-hidden mb-2">
+            <div className="bg-slate-800 text-white text-xs rounded-lg shadow-2xl border border-slate-700 overflow-hidden relative">
                 <div className="bg-slate-900/90 px-3 py-2.5 font-bold border-b border-white/10 text-indigo-200 flex items-center gap-2">
                     <Info size={12} className="shrink-0" /> {title}
                 </div>
@@ -65,8 +106,8 @@ const InfoTooltip: React.FC<{ title: string; content: React.ReactNode }> = ({ ti
                     {content}
                 </div>
             </div>
-            {/* Arrow Tip */}
-            <div className="absolute left-1/2 -bottom-1 w-3 h-3 bg-slate-800 border-r border-b border-slate-700 rotate-45 -translate-x-1/2 -translate-y-1/2"></div>
+            {/* Dynamic Arrow Tip */}
+            <div className={`absolute w-2.5 h-2.5 bg-slate-800 border-slate-700 rotate-45 ${getArrowStyle()}`}></div>
         </div>,
         document.body
       )}
@@ -95,6 +136,7 @@ const EventForm: React.FC<{ data: EventData, onChange: (d: EventData) => void }>
                 <InfoTooltip 
                     title="AI Takvim Motoru" 
                     content="Yapay zeka tarihleri dinamik hesaplar. Örn: 'İki Haftada Bir' seçerseniz, AI bugünün tarihine bakarak 'Bugün yoga var mı?' sorusunu döngüye göre yanıtlar." 
+                    placement="left"
                 />
                <select value={data.status} onChange={e => onChange({...data, status: e.target.value as any})} className={`text-xs font-bold px-2 py-1 rounded border ${data.status === 'active' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300'}`}>
                    <option value="active">Aktif</option>
@@ -155,7 +197,7 @@ const DiningForm: React.FC<{ data: DiningData, onChange: (d: DiningData) => void
             <div className="flex items-center justify-between border-b border-orange-200 pb-3">
                 <h4 className="text-sm font-bold text-orange-800 flex items-center gap-2"><Utensils size={18}/> Mutfak & Restoran Detayları</h4>
                 <div className="flex items-center gap-2">
-                    <InfoTooltip title="Yeme & İçme Mantığı" content="'Mutfak Tipi' ve 'Diyet Seçenekleri'ni belirtmek, misafir 'Vegan yemek var mı?' veya 'İtalyan restoranı nerede?' diye sorduğunda AI'ın doğru öneri yapmasını sağlar." />
+                    <InfoTooltip title="Yeme & İçme Mantığı" content="'Mutfak Tipi' ve 'Diyet Seçenekleri'ni belirtmek, misafir 'Vegan yemek var mı?' veya 'İtalyan restoranı nerede?' diye sorduğunda AI'ın doğru öneri yapmasını sağlar." placement="left" />
                     <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${data.concept === 'all_inclusive' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>{data.concept === 'all_inclusive' ? 'Her Şey Dahil' : 'Ekstra Ücretli'}</span>
                 </div>
             </div>
@@ -181,7 +223,7 @@ const RoomForm: React.FC<{ data: RoomData, onChange: (d: RoomData) => void }> = 
         <div className="space-y-6 bg-indigo-50 p-5 rounded-xl border border-indigo-100">
              <div className="flex items-center justify-between border-b border-indigo-200 pb-3">
                 <h4 className="text-sm font-bold text-indigo-800 flex items-center gap-2"><BedDouble size={18}/> Oda Özellikleri</h4>
-                <InfoTooltip title="Oda Eşleştirme" content="Kişi kapasitesi ve yatak tiplerini doğru girerseniz, AI '4 kişilik bir aile nerede kalabilir?' sorusuna doğru yanıt verir." />
+                <InfoTooltip title="Oda Eşleştirme" content="Kişi kapasitesi ve yatak tiplerini doğru girerseniz, AI '4 kişilik bir aile nerede kalabilir?' sorusuna doğru yanıt verir." placement="left" />
              </div>
              <div className="grid grid-cols-3 gap-3">
                 <div><label className="text-xs font-bold text-slate-500 uppercase">Boyut (m²)</label><input type="number" value={data.sizeSqM || ''} onChange={e => onChange({...data, sizeSqM: parseFloat(e.target.value)})} className="w-full mt-1 bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm text-slate-700 outline-none"/></div>
@@ -382,20 +424,23 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 <InfoTooltip 
                     title="Hiyerarşi Konumu" 
                     content="Bu alan, verinin ağaç yapısındaki yerini gösterir. Doğru klasörleme (Örn: 'Ana Havuz' öğesinin 'Havuzlar' kategorisi altında olması) Yapay Zeka'nın konuyu anlaması için kritiktir." 
+                    placement="bottom"
                 />
            </div>
         </div>
         
         <div className="flex items-center gap-3">
-           <div className="flex flex-col items-end">
-              <div className="flex items-center gap-1 mb-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Veri Tipi</span>
+           {/* REORGANIZED DATA TYPE SELECTOR */}
+           <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+              <div className="flex items-center gap-1.5 pl-2">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Veri Tipi</span>
                   <InfoTooltip 
                     title="Veri Tipleri Rehberi" 
                     content={nodeTypeContent}
+                    placement="bottom" 
                   />
               </div>
-              <select value={node.type} onChange={(e) => handleChange('type', e.target.value)} className="text-xs font-bold uppercase tracking-wide border border-slate-200 rounded px-2 py-1.5 bg-slate-50 text-slate-700 outline-none cursor-pointer hover:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all">
+              <select value={node.type} onChange={(e) => handleChange('type', e.target.value)} className="text-xs font-bold uppercase tracking-wide border-0 bg-white shadow-sm rounded px-2 py-1.5 text-slate-700 outline-none cursor-pointer hover:text-blue-600 focus:ring-2 focus:ring-blue-100 transition-all">
                   <optgroup label="Kapsayıcılar (Gruplama)">
                       <option value="category">Category (Kategori)</option>
                       <option value="list">List (Liste)</option>
@@ -412,6 +457,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                   </optgroup>
               </select>
            </div>
+
            <div className="h-8 w-px bg-slate-200 mx-1"></div>
            <button onClick={handleDeleteClick} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Öğeyi Sil"><Trash2 size={18} /></button>
         </div>
@@ -429,7 +475,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Başlık / İsim</label>
-                        <InfoTooltip title="İsimlendirme" content="Anlaşılır ve benzersiz isimler kullanın. 'Havuz' yerine 'Ana Açık Havuz' demek, karışıklığı önler." />
+                        <InfoTooltip title="İsimlendirme" content="Anlaşılır ve benzersiz isimler kullanın. 'Havuz' yerine 'Ana Açık Havuz' demek, karışıklığı önler." placement="bottom" />
                     </div>
                     
                     {/* SCHEMA SELECTOR */}
@@ -445,7 +491,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                             <option value="dining">🍽️ Restoran / Bar</option>
                             <option value="room">🛏️ Oda / Suit</option>
                         </select>
-                        <InfoTooltip title="Akıllı Şablonlar Nedir?" content="Bu şablonlar (Event, Room, Dining), AI'ın karmaşık verileri (Açılış Saatleri, Fiyatlar, Yaş Sınırları) daha iyi anlamasını sağlayan özel form alanları açar." />
+                        <InfoTooltip title="Akıllı Şablonlar Nedir?" content="Bu şablonlar (Event, Room, Dining), AI'ın karmaşık verileri (Açılış Saatleri, Fiyatlar, Yaş Sınırları) daha iyi anlamasını sağlayan özel form alanları açar." placement="bottom" />
                     </div>
                 </div>
                 <input type="text" value={node.name || ''} onChange={(e) => handleChange('name', e.target.value)} className="w-full bg-white text-xl font-bold text-slate-900 border-b-2 border-slate-100 px-2 py-2 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300" placeholder="Örn: Butler Servisi"/>
