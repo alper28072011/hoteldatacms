@@ -1,6 +1,7 @@
 
 export type NodeType = 'root' | 'category' | 'item' | 'field' | 'list' | 'menu' | 'menu_item' | 'event' | 'qa_pair' | 'policy' | 'note';
 
+// Legacy SchemaType kept for backward compatibility but deprecated in UI
 export type SchemaType = 'generic' | 'event' | 'dining' | 'room' | 'pool' | 'bar';
 
 // --- INTENT-DRIVEN ARCHITECTURE ---
@@ -10,71 +11,43 @@ export type IntentType = 'informational' | 'request' | 'policy' | 'complaint' | 
 export interface LocalizedText {
   tr: string;
   en: string;
-  [key: string]: string; // For future languages (de, ru, etc.)
+  [key: string]: string; 
 }
 
-// --- ROBUST EVENT SCHEDULING ---
-
 export interface ScheduleConfig {
-  frequency: 'once' | 'daily' | 'weekly' | 'biweekly'; // biweekly = her 2 haftada bir
-  
-  // Sezonluk Geçerlilik (Örn: 1 Mayıs - 31 Ekim arası)
-  validFrom?: string; // YYYY-MM-DD
-  validUntil?: string; // YYYY-MM-DD
-  
-  // Haftalık/İki Haftalık günler
-  activeDays: string[]; // ['Mon', 'Thu']
-  
-  // İki haftalık döngü için referans tarihi (Hangi haftada olduğumuzu hesaplamak için)
-  cycleAnchorDate?: string; // YYYY-MM-DD (Döngünün başladığı ilk Pazartesi)
-  
-  // Saatler
-  startTime: string; // "21:30"
-  endTime?: string; // "23:00"
-  
-  // İstisnalar (Örn: Yağmur nedeniyle iptal)
-  excludedDates?: string[]; // ['2024-06-12']
+  frequency: 'once' | 'daily' | 'weekly' | 'biweekly';
+  validFrom?: string; 
+  validUntil?: string; 
+  activeDays: string[]; 
+  cycleAnchorDate?: string; 
+  startTime: string; 
+  endTime?: string; 
+  excludedDates?: string[]; 
 }
 
 export interface EventData {
   schedule: ScheduleConfig;
   location: string;
-  
-  // Hedef Kitle
   ageGroup: 'all' | 'adults' | 'kids' | 'teens';
   minAge?: number;
-  
-  // Durum
   status: 'active' | 'cancelled' | 'moved';
-  statusReason?: string; // "Hava muhalefeti nedeniyle"
-  
-  // Finansal
+  statusReason?: string; 
   isPaid: boolean;
   price?: string;
   currency?: string;
   requiresReservation: boolean;
-  
-  // İçerik
-  performer?: string; // "Fire of Anatolia"
-  description?: string; // "Anadolu ateşinin büyüleyici dansı..."
-  tags: string[]; // ['Dance', 'Show', 'Live Music']
+  performer?: string; 
+  description?: string; 
+  tags: string[]; 
 }
-
-// --- DINING & CULINARY ---
 
 export interface DiningData {
   type: 'buffet' | 'alacarte' | 'snack' | 'patisserie';
-  cuisine: string; // "Italian", "International", "Ottoman"
-  
-  // Konsept Detayları
-  concept: 'all_inclusive' | 'extra_charge' | 'mixed'; // Mixed: Bazı içkiler ücretli
+  cuisine: string; 
+  concept: 'all_inclusive' | 'extra_charge' | 'mixed'; 
   reservationRequired: boolean;
   dressCode: string;
-  
-  // Öğün Saatleri (Array of shifts)
-  shifts: { name: string; start: string; end: string }[]; // [{name: 'Breakfast', start: '07:00', end: '10:00'}]
-  
-  // Özellikler & Diyet
+  shifts: { name: string; start: string; end: string }[]; 
   features: {
     hasKidsMenu: boolean;
     hasVeganOptions: boolean;
@@ -82,53 +55,57 @@ export interface DiningData {
     hasBabyChair: boolean;
     hasTerrace: boolean;
   };
-  
-  menuHighlights: string[]; // ["Sushi", "Steak", "Fresh Pasta"]
-  beverageHighlights: string[]; // ["Premium Whisky", "Fresh Orange Juice"]
+  menuHighlights: string[]; 
+  beverageHighlights: string[]; 
 }
-
-// --- ROOM & ACCOMMODATION ---
 
 export interface RoomData {
   sizeSqM: number;
   maxOccupancy: { adults: number; children: number; total: number };
-  
-  // Yatak Düzeni
-  bedConfiguration: string; // "1 French + 1 Single"
+  bedConfiguration: string; 
   pillowMenuAvailable: boolean;
-  
-  // Manzara & Konum
   view: 'sea' | 'land' | 'garden' | 'pool' | 'partial_sea';
   hasBalcony: boolean;
   hasJacuzzi: boolean;
-  
-  // Teknik & İmkanlar
-  amenities: string[]; // ["Espresso Machine", "Iron", "Smart TV", "High Speed Wifi"]
-  minibarContent: string[]; // ["Coke", "Beer", "Water", "Chocolate"]
-  bathroomDetails: string; // "Shower & Bathtub, Bulgari Amenities"
+  amenities: string[]; 
+  minibarContent: string[]; 
+  bathroomDetails: string; 
 }
+
+// --- DYNAMIC TEMPLATES & ATTRIBUTES ---
+
+export type FieldType = 
+  | 'text'        // Short text (Name, Title)
+  | 'textarea'    // Long text (Description, Ingredients)
+  | 'number'      // Integers/Floats (SqM, Capacity)
+  | 'boolean'     // Toggle (Has Balcony, Is Paid)
+  | 'select'      // Single choice dropdown
+  | 'multiselect' // Multiple tags
+  | 'date'        // Calendar date
+  | 'time'        // Clock time
+  | 'currency';   // Price field
 
 export interface NodeAttribute {
   id: string;
-  key: LocalizedText | string; // Updated to support localization
-  value: LocalizedText | string; // Updated to support localization
-  type: 'text' | 'boolean' | 'number' | 'select';
+  key: LocalizedText | string; 
+  value: LocalizedText | string; 
+  type: FieldType;
   options?: string[]; 
 }
 
-// --- DYNAMIC TEMPLATES ---
 export interface TemplateField {
   id: string;
-  key: string; // Internal machine key (e.g. 'calories')
-  label: LocalizedText; // Display label (e.g. TR: 'Kalori', EN: 'Calories')
-  type: 'text' | 'number' | 'boolean' | 'select';
-  options?: string[]; // CSV string or array for selects
+  key: string; // Machine key (e.g. 'opening_time')
+  label: LocalizedText; // Display label (e.g. TR: 'Açılış Saati')
+  type: FieldType;
+  options?: string[]; // For select/multiselect
   required: boolean;
+  aiDescription?: string; // Hint for AI: "This field represents the start time of the event"
 }
 
 export interface NodeTemplate {
   id: string;
-  name: string; // Template name (e.g. "Food Item Template")
+  name: string; 
   description?: string;
   fields: TemplateField[];
 }
@@ -137,56 +114,43 @@ export interface HotelNode {
   id: string;
   type: NodeType | string;
   
-  // MULTI-LANGUAGE FIELDS (Union type allows legacy string support during migration)
   name?: LocalizedText | string;
-  
-  // NEW: INTENT AWARENESS
   intent?: IntentType;
 
-  // NEW: SCHEMA AWARENESS
+  // Deprecated usage in favor of Template System, but kept for compatibility
   schemaType?: SchemaType; 
-  data?: EventData | DiningData | RoomData | any; // Structured payload based on schemaType
+  data?: any; 
 
-  // NEW: TEMPLATE SYSTEM
   appliedTemplateId?: string | null;
 
-  // PRIMARY CONTENT
-  value?: LocalizedText | string; // Main description or generated summary
-  description?: LocalizedText | string; // Internal AI notes / Context
+  value?: LocalizedText | string; 
+  description?: LocalizedText | string; 
   
-  // DYNAMIC ATTRIBUTES
   attributes?: NodeAttribute[];
-  
-  // HIERARCHY
   children?: HotelNode[];
   
-  // LEGACY FIELDS (Kept for backward compatibility)
   price?: string | number | null;
   tags?: string[];
   question?: string;
   answer?: LocalizedText | string;
   
-  // Metadata fields
   lastSaved?: number; 
   [key: string]: any;
 }
 
-// New type for listing hotels without fetching full tree
 export interface HotelSummary {
   id: string;
   name: string;
 }
 
-// Template definition (Hotel Cloning)
 export interface HotelTemplate {
   id: string;
   name: string;
   description: string;
   createdAt: number;
-  data: HotelNode; // The structural snapshot
+  data: HotelNode; 
 }
 
-// AI Persona Definition
 export interface AIPersona {
   id: string;
   name: string;        
@@ -211,7 +175,6 @@ export interface ChatMessage {
   isThinking?: boolean;
 }
 
-// AI Architect Types
 export interface ArchitectAction {
   type: 'add' | 'update' | 'delete';
   targetId: string; 
@@ -223,8 +186,6 @@ export interface ArchitectResponse {
   summary: string;
   actions: ArchitectAction[];
 }
-
-// --- DATA HEALTH TYPES ---
 
 export type IssueSeverity = 'critical' | 'warning' | 'optimization';
 
@@ -245,12 +206,10 @@ export interface HealthIssue {
 }
 
 export interface HealthReport {
-  score: number; // 0-100
+  score: number; 
   summary: string;
   issues: HealthIssue[];
 }
-
-// --- DATA CHECK TYPES ---
 
 export interface SuggestedAction {
   type: 'add' | 'update';
