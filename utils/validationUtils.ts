@@ -49,8 +49,8 @@ export const runLocalValidation = (root: HotelNode): HealthIssue[] => {
   // 3. Tekrarlanan Kardeş Öğeler
   issues.push(...findDuplicateSiblings(root));
 
-  // 4. İlişkisel Bütünlük (Kırık Linkler - Basit)
-  issues.push(...findBrokenReferences(root, definedTerms));
+  // 4. Semantik Tutarlılık (Yeni: Intent vs Konum)
+  issues.push(...findSemanticMismatches(root));
 
   // 5. Eksik Hizmet Detayları (Saat, Konum vb.)
   issues.push(...findMissingServiceDetails(root));
@@ -155,11 +155,59 @@ const findDuplicateSiblings = (node: HotelNode, issues: HealthIssue[] = []): Hea
   return issues;
 };
 
-const findBrokenReferences = (node: HotelNode, definedTerms: Set<string>, issues: HealthIssue[] = []): HealthIssue[] => {
-    // Basit heuristic: Büyük harfle başlayan ve tırnak içinde olmayan kelimeler başka bir servise referans olabilir.
-    // Şimdilik false-positive riskinden dolayı devre dışı bırakıldı veya çok basit tutuldu.
+const findSemanticMismatches = (node: HotelNode, parentCategoryName: string = '', issues: HealthIssue[] = []): HealthIssue[] => {
+    
+    const nodeName = (node.name || '').toLowerCase();
+    const parentName = parentCategoryName.toLowerCase();
+    const intent = node.intent || 'informational'; // Default intent
+
+    // Rule 1: 'Policy' intent found in general/info categories without 'rule' keywords
+    if (intent === 'policy') {
+        const isInPolicyCategory = parentName.includes('rule') || parentName.includes('kural') || parentName.includes('politik') || parentName.includes('yasak');
+        if (parentName && !isInPolicyCategory && (parentName.includes('bilgi') || parentName.includes('info'))) {
+            issues.push(createIssue(
+                node,
+                'warning',
+                `"${node.name}" bir KURAL (Policy) ancak "Bilgi" kategorisinde duruyor.`,
+                'Niyeti Değiştir',
+                { intent: 'informational' }
+            ));
+        }
+    }
+
+    // Rule 2: 'Safety' intent items should not be buried deep or obscure
+    if (intent === 'safety' && !parentName.includes('safety') && !parentName.includes('güvenlik') && !parentName.includes('acil')) {
+         issues.push(createIssue(
+                node,
+                'optimization',
+                `"${node.name}" bir GÜVENLİK öğesi. "Acil Durum" veya "Güvenlik" kategorisinde olması daha doğru olur.`,
+                undefined
+            ));
+    }
+
+    // Rule 3: Complaint/Request items in generic lists
+    if ((intent === 'complaint' || intent === 'request') && parentName.includes('genel')) {
+        issues.push(createIssue(
+            node,
+            'optimization',
+            `"${node.name}" bir talep/şikayet konusu. Operasyonel bir kategoriye (Örn: Oda Servisi, Teknik Servis) taşınması önerilir.`,
+            undefined
+        ));
+    }
+
+    // Rule 4: Intent missing on critical items (policy type nodes)
+    if (node.type === 'policy' && (!node.intent || node.intent === 'informational')) {
+         issues.push(createIssue(
+            node,
+            'warning',
+            `Bu öğe bir Politika tipi ancak niyeti 'Policy' olarak işaretlenmemiş.`,
+            'Niyeti Düzelt',
+            { intent: 'policy' }
+        ));
+    }
+
     if (node.children) {
-        node.children.forEach(c => findBrokenReferences(c, definedTerms, issues));
+        node.children.forEach(c => findSemanticMismatches(c, node.name || '', issues));
     }
     return issues;
 }

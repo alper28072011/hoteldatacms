@@ -3,6 +3,9 @@ export type NodeType = 'root' | 'category' | 'item' | 'field' | 'list' | 'menu' 
 
 export type SchemaType = 'generic' | 'event' | 'dining' | 'room' | 'pool' | 'bar';
 
+// --- INTENT-DRIVEN ARCHITECTURE ---
+export type IntentType = 'informational' | 'request' | 'policy' | 'complaint' | 'safety' | 'navigation';
+
 // --- ROBUST EVENT SCHEDULING ---
 
 export interface ScheduleConfig {
@@ -111,6 +114,9 @@ export interface HotelNode {
   type: NodeType | string;
   name?: string;
   
+  // NEW: INTENT AWARENESS
+  intent?: IntentType;
+
   // NEW: SCHEMA AWARENESS
   schemaType?: SchemaType; 
   data?: EventData | DiningData | RoomData | any; // Structured payload based on schemaType

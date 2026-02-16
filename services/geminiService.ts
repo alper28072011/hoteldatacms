@@ -90,12 +90,31 @@ export const chatWithData = async (
     ${toneBlock}
     ${rulesBlock}
 
-    TALİMATLAR:
-    1. Sadece aşağıda verilen OTEL VERİTABANI bilgilerini kullanarak cevap ver. Bilgi uydurma.
-    2. **ZAMAN FARKINDALIĞI**: Kullanıcı "Şu an ne yapabilirim?" diye sorarsa, veritabanındaki etkinlik saatlerini ve restoran açılış saatlerini şu anki saat (${timeStr}) ile karşılaştır.
-    3. **TÜRKÇE**: Cevapların tamamı akıcı ve doğal Türkçe olmalı.
+    **GÖREV AKIŞI (INTENT-DRIVEN LOGIC):**
     
-    OTEL VERİTABANI (Okunabilir Format):
+    ADIM 1: KULLANICI NİYETİNİ (INTENT) ANALİZ ET
+    Kullanıcının mesajını şu kategorilerden birine koy:
+    - **Informational**: Bilgi istiyor (Saat kaçta açılıyor? Havuz nerede?)
+    - **Request**: Bir hizmet istiyor (Odaya havlu, taksi çağırma)
+    - **Policy**: Kural soruyor (Sigara içiliyor mu? Evcil hayvan yasak mı?)
+    - **Complaint**: Şikayet ediyor (Klima bozuk, yemek soğuk)
+    - **Safety**: Acil durum veya güvenlik (Doktor var mı? Yangın merdiveni nerede?)
+    
+    ADIM 2: VERİ FİLTRELEME VE ODAKLANMA
+    Veritabanında cevap ararken, tespit ettiğin NİYET'e uygun etiketlere (Tags) ve [INTENT: ...] işaretlerine öncelik ver.
+    - **Eğer COMPLAINT ise**: Prosedürlere, misafir ilişkileri numaralarına ve çözüm protokollerine bak. "Özür dile ve çözüm sun".
+    - **Eğer SAFETY ise**: En kısa, en net ve hayati bilgiyi ver.
+    - **Eğer REQUEST ise**: O hizmetin "Ücretli mi?" ve "Nasıl talep edilir?" bilgisini kontrol et.
+    
+    ADIM 3: CEVAP OLUŞTURMA
+    - Cevabın başına (kendi iç monoloğun olarak, kullanıcıya göstermeden) şunu düşün: "Tespit Edilen Niyet: [INTENT]".
+    - Sonra kullanıcıya cevabı ver.
+    
+    KURALLAR:
+    1. Sadece aşağıda verilen OTEL VERİTABANI bilgilerini kullanarak cevap ver. Bilgi uydurma.
+    2. **TÜRKÇE**: Cevapların tamamı akıcı ve doğal Türkçe olmalı.
+    
+    OTEL VERİTABANI (Intent Etiketli):
     ${textContext}
     `;
 
@@ -103,7 +122,7 @@ export const chatWithData = async (
       model: modelConfig.model,
       config: { 
           systemInstruction,
-          temperature: activePersona ? activePersona.creativity : 0.7 
+          temperature: activePersona ? activePersona.creativity : 0.5 
       },
       history: history.map(h => ({
         role: h.role,
@@ -119,40 +138,35 @@ export const chatWithData = async (
   }
 };
 
-// --- ARCHITECT COMMAND PROCESSOR (Enhanced) ---
+// --- ARCHITECT COMMAND PROCESSOR (Enhanced with Intent & Routing) ---
 export const processArchitectCommand = async (data: HotelNode, userCommand: string): Promise<ArchitectResponse> => {
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
-    const prompt = `Sen bir Otel CMS (İçerik Yönetim Sistemi) için "Akıllı Veri Mimarı ve Sistem Yöneticisi"sin.
+    const prompt = `Sen bir Otel CMS (İçerik Yönetim Sistemi) için "Akıllı Veri Mimarı ve Sınıflandırma Uzmanı"sın.
     
     GÖREVİN:
-    Aşağıdaki tam otel veri ağacını (JSON) tara ve kullanıcının doğal dil ile verdiği komutu uygulamak için gerekli teknik işlemleri belirle.
+    Kullanıcının doğal dil komutunu analiz et, verinin NİYETİNİ (Intent) belirle ve bu niyete en uygun kategoriyi bularak işlemi planla.
     
     KULLANICI KOMUTU: "${userCommand}"
     
-    **TİP ÇIKARIM KURALLARI (TYPE INFERENCE RULES - CRITICAL):**
-    1. **POLİTİKALAR/KURALLAR**: Eğer kullanıcı bir "Politika", "Kural", "Şart" veya "Not" ekliyorsa, tip **'policy'** veya **'note'** olmalıdır. ASLA 'category' yapma (kırmızı uyarı ikonu çıkıyor).
-    2. **MENÜLER**: "Menü" oluşturuluyorsa tip **'menu'**. Menüye yemek/içecek ekleniyorsa tip **'menu_item'**.
-    3. **LİSTELER**: Sadece isim listesi ise (örn: TV Kanalları) tip **'list'** ve alt öğeler **'item'**.
-    4. **KLASÖRLER**: Sadece ve sadece başka şeyleri gruplamak içinse **'category'**.
+    **ADIM 1: NİYET (INTENT) TESPİTİ**
+    Metni analiz et ve şu 6 niyetten birini seç:
+    - 'informational': Genel bilgi, saatler, tanımlar.
+    - 'request': Misafirin isteyebileceği hizmetler (Oda servisi, havlu).
+    - 'policy': Yasaklar, kurallar, şartlar (Yaş sınırı, kıyafet kuralı).
+    - 'complaint': Şikayet yönetimi ile ilgili prosedürler.
+    - 'safety': Güvenlik, acil durum, sağlık.
+    - 'navigation': Konum, harita, yön tarifi.
     
-    İŞLEM ADIMLARI (DÜŞÜNME SÜRECİ):
-    1. **ARAMA & TESPİT**: Komutta geçen anahtar kelimeleri (Örn: "Kapalı Havuz") tüm JSON içinde ara. İsimleri, açıklamaları, etiketleri ve özellikleri (attributes) kontrol et.
-    2. **MEVCUT DURUM ANALİZİ**:
-       - Bulduğun öğenin özelliklerinde (attributes) istenen bilgi zaten var mı? (Örn: Key: "Çalışma Saatleri", Value: "09:00-18:00").
-       - Yoksa, ana değerinde (value) veya açıklamasında (description) mı yazıyor?
-       - Yoksa, bu bir 'schemaType' (event/dining) verisi içinde mi? (data objesi).
-    3. **EYLEM BELİRLEME**:
-       - **GÜNCELLEME (Update)**: Eğer veri varsa, onu güncelle.
-       - **EKLEME (Add)**: Eğer veri yoksa ama uygun bir kategori varsa (Örn: "Havuzlar" kategorisi), yeni bir öğe ekle.
-       - **SİLME (Delete)**: Kullanıcı istediyse sil.
+    **ADIM 2: HEDEF KATEGORİ YÖNLENDİRMESİ**
+    Mevcut JSON ağacını tara ve NİYET'e en uygun "Category" tipindeki ebeveyni bul.
+    - Eğer Intent = 'policy' ise -> "Kurallar", "Politikalar", "Rules" içeren kategorileri ara.
+    - Eğer Intent = 'request' ise -> "Hizmetler", "Services", "İstekler" kategorilerini ara.
+    - Eğer Intent = 'safety' ise -> "Güvenlik", "Acil Durum" kategorilerini ara.
+    - Eğer uygun kategori yoksa, Root (Ana Dizin) altına ekle.
     
-    KURALLAR:
-    - **ID KULLANIMI**: İşlemler için mutlaka mevcut öğelerin 'id'lerini kullan. Uydurma ID kullanma (ekleme hariç).
-    - **ÖZELLİK (ATTRIBUTE) GÜNCELLEME**: Eğer bir özelliği (key-value) değiştireceksen, "features" objesi içinde gönder. Örn: "features": { "Çalışma Saatleri": "08:00 - 20:00" }.
-    - **ŞEMA (SCHEMA) GÜNCELLEME**: Eğer 'data' objesini (Örn: Event saatleri) değiştireceksen, sadece değişen kısımları değil, o yapının tutarlı halini gönder.
-    - **TÜRKÇE**: Özet (summary) ve neden (reason) alanları kesinlikle Türkçe olmalı.
+    **ADIM 3: EYLEM OLUŞTURMA**
     
     VERİTABANI (JSON):
     \`\`\`json
@@ -161,18 +175,18 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     
     DÖNÜŞ FORMATI (JSON):
     {
-      "summary": "Kullanıcıya ne yapacağını anlatan detaylı Türkçe özet.",
+      "summary": "Kullanıcıya ne yapacağını anlatan detaylı Türkçe özet. Örn: 'Bu veriyi Yasaklar kategorisine, Policy niyetiyle ekliyorum.'",
       "actions": [
         {
           "type": "add" | "update" | "delete",
-          "targetId": "Hedef ID (Mevcut bir ID olmalı, kök dizine ekliyorsan root ID)",
+          "targetId": "Hedef ID (Ekleme yapıyorsan bulduğun Kategori ID'si, güncelleme ise o öğenin ID'si)",
           "data": { 
              "name": "...", 
-             "type": "...", // YUKARIDAKİ TİP KURALLARINA UY
+             "type": "item" | "policy" | "note" | "menu_item", 
              "value": "...", 
+             "intent": "informational" | "request" | "policy" | "complaint" | "safety" | "navigation",
              "description": "...",
-             "features": { "Key": "Value" }, // Özellik güncellemeleri için
-             "data": { ... } // Schema tipi veriler için (Event, Dining)
+             "features": { "Key": "Value" } 
           },
           "reason": "Teknik açıklama (Türkçe)"
         }
@@ -211,6 +225,7 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
     
     const prompt = `Bu yüklenen dosyayı (Resim/PDF) analiz et ve otel verilerini çıkararak mevcut yapıya entegre et.
+    Verileri çıkarırken her biri için doğru 'intent' (informational, policy, request, safety, complaint) değerini ata.
     
     Mevcut Veri:
     \`\`\`json
@@ -254,16 +269,15 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
     }
     
     const prompt = `
-    Sen bir Otel Veritabanı için "Veri İlişkisi ve Mantık Denetçisi"sin.
+    Sen bir Otel Veritabanı için "Semantik Tutarlılık ve Veri İlişkisi Denetçisi"sin.
     
     GÖREV:
-    Aşağıdaki otel verilerini (Markdown formatında) ilişkisel ve mantıksal tutarsızlıklar açısından analiz et.
+    Aşağıdaki otel verilerini (Markdown formatında, [INTENT] etiketleri ile) analiz et.
     
-    ŞUNLARA BAK:
-    1. **Kırık Referanslar**: (Örn: Bir oda "VIP Kahvaltı" içeriyor diyor ama "VIP Kahvaltı" listelerde yok).
-    2. **Çelişkiler**: (Örn: "Havuz Bar 24 saat açık" diyor ama başka yerde "Havuz 20:00'de kapanır" yazıyor).
-    3. **Mantıksal Boşluklar**: (Örn: Bir "Steakhouse" var ama açılış saati veya kıyafet kuralı girilmemiş).
-    4. **Yazım Hataları**: İsimlerdeki bariz hatalar.
+    ŞUNLARA ODAKLAN:
+    1. **Niyet (Intent) Uyuşmazlığı**: Bir kategori "Bilgi" ise, altında sert bir "Yasak/Policy" niyeti taşıyan öğe varsa uyar.
+    2. **Mantıksal Tutarsızlık**: "7/24 Açık" yazıp attribute olarak "Kapanış: 22:00" girilmişse uyar.
+    3. **Kırık Referanslar**: (Örn: Bir oda "VIP Kahvaltı" içeriyor diyor ama "VIP Kahvaltı" listelerde yok).
     
     GİRDİ VERİSİ:
     ${textContext}
@@ -278,11 +292,11 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
           "nodeId": "Bulabildiğin en yakın ID veya öğe ismi",
           "nodeName": "Öğe ismi",
           "severity": "critical" | "warning" | "optimization",
-          "message": "Sorunun Türkçe açıklaması",
+          "message": "Sorunun Türkçe açıklaması (Örn: Bu bir KURAL verisidir, 'policies_rules' altına taşınması önerilir)",
           "fix": { // OPSİYONEL
              "targetId": "ilgili ID",
              "action": "update",
-             "data": { "key": "value" },
+             "data": { "intent": "policy" }, // Örn: Niyeti düzelt
              "description": "Öneri (Türkçe)"
           }
         }
@@ -379,13 +393,12 @@ export const autoFixDatabase = async (rootNode: HotelNode): Promise<AutoFixActio
        -> AKSİYON: type: 'changeType', payload: { type: 'category' }
     
     2. **ANLAMSAL (SEMANTİK) TUTARSIZLIK**:
-       - Öğelerin bulundukları kategoriye uygun olup olmadığını kontrol et.
-       - Örn: "Oda Servisi Menüsü" içinde "Yüzme Havuzu Kuralları" varsa, bu yanlıştır.
+       - Öğelerin Intent (Niyet) değerlerini kontrol et. Eğer bir öğe 'policy' niyetine sahipse ama 'General Info' altında duruyorsa, onu 'Rules' kategorisine taşı.
        -> AKSİYON: type: 'move', destinationId: 'İlgili en uygun Kategori ID'si (yoksa root ID)'
     
-    3. **İÇERİK ZENGİNLEŞTİRME**:
-       - Eğer bir öğenin ismi var ama 'value' (değer/açıklama) kısmı boşsa ve özellikleri (attributes) varsa; özelliklerden yola çıkarak Türkçe bir özet cümle yaz.
-       -> AKSİYON: type: 'update', payload: { value: 'Oluşturulan Türkçe Cümle' }
+    3. **EKSİK NİYET**:
+       - Eğer bir öğenin intent değeri yoksa veya yanlışsa (Örn: "Yüzmek Yasaktır" -> intent: informational), bunu düzelt.
+       -> AKSİYON: type: 'update', payload: { intent: 'safety' }
     
     GİRDİ VERİSİ:
     \`\`\`json

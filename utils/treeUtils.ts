@@ -267,12 +267,14 @@ export const getInitialData = (): HotelNode => ({
       id: "gen-info",
       type: "category",
       name: "Genel Bilgiler",
+      intent: "informational",
       children: [
         {
           id: "g1",
           type: "field",
           name: "Otel Adı",
           value: "Grand React Hotel",
+          intent: "informational",
           attributes: [
             { id: 'attr-1', key: 'Yıldız', value: '5', type: 'number' }
           ]
@@ -367,13 +369,14 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   
   const nameMatch = (node.name || '').toLowerCase().includes(lowerQuery);
   const valueMatch = (node.value || '').toLowerCase().includes(lowerQuery);
+  const intentMatch = (node.intent || '').toLowerCase().includes(lowerQuery);
   const tagsMatch = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
   const attributesMatch = node.attributes?.some(attr => 
     (attr.key || '').toLowerCase().includes(lowerQuery) || 
     (attr.value || '').toLowerCase().includes(lowerQuery)
   );
   
-  const isMatch = nameMatch || valueMatch || tagsMatch || attributesMatch;
+  const isMatch = nameMatch || valueMatch || tagsMatch || attributesMatch || intentMatch;
 
   let filteredChildren: HotelNode[] = [];
   if (node.children) {
@@ -523,6 +526,9 @@ export const generateAIText = async (
     const name = node.name || 'İsimsiz';
     const value = node.value || node.answer || '';
     
+    // INTENT-AWARE TEXT GENERATION
+    const intentTag = node.intent ? ` [INTENT: ${node.intent.toUpperCase()}]` : '';
+    
     const indent = "  ".repeat(depth);
     let line = "";
 
@@ -530,12 +536,12 @@ export const generateAIText = async (
     
     if (isContainer) {
        if (depth < 3) {
-         line = `\n${"#".repeat(depth + 1)} ${name}`;
+         line = `\n${"#".repeat(depth + 1)} ${name}${intentTag}`;
        } else {
-         line = `${indent}- **[${type.toUpperCase()}] ${name}**`;
+         line = `${indent}- **[${type.toUpperCase()}] ${name}**${intentTag}`;
        }
     } else {
-       line = `${indent}- ${name}`;
+       line = `${indent}- ${name}${intentTag}`;
     }
 
     if (value) {
@@ -610,6 +616,7 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
 
   if (node.id) semanticData.id = node.id;
   if (node.type) semanticData.type = node.type;
+  if (node.intent) semanticData.intent = node.intent; // Include Intent in clean JSON
   if (node.name) semanticData.name = node.name;
   if (node.value) semanticData.value = node.value;
   if (node.description) semanticData.description = node.description; 
@@ -650,7 +657,7 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
   const flatNodes = flattenTreeForExport(root);
   const totalNodes = flatNodes.length;
   
-  const headers = ['Sistem_ID', 'Yol', 'Tip', 'Şema', 'İsim', 'Değer', 'Özellikler', 'Yapısal_Veri'];
+  const headers = ['Sistem_ID', 'Yol', 'Tip', 'Intent', 'Şema', 'İsim', 'Değer', 'Özellikler', 'Yapısal_Veri'];
   const rows: string[] = ['\uFEFF' + headers.join(',')]; 
 
   const safeCSV = (val: any) => {
@@ -664,6 +671,7 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
         safeCSV(node.id),
         safeCSV(path.join(' > ')),
         safeCSV(node.type),
+        safeCSV(node.intent || 'informational'),
         safeCSV(node.schemaType || 'generic'),
         safeCSV(node.name),
         safeCSV(node.value),

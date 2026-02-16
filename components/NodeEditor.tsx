@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { HotelNode, NodeType, NodeAttribute, SchemaType, EventData, DiningData, RoomData } from '../types';
+import { HotelNode, NodeType, NodeAttribute, SchemaType, EventData, DiningData, RoomData, IntentType } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes, generateSlug } from '../utils/treeUtils';
 import { generateNodeContext, generateValueFromAttributes } from '../services/geminiService';
 import { validateNodeInput } from '../utils/validationUtils';
@@ -10,7 +10,8 @@ import {
   Tag, Trash2, LayoutDashboard, Box, BrainCircuit, Sparkles, Loader2, 
   ChevronRight, Database, Check, Settings, List, FileText, CircleHelp, 
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
-  Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3
+  Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
+  Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: PORTAL-BASED EDUCATIONAL TOOLTIP WITH PLACEMENT ---
@@ -137,6 +138,7 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
                 <div className="border-b border-slate-200 pb-6 mb-8">
                     <div className="flex items-center gap-2 mb-2">
                         <span className="bg-slate-800 text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider">{node.type}</span>
+                        {node.intent && <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider">INTENT: {node.intent}</span>}
                         {node.schemaType && <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider">{node.schemaType}</span>}
                     </div>
                     <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">{node.name || 'İsimsiz Başlık'}</h1>
@@ -204,6 +206,7 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
             <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-slate-800">{node.name}</span>
+                    {node.intent && <span className="text-[9px] font-bold text-emerald-600 uppercase bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">{node.intent}</span>}
                     {node.value && <span className="text-sm text-slate-600 font-normal border-l border-slate-200 pl-2 ml-1">{node.value}</span>}
                 </div>
                 
@@ -594,6 +597,39 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       return <option value={value} disabled={!isAllowed}>{label}</option>;
   };
 
+  // --- INTENT SELECTOR RENDERER ---
+  const renderIntentSelector = () => {
+      const intentOptions: { value: IntentType; label: string; icon: React.ReactNode }[] = [
+          { value: 'informational', label: 'Genel Bilgi', icon: <Info size={14}/> },
+          { value: 'request', label: 'Hizmet İsteği', icon: <HandPlatter size={14}/> },
+          { value: 'policy', label: 'Kural / Politika', icon: <Shield size={14}/> },
+          { value: 'complaint', label: 'Şikayet / Destek', icon: <MessageCircleQuestion size={14}/> },
+          { value: 'safety', label: 'Güvenlik & Acil', icon: <AlertTriangle size={14}/> },
+          { value: 'navigation', label: 'Yön / Konum', icon: <Milestone size={14}/> },
+      ];
+
+      return (
+          <div className="flex items-center gap-2 bg-emerald-50/50 p-1.5 rounded-lg border border-emerald-100 ml-3">
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider pl-1">Amaç (Intent)</span>
+              <select 
+                value={node.intent || 'informational'} 
+                onChange={(e) => handleChange('intent', e.target.value)}
+                className="text-xs bg-transparent font-bold text-emerald-800 outline-none cursor-pointer hover:bg-emerald-100 rounded px-1 py-0.5 transition-colors"
+              >
+                  {intentOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                      </option>
+                  ))}
+              </select>
+              <InfoTooltip 
+                title="Intent-Driven Architecture" 
+                content="Bu alan AI'ın veriyi nasıl kullanacağını belirler. Örneğin 'Şikayet' seçerseniz, AI bu veriyi misafir sorunlarını çözerken kullanır." 
+              />
+          </div>
+      );
+  };
+
   if (node.type === 'root') {
       return (
       <div className="h-full flex flex-col bg-slate-50/30">
@@ -651,6 +687,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
         </div>
         
         <div className="flex items-center gap-3">
+           {renderIntentSelector()}
            <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
               <div className="flex items-center gap-1.5 pl-2">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Veri Tipi</span>
