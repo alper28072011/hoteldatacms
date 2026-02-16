@@ -2,7 +2,15 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { HotelNode, AIPersona, NodeTemplate } from '../types';
 import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree, findNodeById, getSmartDefaultChildType, checkIdExists } from '../utils/treeUtils';
-import { updateHotelData, getPersonas, savePersona as savePersonaToDb, deletePersona as deletePersonaFromDb, getNodeTemplates, saveNodeTemplate, deleteNodeTemplate } from '../services/firestoreService';
+import { 
+  updateHotelData, 
+  getPersonas, 
+  savePersona as savePersonaToDb, 
+  deletePersona as deletePersonaFromDb, 
+  getNodeTemplates, 
+  saveNodeTemplate as saveNodeTemplateToDb, // Aliased to prevent collision
+  deleteNodeTemplate as deleteNodeTemplateFromDb // Aliased to prevent collision
+} from '../services/firestoreService';
 
 interface HotelContextType {
   hotelData: HotelNode;
@@ -211,19 +219,19 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addNodeTemplate = useCallback(async (template: NodeTemplate) => {
       if (!hotelId) return;
       setNodeTemplates(prev => [...prev, template]);
-      await saveNodeTemplate(hotelId, template);
+      await saveNodeTemplateToDb(hotelId, template); // Fixed call
   }, [hotelId]);
 
   const updateNodeTemplate = useCallback(async (template: NodeTemplate) => {
       if (!hotelId) return;
       setNodeTemplates(prev => prev.map(t => t.id === template.id ? template : t));
-      await saveNodeTemplate(hotelId, template);
+      await saveNodeTemplateToDb(hotelId, template); // Fixed call
   }, [hotelId]);
 
   const deleteNodeTemplate = useCallback(async (id: string) => {
       if (!hotelId) return;
       setNodeTemplates(prev => prev.filter(t => t.id !== id));
-      await deleteNodeTemplate(hotelId, id);
+      await deleteNodeTemplateFromDb(hotelId, id); // Fixed call
   }, [hotelId]);
 
   return (

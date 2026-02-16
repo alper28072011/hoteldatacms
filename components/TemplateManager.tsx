@@ -5,7 +5,7 @@ import { useHotel } from '../contexts/HotelContext';
 import { generateId } from '../utils/treeUtils';
 import { 
     X, Plus, Trash2, Save, LayoutTemplate, GripVertical, Check, Info, 
-    Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit
+    Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2
 } from 'lucide-react';
 
 interface TemplateManagerProps {
@@ -88,22 +88,31 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [formData, setFormData] = useState<NodeTemplate>(emptyTemplate);
   const [showTypeSelector, setShowTypeSelector] = useState<number | null>(null); // Index of field showing selector
+  
+  // Feedback States
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
+
+  // Drag & Drop State
+  const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
 
   // Initialize create mode
   useEffect(() => {
     if (isOpen && !selectedTemplateId) {
         setFormData({ ...emptyTemplate, id: generateId('tpl') });
+        setSaveStatus('idle');
     }
   }, [isOpen, selectedTemplateId]);
 
   const handleSelect = (tpl: NodeTemplate) => {
       setSelectedTemplateId(tpl.id);
       setFormData(JSON.parse(JSON.stringify(tpl))); 
+      setSaveStatus('idle');
   };
 
   const handleCreateNew = () => {
       setSelectedTemplateId(null);
       setFormData({ ...emptyTemplate, id: generateId('tpl') });
+      setSaveStatus('idle');
   };
 
   const handleAddField = (type: FieldType = 'text') => {
@@ -135,6 +144,9 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
 
   const handleSave = async () => {
       if (!formData.name.trim()) return;
+      
+      setSaveStatus('saving');
+
       // Auto-generate keys if missing
       const processedFields = formData.fields.map(f => ({
           ...f,
@@ -143,18 +155,56 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
       
       const finalData = { ...formData, fields: processedFields };
 
-      if (selectedTemplateId) {
-          await updateNodeTemplate(finalData);
-      } else {
-          await addNodeTemplate(finalData);
+      try {
+        if (selectedTemplateId) {
+            await updateNodeTemplate(finalData);
+        } else {
+            await addNodeTemplate(finalData);
+        }
+        setSelectedTemplateId(finalData.id);
+        setSaveStatus('success');
+        
+        // Reset success message after 2 seconds
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch (e) {
+        console.error(e);
+        setSaveStatus('idle');
       }
-      setSelectedTemplateId(finalData.id);
   };
 
   const handleDeleteTemplate = async (id: string) => {
       if (!window.confirm("Bu şablonu silmek istediğinize emin misiniz?")) return;
       await deleteNodeTemplate(id);
       if (selectedTemplateId === id) handleCreateNew();
+  };
+
+  // --- DRAG AND DROP HANDLERS ---
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+      setDraggedItemIndex(index);
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox requires dataTransfer data to be set
+      e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+      e.preventDefault();
+      // Only reorder if dragging over a different item
+      if (draggedItemIndex === null || draggedItemIndex === index) return;
+
+      const newFields = [...formData.fields];
+      const draggedItem = newFields[draggedItemIndex];
+      
+      // Remove from old pos
+      newFields.splice(draggedItemIndex, 1);
+      // Insert at new pos
+      newFields.splice(index, 0, draggedItem);
+      
+      setFormData(prev => ({ ...prev, fields: newFields }));
+      setDraggedItemIndex(index);
+  };
+
+  const handleDragEnd = () => {
+      setDraggedItemIndex(null);
   };
 
   if (!isOpen) return null;
@@ -238,10 +288,20 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                     </div>
                     <button 
                         onClick={handleSave}
-                        disabled={!formData.name.trim()}
-                        className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        disabled={!formData.name.trim() || saveStatus === 'saving'}
+                        className={`px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all min-w-[140px] justify-center ${
+                            saveStatus === 'success' 
+                            ? 'bg-green-600 text-white hover:bg-green-700' 
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        }`}
                     >
-                        <Save size={18} /> Değişiklikleri Kaydet
+                        {saveStatus === 'saving' ? <Loader2 size={18} className="animate-spin" /> : 
+                         saveStatus === 'success' ? <Check size={18} /> : 
+                         <Save size={18} />}
+                        
+                        {saveStatus === 'saving' ? 'Kaydediliyor' : 
+                         saveStatus === 'success' ? 'Kaydedildi' : 
+                         'Kaydet'}
                     </button>
                 </div>
 
@@ -261,8 +321,17 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                         )}
 
                         {formData.fields.map((field, index) => (
-                            <div key={field.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm group hover:border-indigo-200 transition-all relative">
-                                <div className="absolute left-2 top-6 text-slate-300 cursor-move hover:text-slate-500"><GripVertical size={20} /></div>
+                            <div 
+                                key={field.id} 
+                                className={`bg-white p-5 rounded-xl border shadow-sm group transition-all relative ${draggedItemIndex === index ? 'opacity-50 border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-indigo-200'}`}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, index)}
+                                onDragOver={(e) => handleDragOver(e, index)}
+                                onDragEnd={handleDragEnd}
+                            >
+                                <div className="absolute left-2 top-6 text-slate-300 cursor-grab active:cursor-grabbing hover:text-slate-500">
+                                    <GripVertical size={20} />
+                                </div>
                                 
                                 <div className="pl-8 grid grid-cols-12 gap-4 items-start">
                                     {/* Row 1: Basic Info */}
