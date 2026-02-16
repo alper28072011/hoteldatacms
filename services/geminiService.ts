@@ -23,6 +23,25 @@ export interface AutoFixAction {
   severity: 'critical' | 'structural' | 'content';
 }
 
+export const translateText = async (text: string, targetLang: string): Promise<string> => {
+    if (!text || !text.trim()) return '';
+    try {
+        const prompt = `Translate the following hotel content to ${targetLang === 'en' ? 'English' : 'Turkish'}. 
+        Keep formatting, numbers, and technical terms. Return ONLY the translation.
+        
+        Text: "${text}"`;
+        
+        const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt
+        });
+        return response.text?.trim() || '';
+    } catch (e) {
+        console.error("Translation failed", e);
+        return text; // Fallback to original
+    }
+}
+
 export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
   try {
     let textContext = await generateAIText(data, () => {});
@@ -114,7 +133,7 @@ export const chatWithData = async (
     1. Sadece aşağıda verilen OTEL VERİTABANI bilgilerini kullanarak cevap ver. Bilgi uydurma.
     2. **TÜRKÇE**: Cevapların tamamı akıcı ve doğal Türkçe olmalı.
     
-    OTEL VERİTABANI (Intent Etiketli):
+    OTEL VERİTABANI (Intent Etiketli - Rosetta Format: TR (EN)):
     ${textContext}
     `;
 
@@ -181,11 +200,11 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
           "type": "add" | "update" | "delete",
           "targetId": "Hedef ID (Ekleme yapıyorsan bulduğun Kategori ID'si, güncelleme ise o öğenin ID'si)",
           "data": { 
-             "name": "...", 
+             "name": { "tr": "...", "en": "..." }, 
              "type": "item" | "policy" | "note" | "menu_item", 
-             "value": "...", 
+             "value": { "tr": "...", "en": "..." }, 
              "intent": "informational" | "request" | "policy" | "complaint" | "safety" | "navigation",
-             "description": "...",
+             "description": { "tr": "...", "en": "..." },
              "features": { "Key": "Value" } 
           },
           "reason": "Teknik açıklama (Türkçe)"
@@ -226,6 +245,7 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
     
     const prompt = `Bu yüklenen dosyayı (Resim/PDF) analiz et ve otel verilerini çıkararak mevcut yapıya entegre et.
     Verileri çıkarırken her biri için doğru 'intent' (informational, policy, request, safety, complaint) değerini ata.
+    Ayrıca isim ve açıklamaları hem Türkçe (tr) hem İngilizce (en) olarak çıkar.
     
     Mevcut Veri:
     \`\`\`json

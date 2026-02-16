@@ -11,6 +11,10 @@ interface HotelContextType {
   lastSavedAt: number | null;
   hasUnsavedChanges: boolean; // Exposed for UI
   
+  // UI Preferences
+  displayLanguage: 'tr' | 'en';
+  setDisplayLanguage: (lang: 'tr' | 'en') => void;
+
   // Persona State
   personas: AIPersona[];
   activePersonaId: string;
@@ -43,6 +47,9 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   
   // Tracks if data has changed since last save
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // UI State
+  const [displayLanguage, setDisplayLanguage] = useState<'tr' | 'en'>('tr');
 
   // Persona State
   const [personas, setPersonas] = useState<AIPersona[]>([]);
@@ -122,8 +129,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const newChild: HotelNode = {
         id: generateId(prefix),
         type: finalType,
-        name: finalType === 'menu_item' ? 'Yeni Ürün' : 'Yeni Öğe',
-        value: ''
+        name: { tr: finalType === 'menu_item' ? 'Yeni Ürün' : 'Yeni Öğe', en: finalType === 'menu_item' ? 'New Item' : 'New Node' },
+        value: { tr: '', en: '' }
       };
       
       return addChildToNode(prev, parentId, newChild);
@@ -201,6 +208,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       lastSavedAt,
       hasUnsavedChanges,
       forceSave,
+      displayLanguage,
+      setDisplayLanguage,
       personas,
       activePersonaId,
       setActivePersonaId,

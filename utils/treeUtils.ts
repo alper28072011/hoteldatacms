@@ -1,5 +1,5 @@
 
-import { HotelNode, EventData, DiningData, RoomData, NodeType } from "../types";
+import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText } from "../types";
 
 // Generate a simple unique ID with high collision resistance
 // Updated to accept a custom prefix derived from content
@@ -8,14 +8,46 @@ export const generateId = (prefix: string = 'node'): string => {
 };
 
 // Converts human readable text to a safe ID slug (e.g. "Main Pool Rules" -> "main-pool-rules")
-export const generateSlug = (text: string): string => {
-  return text
+export const generateSlug = (text: string | LocalizedText | undefined): string => {
+  const str = typeof text === 'object' ? text.tr : (text || '');
+  return str
     .toString()
     .toLowerCase()
     .trim()
     .replace(/[\s\W-]+/g, '-') // Replace spaces and non-word chars with -
     .replace(/^-+|-+$/g, '')   // Remove leading/trailing -
     .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c'); // Turkish char support
+};
+
+// --- MULTI-LANGUAGE UTILITIES ---
+
+/**
+ * Returns a localized string. Falls back to TR, then EN, then empty string.
+ * Handles both legacy string data and new LocalizedText objects.
+ */
+export const getLocalizedValue = (val: LocalizedText | string | undefined, lang: 'tr' | 'en'): string => {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  return val[lang] || val['tr'] || val['en'] || '';
+};
+
+/**
+ * Ensures data is in LocalizedText format. Used for migration on read/write.
+ */
+export const ensureLocalized = (val: LocalizedText | string | undefined): LocalizedText => {
+  if (!val) return { tr: '', en: '' };
+  if (typeof val === 'string') return { tr: val, en: '' };
+  return { tr: val.tr || '', en: val.en || '', ...val };
+};
+
+/**
+ * Formats text for AI Context as "Turkish (English)" if both exist.
+ */
+const getRosettaText = (val: LocalizedText | string | undefined): string => {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (val.tr && val.en) return `${val.tr} (${val.en})`;
+  return val.tr || val.en || '';
 };
 
 // Recursively checks if an ID exists in the tree
@@ -260,20 +292,20 @@ export const moveNode = (root: HotelNode, sourceId: string, targetId: string, po
 export const getInitialData = (): HotelNode => ({
   id: "root",
   type: "root",
-  name: "Yeni Otel",
+  name: { tr: "Yeni Otel", en: "New Hotel" },
   attributes: [],
   children: [
     {
       id: "gen-info",
       type: "category",
-      name: "Genel Bilgiler",
+      name: { tr: "Genel Bilgiler", en: "General Info" },
       intent: "informational",
       children: [
         {
           id: "g1",
           type: "field",
-          name: "Otel Adı",
-          value: "Grand React Hotel",
+          name: { tr: "Otel Adı", en: "Hotel Name" },
+          value: { tr: "Grand React Hotel", en: "Grand React Hotel" },
           intent: "informational",
           attributes: [
             { id: 'attr-1', key: 'Yıldız', value: '5', type: 'number' }
@@ -338,12 +370,15 @@ export const analyzeHotelStats = (root: HotelNode): HotelStats => {
     } else {
       stats.fillableItems++;
       let isEmpty = false;
+      const valStr = getLocalizedValue(node.value, 'tr');
+      const ansStr = getLocalizedValue(node.answer, 'tr');
+
       if (type === 'qa_pair') {
-         if (!node.answer || !node.answer.trim()) isEmpty = true;
+         if (!ansStr || !ansStr.trim()) isEmpty = true;
       } else if (type === 'menu_item') {
          if (!node.price) isEmpty = true;
       } else {
-         if ((!node.value || !node.value.trim()) && !node.data) isEmpty = true;
+         if ((!valStr || !valStr.trim()) && !node.data) isEmpty = true;
       }
       if (isEmpty) stats.emptyItems++;
     }
@@ -367,8 +402,12 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
 
   const lowerQuery = query.toLowerCase();
   
-  const nameMatch = (node.name || '').toLowerCase().includes(lowerQuery);
-  const valueMatch = (node.value || '').toLowerCase().includes(lowerQuery);
+  // Search in both languages for name and value
+  const name = typeof node.name === 'object' ? `${node.name.tr} ${node.name.en}` : (node.name || '');
+  const value = typeof node.value === 'object' ? `${node.value.tr} ${node.value.en}` : (node.value || '');
+  
+  const nameMatch = name.toLowerCase().includes(lowerQuery);
+  const valueMatch = value.toLowerCase().includes(lowerQuery);
   const intentMatch = (node.intent || '').toLowerCase().includes(lowerQuery);
   const tagsMatch = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
   const attributesMatch = node.attributes?.some(attr => 
@@ -410,10 +449,10 @@ const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
   const traverse = (node: HotelNode) => {
     // Index definable items
     if (['list', 'menu', 'policy', 'category'].includes(String(node.type))) {
-      const name = node.name?.trim();
+      const name = getLocalizedValue(node.name, 'tr').trim();
       if (name && name.length > 3) {
         const childrenSummary = node.children
-          ?.map(c => c.name + (c.value ? `: ${c.value}` : ''))
+          ?.map(c => getLocalizedValue(c.name, 'tr') + (getLocalizedValue(c.value, 'tr') ? `: ${getLocalizedValue(c.value, 'tr')}` : ''))
           .slice(0, 5) 
           .join(', ');
         
@@ -423,10 +462,12 @@ const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
       }
     }
 
-    if (node.name?.toLowerCase().includes('general rule') || node.tags?.includes('global')) {
+    const nameStr = getLocalizedValue(node.name, 'tr').toLowerCase();
+    if (nameStr.includes('general rule') || node.tags?.includes('global')) {
        if (node.children) {
           node.children.forEach(c => {
-             if (c.value) index.globalRules.push(`${c.name}: ${c.value}`);
+             const val = getLocalizedValue(c.value, 'tr');
+             if (val) index.globalRules.push(`${getLocalizedValue(c.name, 'tr')}: ${val}`);
           });
        }
     }
@@ -442,6 +483,7 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
     if (!node.schemaType || !node.data) return '';
 
     const { schemaType, data } = node;
+    const name = getRosettaText(node.name);
 
     // --- EVENT TRANSLATOR ---
     if (schemaType === 'event') {
@@ -453,7 +495,7 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
         let scheduleText = "";
         const s = d.schedule;
         
-        if (!s) return `[AKTİVİTE: ${node.name}] Takvim bilgisi eksik.`;
+        if (!s) return `[AKTİVİTE: ${name}] Takvim bilgisi eksik.`;
 
         if (s.frequency === 'daily') {
             scheduleText = "HER GÜN.";
@@ -471,7 +513,7 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
         const cost = d.isPaid ? `ÜCRETLİ (${d.price || 'Fiyat sorunuz'})` : 'ÜCRETSİZ';
         const audience = d.ageGroup === 'all' ? 'Herkes' : d.ageGroup === 'kids' ? 'SADECE ÇOCUK (4-12)' : d.ageGroup === 'adults' ? 'SADECE YETİŞKİN (18+)' : 'Genç';
 
-        return `[AKTİVİTE: ${node.name}] ${scheduleText} Saat: ${time}. Konum: ${d.location}. Kitle: ${audience}. ${cost}. ${d.requiresReservation ? 'Rezervasyon Gerekli.' : ''}`;
+        return `[AKTİVİTE: ${name}] ${scheduleText} Saat: ${time}. Konum: ${d.location}. Kitle: ${audience}. ${cost}. ${d.requiresReservation ? 'Rezervasyon Gerekli.' : ''}`;
     }
 
     // --- DINING TRANSLATOR ---
@@ -485,7 +527,7 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
         if (d.features?.hasVeganOptions) feats.push("Vegan Seçenek");
         if (d.features?.hasGlutenFreeOptions) feats.push("Glutensiz");
         
-        return `[RESTORAN: ${node.name}] Tip: ${d.type}. Mutfak: ${d.cuisine}. Saatler: ${shifts}. Konsept: ${concept}. Kıyafet: ${d.dressCode}. İmkanlar: ${feats.join(', ')}. Öne Çıkanlar: ${d.menuHighlights?.join(', ')}.`;
+        return `[RESTORAN: ${name}] Tip: ${d.type}. Mutfak: ${d.cuisine}. Saatler: ${shifts}. Konsept: ${concept}. Kıyafet: ${d.dressCode}. İmkanlar: ${feats.join(', ')}. Öne Çıkanlar: ${d.menuHighlights?.join(', ')}.`;
     }
 
     // --- ROOM TRANSLATOR ---
@@ -494,7 +536,7 @@ const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
         const balc = d.hasBalcony ? 'Balkonlu' : 'Balkonsuz';
         const occ = `Kapasite: ${d.maxOccupancy?.adults} Yetişkin + ${d.maxOccupancy?.children} Çocuk`;
         
-        return `[ODA TİPİ: ${node.name}] Boyut: ${d.sizeSqM}m². ${occ}. Manzara: ${d.view}. Yatak: ${d.bedConfiguration}. ${balc}. Donanım: ${d.amenities?.join(', ')}. Minibar: ${d.minibarContent?.join(', ')}.`;
+        return `[ODA TİPİ: ${name}] Boyut: ${d.sizeSqM}m². ${occ}. Manzara: ${d.view}. Yatak: ${d.bedConfiguration}. ${balc}. Donanım: ${d.amenities?.join(', ')}. Minibar: ${d.minibarContent?.join(', ')}.`;
     }
 
     return '';
@@ -523,8 +565,10 @@ export const generateAIText = async (
   for (let i = 0; i < totalNodes; i++) {
     const { node, depth } = flatNodes[i];
     const type = String(node.type);
-    const name = node.name || 'İsimsiz';
-    const value = node.value || node.answer || '';
+    
+    // ROSETTA STONE FORMAT: Turkish (English)
+    const name = getRosettaText(node.name);
+    const value = getRosettaText(node.value || node.answer);
     
     // INTENT-AWARE TEXT GENERATION
     const intentTag = node.intent ? ` [INTENT: ${node.intent.toUpperCase()}]` : '';
@@ -547,7 +591,7 @@ export const generateAIText = async (
     if (value) {
       line += `: ${value}`;
       
-      const definition = globalIndex.definitions.get(value.trim());
+      const definition = globalIndex.definitions.get(getLocalizedValue(node.name, 'tr').trim());
       if (definition && type !== 'list' && type !== 'menu') {
         line += ` _(Sistem Tanımı: ${definition}...)_`;
       }
@@ -582,7 +626,8 @@ export const generateAIText = async (
     lines.push(line);
 
     if (node.description) {
-       lines.push(`${indent}  > Not: ${node.description}`);
+       const desc = getRosettaText(node.description);
+       lines.push(`${indent}  > Not: ${desc}`);
     }
 
     if (i % CHUNK_SIZE === 0) {
@@ -616,8 +661,8 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
 
   if (node.id) semanticData.id = node.id;
   if (node.type) semanticData.type = node.type;
-  if (node.intent) semanticData.intent = node.intent; // Include Intent in clean JSON
-  if (node.name) semanticData.name = node.name;
+  if (node.intent) semanticData.intent = node.intent; 
+  if (node.name) semanticData.name = node.name; // Keep Localized Object
   if (node.value) semanticData.value = node.value;
   if (node.description) semanticData.description = node.description; 
   if (node.tags) semanticData.tags = node.tags;
@@ -632,7 +677,7 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
       }));
   }
 
-  const currentPath = parentPath ? `${parentPath} > ${node.name || 'İsimsiz'}` : (node.name || 'İsimsiz');
+  const currentPath = parentPath ? `${parentPath} > ${getLocalizedValue(node.name, 'en') || 'Untitled'}` : (getLocalizedValue(node.name, 'en') || 'Untitled');
   semanticData._path = currentPath;
 
   if (node.children && node.children.length > 0) {
@@ -646,7 +691,7 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
   const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[] }[] => {
     const result: { node: HotelNode, path: string[] }[] = [];
     const traverse = (node: HotelNode, path: string[]) => {
-      const currentPath = [...path, node.name || 'İsimsiz'];
+      const currentPath = [...path, getLocalizedValue(node.name, 'tr') || 'İsimsiz'];
       result.push({ node, path: currentPath });
       if (node.children) node.children.forEach(child => traverse(child, currentPath));
     };
@@ -657,7 +702,7 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
   const flatNodes = flattenTreeForExport(root);
   const totalNodes = flatNodes.length;
   
-  const headers = ['Sistem_ID', 'Yol', 'Tip', 'Intent', 'Şema', 'İsim', 'Değer', 'Özellikler', 'Yapısal_Veri'];
+  const headers = ['Sistem_ID', 'Yol', 'Tip', 'Intent', 'Şema', 'İsim_TR', 'İsim_EN', 'Değer_TR', 'Değer_EN', 'Özellikler', 'Yapısal_Veri'];
   const rows: string[] = ['\uFEFF' + headers.join(',')]; 
 
   const safeCSV = (val: any) => {
@@ -667,14 +712,19 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
 
   for (let i = 0; i < totalNodes; i++) {
      const { node, path } = flatNodes[i];
+     const nameObj = ensureLocalized(node.name);
+     const valueObj = ensureLocalized(node.value || node.answer);
+
      rows.push([
         safeCSV(node.id),
         safeCSV(path.join(' > ')),
         safeCSV(node.type),
         safeCSV(node.intent || 'informational'),
         safeCSV(node.schemaType || 'generic'),
-        safeCSV(node.name),
-        safeCSV(node.value),
+        safeCSV(nameObj.tr),
+        safeCSV(nameObj.en),
+        safeCSV(valueObj.tr),
+        safeCSV(valueObj.en),
         safeCSV(JSON.stringify(node.attributes || [])),
         safeCSV(node.data ? JSON.stringify(node.data) : '')
      ].join(','));

@@ -13,6 +13,7 @@ import {
   select
 } from 'firebase/firestore';
 import { HotelNode, HotelSummary, HotelTemplate, AIPersona } from '../types';
+import { getLocalizedValue } from '../utils/treeUtils';
 
 const HOTELS_COLLECTION = 'hotels';
 const STRUCTURE_SUBCOLLECTION = 'structure'; // The sub-collection for sharded data
@@ -154,7 +155,8 @@ export const createNewHotel = async (initialData: HotelNode): Promise<string> =>
     saveLocalHotelData(newId, newHotelData);
     
     const list = getLocalHotelsList();
-    list.push({ id: newId, name: initialData.name || "Untitled Hotel" });
+    const nameStr = getLocalizedValue(initialData.name, 'en') || "Untitled Hotel";
+    list.push({ id: newId, name: nameStr });
     saveLocalHotelsList(list);
     
     return newId;
@@ -232,13 +234,14 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
     // Update Local Index if name changed
     const list = getLocalHotelsList();
     const index = list.findIndex(h => h.id === hotelId);
+    const newName = getLocalizedValue(data.name, 'en') || "Untitled Hotel";
     if (index !== -1) {
-        if (list[index].name !== data.name) {
-            list[index].name = data.name || "Untitled Hotel";
+        if (list[index].name !== newName) {
+            list[index].name = newName;
             saveLocalHotelsList(list);
         }
     } else {
-        list.push({ id: hotelId, name: data.name || "Untitled Hotel" });
+        list.push({ id: hotelId, name: newName });
         saveLocalHotelsList(list);
     }
   }
@@ -324,9 +327,10 @@ export const getHotelsList = async (): Promise<HotelSummary[]> => {
     const hotels: HotelSummary[] = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
+      const name = getLocalizedValue(data.name, 'en') || "Untitled Hotel";
       hotels.push({
         id: doc.id,
-        name: data.name || "Untitled Hotel"
+        name: name
       });
     });
     return hotels;

@@ -6,6 +6,13 @@ export type SchemaType = 'generic' | 'event' | 'dining' | 'room' | 'pool' | 'bar
 // --- INTENT-DRIVEN ARCHITECTURE ---
 export type IntentType = 'informational' | 'request' | 'policy' | 'complaint' | 'safety' | 'navigation';
 
+// --- MULTI-LANGUAGE SUPPORT ---
+export interface LocalizedText {
+  tr: string;
+  en: string;
+  [key: string]: string; // For future languages (de, ru, etc.)
+}
+
 // --- ROBUST EVENT SCHEDULING ---
 
 export interface ScheduleConfig {
@@ -112,7 +119,9 @@ export interface NodeAttribute {
 export interface HotelNode {
   id: string;
   type: NodeType | string;
-  name?: string;
+  
+  // MULTI-LANGUAGE FIELDS (Union type allows legacy string support during migration)
+  name?: LocalizedText | string;
   
   // NEW: INTENT AWARENESS
   intent?: IntentType;
@@ -122,8 +131,8 @@ export interface HotelNode {
   data?: EventData | DiningData | RoomData | any; // Structured payload based on schemaType
 
   // PRIMARY CONTENT
-  value?: string; // Main description or generated summary
-  description?: string; // Internal AI notes / Context
+  value?: LocalizedText | string; // Main description or generated summary
+  description?: LocalizedText | string; // Internal AI notes / Context
   
   // DYNAMIC ATTRIBUTES
   attributes?: NodeAttribute[];
@@ -135,7 +144,7 @@ export interface HotelNode {
   price?: string | number | null;
   tags?: string[];
   question?: string;
-  answer?: string;
+  answer?: LocalizedText | string;
   
   // Metadata fields
   lastSaved?: number; 

@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HotelNode } from '../types';
 import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield, Tag, Box } from 'lucide-react';
-import { isLeafNode } from '../utils/treeUtils';
+import { isLeafNode, getLocalizedValue } from '../utils/treeUtils';
+import { useHotel } from '../contexts/HotelContext';
 
 interface TreeViewNodeProps {
   node: HotelNode;
@@ -13,7 +14,6 @@ interface TreeViewNodeProps {
   forceExpand?: boolean;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragOver: (e: React.DragEvent, id: string) => void;
-  // Updated signature to include position
   onDrop: (e: React.DragEvent, targetId: string, position: 'inside' | 'before' | 'after') => void;
 }
 
@@ -42,20 +42,22 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   level = 0,
   forceExpand = false,
   onDragStart,
-  // onDragOver prop is kept for compatibility but logic is handled internally for specific zones
   onDrop
 }) => {
   const [isExpanded, setIsExpanded] = useState(level === 0);
   const [hasRenderedChildren, setHasRenderedChildren] = useState(level === 0 || forceExpand);
   
-  // New State for Smart Drop Zones
   const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | 'inside' | null>(null);
   
   const nodeRef = useRef<HTMLDivElement>(null);
+  const { displayLanguage } = useHotel(); // Consume language context
 
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === node.id;
   const isLeaf = isLeafNode(String(node.type));
+  
+  // Get localized name based on context
+  const displayName = getLocalizedValue(node.name, displayLanguage);
 
   useEffect(() => {
     if (forceExpand && hasChildren) {
@@ -85,26 +87,21 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     onDragStart(e, node.id);
   };
 
-  // --- SMART DRAG OVER LOGIC ---
   const handleDragOverInternal = (e: React.DragEvent) => {
-    e.preventDefault(); // Necessary to allow dropping
+    e.preventDefault(); 
     e.stopPropagation();
 
     if (!nodeRef.current) return;
 
     const rect = nodeRef.current.getBoundingClientRect();
-    const y = e.clientY - rect.top; // Y position relative to the element
+    const y = e.clientY - rect.top; 
     const height = rect.height;
 
-    // Logic: Top 25% -> Before, Bottom 25% -> After, Middle 50% -> Inside
     if (y < height * 0.25) {
         setDragOverPosition('top');
     } else if (y > height * 0.75) {
         setDragOverPosition('bottom');
     } else {
-        // If it's a leaf node, we shouldn't allow 'inside' drop technically, 
-        // but maybe the user wants to convert it to a folder? 
-        // For now, let's allow it but the moveNode logic might block strict types if we enforced it deeply.
         setDragOverPosition('inside');
     }
   };
@@ -123,10 +120,8 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     if (dragOverPosition === 'top') position = 'before';
     else if (dragOverPosition === 'bottom') position = 'after';
     
-    // Safety: Reset state
     setDragOverPosition(null);
     
-    // Check if dropping on itself (handled by parent usually, but good to check)
     const sourceId = e.dataTransfer.getData('nodeId');
     if (sourceId === node.id) return;
 
@@ -150,7 +145,6 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
         onDragLeave={handleDragLeaveInternal}
         onDrop={handleDropInternal}
       >
-        {/* --- VISUAL DROP INDICATORS --- */}
         {dragOverPosition === 'top' && (
             <div className="absolute top-0 left-0 w-full h-[2px] bg-blue-500 z-50 pointer-events-none shadow-sm" />
         )}
@@ -158,7 +152,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
             <div className="absolute bottom-0 left-0 w-full h-[2px] bg-blue-500 z-50 pointer-events-none shadow-sm" />
         )}
 
-        <div className="flex items-center flex-1 overflow-hidden pointer-events-none"> {/* content pointer-events-none to prevent flickering */}
+        <div className="flex items-center flex-1 overflow-hidden pointer-events-none">
           <button 
             type="button"
             onClick={handleExpand}
@@ -176,7 +170,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
           </span>
           
           <span className={`text-sm truncate transition-colors duration-200 ${isSelected ? 'font-medium text-blue-700' : 'text-slate-600'}`}>
-            {node.name || <span className="italic opacity-50">Unnamed {node.type}</span>}
+            {displayName || <span className="italic opacity-50">Untitled</span>}
           </span>
         </div>
 
@@ -220,7 +214,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
                   level={level + 1}
                   forceExpand={forceExpand}
                   onDragStart={onDragStart}
-                  onDragOver={(e) => {}} // No-op, handled internally
+                  onDragOver={(e) => {}} 
                   onDrop={onDrop}
                 />
             ))}
@@ -229,9 +223,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     </div>
   );
 }, (prev, next) => {
-  // RELAXED COMPARISON to fix "stuck selection" bugs.
-  // We strictly check if the node object reference changed or the selection state changed.
-  // We ignore function props as they are stable from App.tsx context/useCallbacks.
+  // Relaxed comparison
   return prev.node === next.node && prev.selectedId === next.selectedId && prev.forceExpand === next.forceExpand;
 });
 
