@@ -38,8 +38,9 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
 
     const handleAutoTranslate = async () => {
         setIsTranslating(true);
-        const sourceLang = activeTab === 'tr' ? 'tr' : 'en';
-        const targetLang = activeTab === 'tr' ? 'en' : 'tr';
+        // Logic: If I am in EN, translate FROM TR. If I am in TR, translate FROM EN.
+        const targetLang = activeTab;
+        const sourceLang = activeTab === 'tr' ? 'en' : 'tr';
         const sourceText = data[sourceLang];
 
         if (sourceText) {
@@ -48,6 +49,12 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
         }
         setIsTranslating(false);
     };
+
+    // Show translate button if:
+    // 1. Current field is empty
+    // 2. The *other* language has content to translate from
+    const sourceLang = activeTab === 'tr' ? 'en' : 'tr';
+    const canTranslate = !data[activeTab] && data[sourceLang] && data[sourceLang].trim().length > 0;
 
     return (
         <div className={`space-y-1 ${className}`}>
@@ -92,15 +99,16 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                     />
                 )}
                 
-                {/* Auto Translate Button - Check other language emptiness */}
-                {data[activeTab] && !data[activeTab === 'tr' ? 'en' : 'tr'] && (
+                {/* Auto Translate Button (Pull from other lang) */}
+                {canTranslate && (
                     <button 
                         onClick={handleAutoTranslate}
                         disabled={isTranslating}
-                        className="absolute right-2 bottom-1.5 p-1 bg-violet-50 text-violet-600 rounded-md hover:bg-violet-100 transition-colors opacity-0 group-hover:opacity-100"
-                        title={`Auto Translate to ${activeTab === 'tr' ? 'English' : 'Turkish'}`}
+                        className="absolute right-2 bottom-1.5 p-1 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-md hover:bg-indigo-100 transition-colors z-10 flex items-center gap-1"
+                        title={`Translate from ${sourceLang.toUpperCase()}`}
                     >
                         {isTranslating ? <Loader2 size={10} className="animate-spin"/> : <RefreshCw size={10} />}
+                        <span className="text-[9px] font-bold">{sourceLang.toUpperCase()}'den Çevir</span>
                     </button>
                 )}
             </div>
@@ -401,6 +409,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   
   const [isGeneratingContext, setIsGeneratingContext] = useState(false);
   const [isGeneratingValue, setIsGeneratingValue] = useState(false);
+  const [isBulkTranslating, setIsBulkTranslating] = useState(false); // NEW: Bulk Translate State
+  
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [newAttrKey, setNewAttrKey] = useState<LocalizedText>({ tr: '', en: '' });
@@ -574,6 +584,44 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             onUpdate(node.id, { [node.type === 'qa_pair' ? 'answer' : 'value']: newVal });
         }
     } catch (e) { console.error(e); } finally { setIsGeneratingValue(false); }
+  };
+
+  const handleBulkTranslateAttributes = async () => {
+      if (!node.attributes || node.attributes.length === 0) return;
+      setIsBulkTranslating(true);
+      try {
+          const newAttributes = await Promise.all(node.attributes.map(async (attr) => {
+              // Ensure localization objects
+              const keyObj = ensureLocalized(attr.key);
+              const valObj = ensureLocalized(attr.value);
+              
+              let newKeyEn = keyObj.en;
+              let newValEn = valObj.en;
+
+              // Translate KEY if EN is empty and TR exists
+              if (!newKeyEn && keyObj.tr) {
+                  newKeyEn = await translateText(keyObj.tr, 'en');
+              }
+
+              // Translate VALUE if EN is empty and TR exists
+              if (!newValEn && valObj.tr) {
+                  newValEn = await translateText(valObj.tr, 'en');
+              }
+
+              return {
+                  ...attr,
+                  key: { ...keyObj, en: newKeyEn },
+                  value: { ...valObj, en: newValEn }
+              };
+          }));
+          
+          onUpdate(node.id, { attributes: newAttributes });
+      } catch (e) {
+          console.error("Bulk translation failed", e);
+          alert("Çeviri sırasında bir hata oluştu.");
+      } finally {
+          setIsBulkTranslating(false);
+      }
   };
 
   const handleAddAttribute = () => {
@@ -821,7 +869,21 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <h3 className="text-sm font-bold text-slate-700">Ekstra Özellikler (Key-Value)</h3>
                         <InfoTooltip title="Teknik Özellikler" content="Buraya 'Anahtar: Değer' çiftleri girin. Artık hem anahtar hem değer çok dillidir." />
                     </div>
-                    <span className="text-xs text-slate-400">{node.attributes?.length || 0} özellik</span>
+                    
+                    <div className="flex items-center gap-3">
+                        {activeTab === 'en' && node.attributes && node.attributes.length > 0 && (
+                            <button 
+                                onClick={handleBulkTranslateAttributes}
+                                disabled={isBulkTranslating}
+                                className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 rounded text-[10px] font-bold transition-colors"
+                                title="Translate all missing English attributes from Turkish"
+                            >
+                                {isBulkTranslating ? <Loader2 size={12} className="animate-spin"/> : <Globe size={12} />}
+                                Tümünü Çevir (EN)
+                            </button>
+                        )}
+                        <span className="text-xs text-slate-400">{node.attributes?.length || 0} özellik</span>
+                    </div>
                 </div>
                 <div className="p-6 space-y-3">
                     {node.attributes && node.attributes.map(attr => (
