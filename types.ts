@@ -110,8 +110,8 @@ export interface RoomData {
 
 export interface NodeAttribute {
   id: string;
-  key: string; 
-  value: string; 
+  key: LocalizedText | string; // Updated to support localization
+  value: LocalizedText | string; // Updated to support localization
   type: 'text' | 'boolean' | 'number' | 'select';
   options?: string[]; 
 }

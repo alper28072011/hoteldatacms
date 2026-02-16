@@ -23,9 +23,10 @@ interface LocalizedInputProps {
     label?: string;
     tooltip?: string;
     className?: string;
+    compact?: boolean; // New prop for attribute list
 }
 
-const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeholder, multiline = false, label, tooltip, className }) => {
+const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeholder, multiline = false, label, tooltip, className, compact = false }) => {
     const [activeTab, setActiveTab] = useState<'tr' | 'en'>('tr');
     const [isTranslating, setIsTranslating] = useState(false);
     const data = ensureLocalized(value);
@@ -49,11 +50,11 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
 
     return (
         <div className={`space-y-1 ${className}`}>
-            {label && (
+            {(label || !compact) && (
                 <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
-                        {tooltip && <InfoTooltip title={label} content={tooltip} placement="bottom" />}
+                        {label && <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>}
+                        {tooltip && <InfoTooltip title={label || ''} content={tooltip} placement="bottom" />}
                     </div>
                     <div className="flex items-center bg-slate-100 rounded-md p-0.5">
                         <button 
@@ -85,20 +86,20 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                         type="text" 
                         value={data[activeTab]} 
                         onChange={(e) => handleChange(activeTab, e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        className={`w-full bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}
                         placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
                     />
                 )}
                 
-                {/* Auto Translate Button (Only shows if target is empty and source has text) */}
+                {/* Auto Translate Button */}
                 {data[activeTab] && !data[activeTab === 'tr' ? 'en' : 'tr'] && (
                     <button 
                         onClick={handleAutoTranslate}
                         disabled={isTranslating}
-                        className="absolute right-2 bottom-2 p-1.5 bg-violet-50 text-violet-600 rounded-md hover:bg-violet-100 transition-colors opacity-0 group-hover:opacity-100"
+                        className="absolute right-2 bottom-1.5 p-1 bg-violet-50 text-violet-600 rounded-md hover:bg-violet-100 transition-colors opacity-0 group-hover:opacity-100"
                         title={`Auto Translate to ${activeTab === 'tr' ? 'English' : 'Turkish'}`}
                     >
-                        {isTranslating ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12} />}
+                        {isTranslating ? <Loader2 size={10} className="animate-spin"/> : <Sparkles size={10} />}
                     </button>
                 )}
             </div>
@@ -300,7 +301,7 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
                     <div className="flex flex-wrap gap-1.5 mt-2">
                         {node.attributes.map(attr => (
                             <span key={attr.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-50 text-slate-500 border border-slate-200 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-100 transition-colors print:border-slate-400 print:text-slate-700">
-                                <span className="opacity-70 mr-1">{attr.key}:</span> {attr.value}
+                                <span className="opacity-70 mr-1">{getLocalizedValue(attr.key, displayLanguage)}:</span> {getLocalizedValue(attr.value, displayLanguage)}
                             </span>
                         ))}
                     </div>
@@ -321,8 +322,6 @@ const LivePreview: React.FC<{ node: HotelNode; level?: number }> = ({ node, leve
 
 // --- SUB-COMPONENTS FOR SCHEMAS ---
 const EventForm: React.FC<{ data: EventData, onChange: (d: EventData) => void }> = ({ data, onChange }) => {
-  // ... (Existing EventForm logic remains unchanged, as schema data isn't localized yet)
-  // For brevity, keeping it as is.
   const days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
   const updateSchedule = (field: string, value: any) => {
       onChange({ ...data, schedule: { ...data.schedule, [field]: value } });
@@ -395,16 +394,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const [isGeneratingValue, setIsGeneratingValue] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [newAttrKey, setNewAttrKey] = useState('');
-  const [newAttrValue, setNewAttrValue] = useState('');
+  const [newAttrKey, setNewAttrKey] = useState<LocalizedText>({ tr: '', en: '' });
+  const [newAttrValue, setNewAttrValue] = useState<LocalizedText>({ tr: '', en: '' });
   
   const [isEditingId, setIsEditingId] = useState(false);
   const [tempId, setTempId] = useState('');
   const [idError, setIdError] = useState<string | null>(null);
   
   useEffect(() => {
-    setNewAttrKey('');
-    setNewAttrValue('');
+    setNewAttrKey({ tr: '', en: '' });
+    setNewAttrValue({ tr: '', en: '' });
     setValidationError(null);
     setIsEditingId(false);
     setTempId(node?.id || '');
@@ -534,14 +533,20 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   };
 
   const handleAddAttribute = () => {
-    if (!newAttrKey.trim()) return;
-    const newAttr: NodeAttribute = { id: generateId('attr'), key: newAttrKey.trim(), value: newAttrValue, type: 'text' };
+    if (!newAttrKey.tr.trim()) return;
+    const newAttr: NodeAttribute = { 
+        id: generateId('attr'), 
+        key: { ...newAttrKey }, 
+        value: { ...newAttrValue }, 
+        type: 'text' 
+    };
     const currentAttributes = Array.isArray(node.attributes) ? [...node.attributes] : [];
     onUpdate(node.id, { attributes: [...currentAttributes, newAttr] });
-    setNewAttrKey(''); setNewAttrValue('');
+    setNewAttrKey({ tr: '', en: '' });
+    setNewAttrValue({ tr: '', en: '' });
   };
 
-  const handleUpdateAttribute = (attrId: string, field: keyof NodeAttribute, value: string) => {
+  const handleUpdateAttribute = (attrId: string, field: 'key' | 'value', value: LocalizedText) => {
       const currentAttributes = Array.isArray(node.attributes) ? node.attributes : [];
       const updated = currentAttributes.map(a => a.id === attrId ? { ...a, [field]: value } : a);
       onUpdate(node.id, { attributes: updated });
@@ -754,15 +759,65 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     <div className="flex items-center gap-2">
                         <Settings size={18} className="text-slate-400" />
                         <h3 className="text-sm font-bold text-slate-700">Ekstra Özellikler (Key-Value)</h3>
-                        <InfoTooltip title="Teknik Özellikler" content="Buraya 'Anahtar: Değer' çiftleri girin. Özellikler şu an tek dildedir, genelde sayısal veya teknik veri içindir." />
+                        <InfoTooltip title="Teknik Özellikler" content="Buraya 'Anahtar: Değer' çiftleri girin. Artık hem anahtar hem değer çok dillidir." />
                     </div>
                     <span className="text-xs text-slate-400">{node.attributes?.length || 0} özellik</span>
                 </div>
                 <div className="p-6 space-y-3">
                     {node.attributes && node.attributes.map(attr => (
-                        <div key={attr.id} className="flex items-center gap-3 group"><div className="w-1/3 min-w-[120px]"><input type="text" value={attr.key} onChange={(e) => handleUpdateAttribute(attr.id, 'key', e.target.value)} className="w-full text-xs font-bold text-slate-600 bg-slate-100 border-transparent rounded px-2 py-1.5 text-right focus:bg-white focus:border-blue-300"/></div><div className="flex-1"><input type="text" value={attr.value} onChange={(e) => handleUpdateAttribute(attr.id, 'value', e.target.value)} className="w-full bg-white text-sm text-slate-800 border border-slate-200 rounded px-3 py-1.5 focus:border-blue-500 outline-none"/></div><button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"><X size={14} /></button></div>
+                        <div key={attr.id} className="flex items-start gap-3 group">
+                            {/* Key Input */}
+                            <div className="w-1/3 min-w-[120px]">
+                                <LocalizedInput 
+                                    value={attr.key} 
+                                    onChange={(val) => handleUpdateAttribute(attr.id, 'key', val)} 
+                                    placeholder="Key"
+                                    compact
+                                />
+                            </div>
+                            {/* Value Input */}
+                            <div className="flex-1">
+                                <LocalizedInput 
+                                    value={attr.value} 
+                                    onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)} 
+                                    placeholder="Value"
+                                    compact
+                                />
+                            </div>
+                            <button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all mt-1">
+                                <X size={14} />
+                            </button>
+                        </div>
                     ))}
-                    <div className="flex items-center gap-3 pt-2 border-t border-slate-100 mt-2"><div className="w-1/3 min-w-[120px]"><input type="text" value={newAttrKey} onChange={(e) => setNewAttrKey(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddAttribute()} placeholder="Yeni Özellik" className="w-full text-xs text-slate-500 bg-white border border-slate-200 border-dashed rounded px-2 py-1.5 text-right focus:border-blue-400 outline-none"/></div><div className="flex-1 flex gap-2"><input type="text" value={newAttrValue} onChange={(e) => setNewAttrValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddAttribute()} placeholder="Değer" className="flex-1 bg-white text-sm text-slate-600 border border-slate-200 border-dashed rounded px-3 py-1.5 focus:border-blue-400 outline-none"/><button onClick={handleAddAttribute} disabled={!newAttrKey.trim()} className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded text-xs font-bold transition-colors disabled:opacity-50"><Check size={14} /></button></div></div>
+                    
+                    {/* Add New Attribute Row */}
+                    <div className="flex items-start gap-3 pt-4 border-t border-slate-100 mt-2">
+                        <div className="w-1/3 min-w-[120px]">
+                            <LocalizedInput 
+                                value={newAttrKey} 
+                                onChange={setNewAttrKey} 
+                                placeholder="Yeni Özellik"
+                                compact
+                            />
+                        </div>
+                        <div className="flex-1 flex gap-2">
+                            <div className="flex-1">
+                                <LocalizedInput 
+                                    value={newAttrValue} 
+                                    onChange={setNewAttrValue} 
+                                    placeholder="Değer"
+                                    compact
+                                />
+                            </div>
+                            <button 
+                                onClick={handleAddAttribute} 
+                                disabled={!newAttrKey.tr.trim()} 
+                                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded text-xs font-bold transition-colors disabled:opacity-50 h-[34px] mt-px"
+                            >
+                                <Check size={14} />
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

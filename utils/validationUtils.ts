@@ -1,6 +1,6 @@
 
 import { HotelNode, HealthIssue, IssueSeverity, LocalizedText } from '../types';
-import { generateId } from './treeUtils';
+import { generateId, getLocalizedValue } from './treeUtils';
 
 // Helper to handle localized text safely
 const getText = (val: LocalizedText | string | undefined): string => {
@@ -240,8 +240,15 @@ const findMissingServiceDetails = (node: HotelNode, issues: HealthIssue[] = []):
     // Eğer bir hizmetse (item veya category olabilir) ve alt öğesi yoksa
     // Veya category ise ama içinde 'saat', 'time', 'open' geçen bir şey yoksa
     if (isService) {
-        const hasTime = node.attributes?.some(a => a.key.toLowerCase().includes('saat') || a.key.toLowerCase().includes('açılış') || a.key.toLowerCase().includes('kapanış'));
-        const hasLocation = node.attributes?.some(a => a.key.toLowerCase().includes('konum') || a.key.toLowerCase().includes('yer'));
+        // Updated to use getLocalizedValue for attribute checking
+        const hasTime = node.attributes?.some(a => {
+            const key = getLocalizedValue(a.key, 'tr').toLowerCase();
+            return key.includes('saat') || key.includes('açılış') || key.includes('kapanış');
+        });
+        const hasLocation = node.attributes?.some(a => {
+            const key = getLocalizedValue(a.key, 'tr').toLowerCase();
+            return key.includes('konum') || key.includes('yer');
+        });
         
         // Veri şeması (dining/event) doluysa sorun yok
         if (node.data && (node.data.shifts || node.data.schedule)) return issues;
@@ -257,7 +264,7 @@ const findMissingServiceDetails = (node: HotelNode, issues: HealthIssue[] = []):
                  `"${getText(node.name)}" önemli bir hizmet ancak saat veya konum bilgisi eksik görünüyor.`, 
                  'Saat Bilgisi Ekle', 
                  // Fix Payload: Mevcut attributelara ekleme yap
-                 { attributes: [...(node.attributes || []), { id: `attr_${Date.now()}`, key: 'Çalışma Saatleri', value: '09:00 - 18:00', type: 'text' }] }
+                 { attributes: [...(node.attributes || []), { id: `attr_${Date.now()}`, key: { tr: 'Çalışma Saatleri', en: 'Working Hours' }, value: { tr: '09:00 - 18:00', en: '09:00 - 18:00' }, type: 'text' }] }
              ));
         }
     }

@@ -308,7 +308,7 @@ export const getInitialData = (): HotelNode => ({
           value: { tr: "Grand React Hotel", en: "Grand React Hotel" },
           intent: "informational",
           attributes: [
-            { id: 'attr-1', key: 'Yıldız', value: '5', type: 'number' }
+            { id: 'attr-1', key: { tr: 'Yıldız', en: 'Star' }, value: { tr: '5', en: '5' }, type: 'number' }
           ]
         }
       ]
@@ -332,7 +332,7 @@ export const cleanTreeValues = (node: HotelNode): HotelNode => {
   delete newNode.data; // Clean structured data too
   delete newNode.description;
   if (newNode.attributes) {
-      newNode.attributes = newNode.attributes.map(attr => ({ ...attr, value: '' }));
+      newNode.attributes = newNode.attributes.map(attr => ({ ...attr, value: { tr: '', en: '' } }));
   }
 
   if (node.children) {
@@ -411,8 +411,10 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   const intentMatch = (node.intent || '').toLowerCase().includes(lowerQuery);
   const tagsMatch = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
   const attributesMatch = node.attributes?.some(attr => 
-    (attr.key || '').toLowerCase().includes(lowerQuery) || 
-    (attr.value || '').toLowerCase().includes(lowerQuery)
+    getLocalizedValue(attr.key, 'tr').toLowerCase().includes(lowerQuery) || 
+    getLocalizedValue(attr.key, 'en').toLowerCase().includes(lowerQuery) ||
+    getLocalizedValue(attr.value, 'tr').toLowerCase().includes(lowerQuery) ||
+    getLocalizedValue(attr.value, 'en').toLowerCase().includes(lowerQuery)
   );
   
   const isMatch = nameMatch || valueMatch || tagsMatch || attributesMatch || intentMatch;
@@ -608,8 +610,11 @@ export const generateAIText = async (
     if (node.price) attributesParts.push(`Fiyat: ${node.price}`);
     if (node.attributes && node.attributes.length > 0) {
        node.attributes.forEach(attr => {
-          if (attr.key && attr.value) {
-             attributesParts.push(`${attr.key}: ${attr.value}`);
+          // LOCALIZED ATTRIBUTES IN ROSETTA FORMAT
+          const key = getRosettaText(attr.key);
+          const val = getRosettaText(attr.value);
+          if (key && val) {
+             attributesParts.push(`${key}: ${val}`);
           }
        });
     }
@@ -672,8 +677,8 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
 
   if (node.attributes && Array.isArray(node.attributes)) {
       semanticData.attributes = node.attributes.map(a => ({
-          key: a.key,
-          value: a.value
+          key: a.key, // Now localized
+          value: a.value // Now localized
       }));
   }
 
@@ -715,6 +720,9 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
      const nameObj = ensureLocalized(node.name);
      const valueObj = ensureLocalized(node.value || node.answer);
 
+     // Simplify attributes for CSV: Just dump JSON string of localized objects
+     const attributesStr = JSON.stringify(node.attributes || []);
+
      rows.push([
         safeCSV(node.id),
         safeCSV(path.join(' > ')),
@@ -725,7 +733,7 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
         safeCSV(nameObj.en),
         safeCSV(valueObj.tr),
         safeCSV(valueObj.en),
-        safeCSV(JSON.stringify(node.attributes || [])),
+        safeCSV(attributesStr),
         safeCSV(node.data ? JSON.stringify(node.data) : '')
      ].join(','));
      
