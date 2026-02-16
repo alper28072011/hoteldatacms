@@ -172,7 +172,6 @@ const InfoTooltip: React.FC<{ title: string; content: React.ReactNode; placement
 };
 
 // --- DYNAMIC FIELD RENDERER ---
-// Renders specific inputs based on the FieldType (text, boolean, date, currency, etc.)
 const DynamicFieldInput: React.FC<{
     attribute: NodeAttribute;
     onChange: (val: LocalizedText) => void;
@@ -266,7 +265,7 @@ const DynamicFieldInput: React.FC<{
                     onChange={onChange} 
                     activeTab={activeTab} 
                     onTabChange={onTabChange}
-                    className="pl-6" // Add padding for icon (requires CSS tweaking in LocalizedInput if class passing supported, assuming it is)
+                    className="pl-6" // Add padding for icon
                     placeholder="0.00"
                 />
             </div>
@@ -539,22 +538,78 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       return <option value={value} disabled={!isAllowed}>{label}</option>;
   };
 
-  const renderIntentSelector = () => {
-      const intentOptions: { value: IntentType; label: string; icon: React.ReactNode }[] = [
-          { value: 'informational', label: 'Genel Bilgi', icon: <Info size={14}/> },
-          { value: 'request', label: 'Hizmet İsteği', icon: <HandPlatter size={14}/> },
-          { value: 'policy', label: 'Kural / Politika', icon: <Shield size={14}/> },
-          { value: 'complaint', label: 'Şikayet / Destek', icon: <MessageCircleQuestion size={14}/> },
-          { value: 'safety', label: 'Güvenlik & Acil', icon: <AlertTriangle size={14}/> },
-          { value: 'navigation', label: 'Yön / Konum', icon: <Milestone size={14}/> },
-      ];
+  // UNIFIED HEADER SELECTORS
+  const renderHeaderSelectors = () => {
+      const containerStyle = (bgColor: string, borderColor: string) => 
+          `flex flex-col justify-center h-10 px-2.5 rounded-lg border ${bgColor} ${borderColor} transition-all hover:shadow-sm min-w-[110px] relative group`;
+      
+      const labelStyle = (textColor: string) => 
+          `text-[9px] font-extrabold uppercase tracking-widest ${textColor} absolute top-1 left-2.5 opacity-80`;
+      
+      const selectStyle = (textColor: string) => 
+          `text-xs font-bold bg-transparent outline-none cursor-pointer appearance-none w-full pt-3 pl-0 ${textColor} focus:ring-0 border-none p-0 m-0`;
 
       return (
-          <div className="flex items-center gap-2 bg-emerald-50/50 p-1.5 rounded-lg border border-emerald-100 ml-3">
-              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider pl-1">Amaç</span>
-              <select value={node.intent || 'informational'} onChange={(e) => handleChange('intent', e.target.value)} className="text-xs bg-transparent font-bold text-emerald-800 outline-none cursor-pointer hover:bg-emerald-100 rounded px-1 py-0.5 transition-colors">
-                  {intentOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
+          <div className="flex items-center gap-2">
+              
+              {/* 1. PURPOSE / INTENT */}
+              <div className={containerStyle('bg-emerald-50', 'border-emerald-100')}>
+                  <span className={labelStyle('text-emerald-700')}>AMAÇ</span>
+                  <select 
+                    value={node.intent || 'informational'} 
+                    onChange={(e) => handleChange('intent', e.target.value)}
+                    className={selectStyle('text-emerald-800')}
+                  >
+                      <option value="informational">Bilgi</option>
+                      <option value="request">İstek</option>
+                      <option value="policy">Kural</option>
+                      <option value="complaint">Şikayet</option>
+                      <option value="safety">Güvenlik</option>
+                      <option value="navigation">Yön</option>
+                  </select>
+              </div>
+
+              {/* 2. TYPE */}
+              <div className={containerStyle('bg-blue-50', 'border-blue-100')}>
+                  <span className={labelStyle('text-blue-700')}>TİP</span>
+                  <select 
+                    value={node.type} 
+                    onChange={(e) => handleChange('type', e.target.value)} 
+                    className={selectStyle('text-blue-800')}
+                  >
+                      <optgroup label="Kapsayıcılar">
+                          {renderOption('category', 'Category')}
+                          {renderOption('list', 'List')}
+                          {renderOption('menu', 'Menu')}
+                      </optgroup>
+                      <optgroup label="Veri">
+                          {renderOption('item', 'Item')}
+                          {renderOption('menu_item', 'Menu Item')}
+                          {renderOption('field', 'Field')}
+                      </optgroup>
+                      <optgroup label="Meta">
+                          {renderOption('qa_pair', 'Q&A')}
+                          {renderOption('note', 'Note')}
+                          {renderOption('policy', 'Policy')}
+                      </optgroup>
+                  </select>
+              </div>
+
+              {/* 3. DATA TEMPLATE */}
+              <div className={containerStyle('bg-violet-50', 'border-violet-100')}>
+                  <span className={labelStyle('text-violet-700')}>VERİ ŞABLONU</span>
+                  <select 
+                      value={node.appliedTemplateId || ''}
+                      onChange={(e) => handleApplyTemplate(e.target.value)}
+                      className={selectStyle('text-violet-800')}
+                  >
+                      <option value="">-- Yok --</option>
+                      {nodeTemplates.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                  </select>
+              </div>
+
           </div>
       );
   };
@@ -586,15 +641,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
            </div>
         </div>
         <div className="flex items-center gap-3">
-           {renderIntentSelector()}
-           <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-2">TİP</span>
-              <select value={node.type} onChange={(e) => handleChange('type', e.target.value)} className="text-xs font-bold uppercase tracking-wide border-0 bg-white shadow-sm rounded px-2 py-1.5 text-slate-700 outline-none cursor-pointer hover:text-blue-600">
-                  <optgroup label="Kapsayıcılar">{renderOption('category', 'Category')}{renderOption('list', 'List')}{renderOption('menu', 'Menu')}</optgroup>
-                  <optgroup label="Veri">{renderOption('item', 'Item')}{renderOption('menu_item', 'Menu Item')}{renderOption('field', 'Field')}</optgroup>
-                  <optgroup label="Meta">{renderOption('qa_pair', 'Q&A')}{renderOption('note', 'Note')}{renderOption('policy', 'Policy')}</optgroup>
-              </select>
-           </div>
+           {renderHeaderSelectors()}
            <div className="h-8 w-px bg-slate-200 mx-1"></div>
            <button onClick={handleDeleteClick} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Sil"><Trash2 size={18} /></button>
         </div>
@@ -607,34 +654,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             )}
 
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                {/* HEADER ROW: Name & Template Selector */}
-                <div className="flex items-start justify-between gap-6 mb-2">
-                    <div className="flex-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">BAŞLIK / İSİM</label>
-                        <LocalizedInput 
-                            value={node.name} 
-                            onChange={(val) => handleChange('name', val)}
-                            placeholder="Öğe Başlığı..."
-                            activeTab={activeTab}
-                            onTabChange={setActiveTab}
-                        />
-                    </div>
-                    
-                    <div className="w-64">
-                        <label className="text-xs font-bold text-indigo-500 uppercase tracking-wider mb-1 block flex items-center gap-1">
-                            <LayoutTemplate size={12}/> Veri Şablonu
-                        </label>
-                        <select 
-                            value={node.appliedTemplateId || ''}
-                            onChange={(e) => handleApplyTemplate(e.target.value)}
-                            className="w-full text-sm bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2.5 font-bold text-indigo-700 outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-shadow"
-                        >
-                            <option value="">-- Standart Metin --</option>
-                            {nodeTemplates.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
-                    </div>
+                {/* JUST NAME - Template Selector Removed from Here */}
+                <div className="mb-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">BAŞLIK / İSİM</label>
+                    <LocalizedInput 
+                        value={node.name} 
+                        onChange={(val) => handleChange('name', val)}
+                        placeholder="Öğe Başlığı..."
+                        activeTab={activeTab}
+                        onTabChange={setActiveTab}
+                    />
                 </div>
                 
                 {/* --- STANDARD CONTENT AREA --- */}
