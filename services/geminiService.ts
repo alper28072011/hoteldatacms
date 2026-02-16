@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute } from "../types";
-import { generateCleanAIJSON, generateAIText } from "../utils/treeUtils";
+import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 
 const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
@@ -337,19 +337,21 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
   }
 };
 
-export const generateNodeContext = async (node: HotelNode, contextPath: string = ''): Promise<{ tags: string[], description: string }> => {
+export const generateNodeContext = async (node: HotelNode, contextPath: string = '', language: 'tr' | 'en' = 'tr'): Promise<{ tags: string[], description: string }> => {
     const cleanNode = generateCleanAIJSON(node);
     
+    const langName = language === 'en' ? 'English' : 'Turkish';
+    
     const prompt = `
-    Bir Otel CMS'i için AI Veri Zenginleştiricisin.
+    You are an AI Data Enricher for a Hotel CMS.
     
-    BAĞLAM:
-    Yol: ${contextPath}
-    Öğe Verisi: ${JSON.stringify(cleanNode, null, 2)}
+    CONTEXT:
+    Path: ${contextPath}
+    Node Data: ${JSON.stringify(cleanNode, null, 2)}
     
-    GÖREV:
-    1. Bir misafirin bunu bulmak için kullanabileceği 5-8 alakalı "Arama Etiketi" (Eş anlamlılar, Türkçe) oluştur.
-    2. Bir AI chatbot için "Gizli Açıklama" (max 2 cümle, Türkçe) yaz. Bağlamı, kuralları açıkla.
+    TASK:
+    1. Generate 5-8 relevant "Search Tags" (Synonyms) in ${langName}.
+    2. Write a "Hidden Description" (max 2 sentences) in ${langName} explaining the context or rules for an AI chatbot.
     
     SADECE JSON DÖNDÜR.
     `;
@@ -378,15 +380,18 @@ export const generateNodeContext = async (node: HotelNode, contextPath: string =
     return JSON.parse(response.text || "{}");
 };
 
-export const generateValueFromAttributes = async (nodeName: string, attributes: NodeAttribute[]): Promise<string> => {
-    const attrsStr = attributes.map(a => `${a.key}: ${a.value}`).join(', ');
+export const generateValueFromAttributes = async (nodeName: string, attributes: NodeAttribute[], language: 'tr' | 'en' = 'tr'): Promise<string> => {
+    const langName = language === 'en' ? 'English' : 'Turkish';
+    // Use getLocalizedValue to get keys/values in the requested language
+    const attrsStr = attributes.map(a => `${getLocalizedValue(a.key, language)}: ${getLocalizedValue(a.value, language)}`).join(', ');
+    
     const prompt = `
-    "${nodeName}" adlı otel öğesinin özelliklerine dayanarak, kısa, çekici bir "Ana Değer" cümlesi yaz (Türkçe).
+    Based on the attributes of the hotel item "${nodeName}", write a short, attractive "Main Value" sentence in ${langName}.
     
-    Özellikler: ${attrsStr}
+    Attributes: ${attrsStr}
     
-    Örnek Girdi: İsim: Havalimanı Transfer, Özellikler: Mesafe: 15km, Süre: 20dk
-    Örnek Çıktı: Havalimanına 15km uzaklıkta olup araçla yaklaşık 20 dakika sürmektedir.
+    Example Input: Name: Airport Transfer, Attrs: Distance: 15km, Time: 20min
+    Example Output (${language==='tr'?'TR':'EN'}): ${language==='tr' ? 'Havalimanına 15km uzaklıkta olup araçla yaklaşık 20 dakika sürmektedir.' : 'Located 15km from the airport, taking approximately 20 minutes by car.'}
     
     Sadece cümleyi döndür.
     `;

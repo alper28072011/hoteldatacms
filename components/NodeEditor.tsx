@@ -23,16 +23,17 @@ interface LocalizedInputProps {
     label?: string;
     tooltip?: string;
     className?: string;
-    compact?: boolean; // New prop for attribute list
+    compact?: boolean;
+    activeTab: 'tr' | 'en';
+    onTabChange: (tab: 'tr' | 'en') => void;
 }
 
-const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeholder, multiline = false, label, tooltip, className, compact = false }) => {
-    const [activeTab, setActiveTab] = useState<'tr' | 'en'>('tr');
+const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeholder, multiline = false, label, tooltip, className, compact = false, activeTab, onTabChange }) => {
     const [isTranslating, setIsTranslating] = useState(false);
     const data = ensureLocalized(value);
 
-    const handleChange = (lang: 'tr' | 'en', text: string) => {
-        onChange({ ...data, [lang]: text });
+    const handleChange = (text: string) => {
+        onChange({ ...data, [activeTab]: text });
     };
 
     const handleAutoTranslate = async () => {
@@ -58,13 +59,13 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                     </div>
                     <div className="flex items-center bg-slate-100 rounded-md p-0.5">
                         <button 
-                            onClick={() => setActiveTab('tr')}
+                            onClick={() => onTabChange('tr')}
                             className={`px-2 py-0.5 text-[10px] font-bold rounded-sm transition-all ${activeTab === 'tr' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             TR
                         </button>
                         <button 
-                            onClick={() => setActiveTab('en')}
+                            onClick={() => onTabChange('en')}
                             className={`px-2 py-0.5 text-[10px] font-bold rounded-sm transition-all ${activeTab === 'en' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             EN
@@ -77,7 +78,7 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                 {multiline ? (
                     <textarea 
                         value={data[activeTab]} 
-                        onChange={(e) => handleChange(activeTab, e.target.value)}
+                        onChange={(e) => handleChange(e.target.value)}
                         className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y min-h-[80px]"
                         placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
                     />
@@ -85,13 +86,13 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                     <input 
                         type="text" 
                         value={data[activeTab]} 
-                        onChange={(e) => handleChange(activeTab, e.target.value)}
+                        onChange={(e) => handleChange(e.target.value)}
                         className={`w-full bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}
                         placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
                     />
                 )}
                 
-                {/* Auto Translate Button */}
+                {/* Auto Translate Button - Check other language emptiness */}
                 {data[activeTab] && !data[activeTab === 'tr' ? 'en' : 'tr'] && (
                     <button 
                         onClick={handleAutoTranslate}
@@ -379,6 +380,14 @@ export interface NodeEditorProps {
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
   const { changeNodeId, displayLanguage } = useHotel();
   
+  // Shared active tab state for all inputs in the editor
+  const [activeTab, setActiveTab] = useState<'tr' | 'en'>(displayLanguage);
+
+  // Sync activeTab with displayLanguage when it changes
+  useEffect(() => {
+    setActiveTab(displayLanguage);
+  }, [displayLanguage]);
+  
   const nodeTypeContent = (
       <div className="space-y-2 text-[11px] font-normal">
           <div><strong className="text-indigo-300 block mb-0.5">Category (Kategori):</strong> Alt öğeleri gruplamak için kullanılan klasör yapısı (Örn: "Restoranlar", "Havuzlar").</div>
@@ -505,15 +514,20 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const handleAutoGenerateContext = async () => {
     setIsGeneratingContext(true);
     try {
-      const pathString = breadcrumbs.map(b => getLocalizedValue(b.name, 'en') || 'Untitled').join(' > ');
-      const result = await generateNodeContext(node, pathString);
+      const pathString = breadcrumbs.map(b => getLocalizedValue(b.name, activeTab) || getLocalizedValue(b.name, 'en') || 'Untitled').join(' > ');
+      
+      // Pass the active language to the generator
+      const result = await generateNodeContext(node, pathString, activeTab);
+      
       const currentTags = node.tags || [];
       const newTags = result.tags || [];
       const mergedTags = Array.from(new Set([...currentTags, ...newTags]));
-      // Note: Auto Generate currently returns only TR/EN string for description based on implementation
-      // We might want to improve this later to return LocalizedText
-      const desc = { tr: result.description, en: result.description }; 
-      onUpdate(node.id, { tags: mergedTags, description: desc });
+      
+      const currentDesc = ensureLocalized(node.description);
+      // Only update the active language part
+      const newDesc = { ...currentDesc, [activeTab]: result.description }; 
+      
+      onUpdate(node.id, { tags: mergedTags, description: newDesc });
     } catch (error) { console.error(error); } finally { setIsGeneratingContext(false); }
   };
 
@@ -524,16 +538,20 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
     }
     setIsGeneratingValue(true);
     try {
-        const name = getLocalizedValue(node.name, 'tr');
-        const generatedText = await generateValueFromAttributes(name, node.attributes);
-        // Again, assuming generatedText is single language for now, we set it to TR and copy to EN or translate later
-        const val: LocalizedText = { tr: generatedText, en: generatedText };
+        const name = getLocalizedValue(node.name, activeTab);
+        // Pass active language to generator
+        const generatedText = await generateValueFromAttributes(name, node.attributes, activeTab);
+        
+        const currentValue = ensureLocalized(node.value);
+        // Only update active language part
+        const val: LocalizedText = { ...currentValue, [activeTab]: generatedText };
+        
         onUpdate(node.id, { value: val });
     } catch (e) { console.error(e); } finally { setIsGeneratingValue(false); }
   };
 
   const handleAddAttribute = () => {
-    if (!newAttrKey.tr.trim()) return;
+    if (!newAttrKey.tr.trim() && !newAttrKey.en.trim()) return;
     const newAttr: NodeAttribute = { 
         id: generateId('attr'), 
         key: { ...newAttrKey }, 
@@ -714,6 +732,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     placeholder="Öğe Başlığı / Item Title"
                     label="BAŞLIK / İSİM"
                     tooltip="Öğenin hem Türkçe hem İngilizce ismini girin. Ağaç yapısında bu isim görünecektir."
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
                 />
                 
                 {(!node.schemaType || node.schemaType === 'generic') ? (
@@ -724,7 +744,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{node.type === 'qa_pair' ? 'Cevap' : node.type === 'menu_item' ? 'Ürün Detayı' : 'Ana Değer / Açıklama'}</label>
                                     <InfoTooltip title="Ana İçerik" content="Misafire gösterilecek ana metin. Kategori tipinde burası genelde boştur." />
                                 </div>
-                                <button onClick={handleAutoGenerateValue} disabled={isGeneratingValue} className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded border border-violet-100 transition-colors">{isGeneratingValue ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12} />} AI ile Yaz</button>
+                                <button 
+                                    onClick={handleAutoGenerateValue} 
+                                    disabled={isGeneratingValue} 
+                                    className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded border border-violet-100 transition-colors"
+                                    title={`Generate content in ${activeTab === 'tr' ? 'Turkish' : 'English'}`}
+                                >
+                                    {isGeneratingValue ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12} />} 
+                                    AI ile Yaz ({activeTab.toUpperCase()})
+                                </button>
                             </div>
                             
                             {/* --- LOCALIZED VALUE/ANSWER INPUT --- */}
@@ -733,6 +761,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 onChange={(val) => handleChange(node.type === 'qa_pair' ? 'answer' : 'value', val)}
                                 placeholder="İçerik metni..."
                                 multiline={true}
+                                activeTab={activeTab}
+                                onTabChange={setActiveTab}
                             />
 
                             {node.type === 'qa_pair' && <input type="text" value={node.question || ''} onChange={(e) => handleChange('question', e.target.value)} className="hidden" />}
@@ -773,6 +803,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     onChange={(val) => handleUpdateAttribute(attr.id, 'key', val)} 
                                     placeholder="Key"
                                     compact
+                                    activeTab={activeTab}
+                                    onTabChange={setActiveTab}
                                 />
                             </div>
                             {/* Value Input */}
@@ -782,6 +814,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)} 
                                     placeholder="Value"
                                     compact
+                                    activeTab={activeTab}
+                                    onTabChange={setActiveTab}
                                 />
                             </div>
                             <button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all mt-1">
@@ -798,6 +832,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 onChange={setNewAttrKey} 
                                 placeholder="Yeni Özellik"
                                 compact
+                                activeTab={activeTab}
+                                onTabChange={setActiveTab}
                             />
                         </div>
                         <div className="flex-1 flex gap-2">
@@ -807,11 +843,13 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     onChange={setNewAttrValue} 
                                     placeholder="Değer"
                                     compact
+                                    activeTab={activeTab}
+                                    onTabChange={setActiveTab}
                                 />
                             </div>
                             <button 
                                 onClick={handleAddAttribute} 
-                                disabled={!newAttrKey.tr.trim()} 
+                                disabled={!newAttrKey.tr.trim() && !newAttrKey.en.trim()} 
                                 className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded text-xs font-bold transition-colors disabled:opacity-50 h-[34px] mt-px"
                             >
                                 <Check size={14} />
@@ -827,7 +865,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">AI Context (Gizli Notlar)</label>
                         <InfoTooltip title="Yapay Zeka Notları" content="Bu alan sadece AI tarafından okunur. Örn: 'Bu fiyatlar 2024 yazına aittir'." />
                     </div>
-                    <button onClick={handleAutoGenerateContext} disabled={isGeneratingContext} className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 bg-white hover:bg-violet-50 px-2 py-1 rounded border border-slate-200 transition-colors">{isGeneratingContext ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12} />} Otomatik Doldur</button>
+                    <button 
+                        onClick={handleAutoGenerateContext} 
+                        disabled={isGeneratingContext} 
+                        className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 bg-white hover:bg-violet-50 px-2 py-1 rounded border border-slate-200 transition-colors"
+                        title={`Generate context in ${activeTab === 'tr' ? 'Turkish' : 'English'}`}
+                    >
+                        {isGeneratingContext ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12} />} 
+                        Otomatik Doldur ({activeTab.toUpperCase()})
+                    </button>
                  </div>
                  
                  {/* --- LOCALIZED DESCRIPTION INPUT --- */}
@@ -836,6 +882,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     onChange={(val) => handleChange('description', val)}
                     placeholder="AI Bağlam Notu..."
                     multiline={true}
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
                  />
             </div>
             
