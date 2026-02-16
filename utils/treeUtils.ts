@@ -402,22 +402,47 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
 
   const lowerQuery = query.toLowerCase();
   
-  // Search in both languages for name and value
-  const name = typeof node.name === 'object' ? `${node.name.tr} ${node.name.en}` : (node.name || '');
-  const value = typeof node.value === 'object' ? `${node.value.tr} ${node.value.en}` : (node.value || '');
+  // Helper for safe text extraction that prevents "Cannot read properties of null"
+  // and concatenates TR/EN for comprehensive search.
+  const getSearchable = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val.toLowerCase();
+    // Safety check for object properties (handle null explicitly since typeof null is 'object')
+    if (typeof val === 'object') {
+         return `${val.tr || ''} ${val.en || ''}`.toLowerCase();
+    }
+    return '';
+  };
   
-  const nameMatch = name.toLowerCase().includes(lowerQuery);
-  const valueMatch = value.toLowerCase().includes(lowerQuery);
-  const intentMatch = (node.intent || '').toLowerCase().includes(lowerQuery);
-  const tagsMatch = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
-  const attributesMatch = node.attributes?.some(attr => 
-    getLocalizedValue(attr.key, 'tr').toLowerCase().includes(lowerQuery) || 
-    getLocalizedValue(attr.key, 'en').toLowerCase().includes(lowerQuery) ||
-    getLocalizedValue(attr.value, 'tr').toLowerCase().includes(lowerQuery) ||
-    getLocalizedValue(attr.value, 'en').toLowerCase().includes(lowerQuery)
+  // 1. Core Fields (Name, Value, Answer, Description)
+  const matchesName = getSearchable(node.name).includes(lowerQuery);
+  const matchesValue = getSearchable(node.value).includes(lowerQuery);
+  const matchesAnswer = getSearchable(node.answer).includes(lowerQuery);
+  const matchesDesc = getSearchable(node.description).includes(lowerQuery); // Include hidden AI context in search
+  const matchesQuestion = (node.question || '').toLowerCase().includes(lowerQuery); // QA Questions
+
+  // 2. Metadata (Intent, Tags)
+  const matchesIntent = (node.intent || '').toLowerCase().includes(lowerQuery);
+  const matchesTags = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
+  
+  // 3. Attributes (Safe traversal of localized keys and values)
+  const matchesAttributes = node.attributes?.some(attr => 
+    getSearchable(attr.key).includes(lowerQuery) ||
+    getSearchable(attr.value).includes(lowerQuery)
   );
   
-  const isMatch = nameMatch || valueMatch || tagsMatch || attributesMatch || intentMatch;
+  // 4. Schema Data (Deep search in structured data like cuisine, location, bed config)
+  let matchesData = false;
+  if (node.data) {
+      try {
+          const dataStr = JSON.stringify(node.data).toLowerCase();
+          matchesData = dataStr.includes(lowerQuery);
+      } catch (e) { /* ignore JSON error */ }
+  }
+  
+  const isMatch = matchesName || matchesValue || matchesAnswer || matchesDesc || 
+                  matchesQuestion || matchesIntent || matchesTags || 
+                  matchesAttributes || matchesData;
 
   let filteredChildren: HotelNode[] = [];
   if (node.children) {
