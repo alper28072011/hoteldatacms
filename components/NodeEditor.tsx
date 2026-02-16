@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, EventData, DiningData, RoomData } from '../types';
-import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes } from '../utils/treeUtils';
+import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes, generateSlug } from '../utils/treeUtils';
 import { generateNodeContext, generateValueFromAttributes } from '../services/geminiService';
 import { validateNodeInput } from '../utils/validationUtils';
 import { useHotel } from '../contexts/HotelContext';
@@ -10,7 +10,7 @@ import {
   Tag, Trash2, LayoutDashboard, Box, BrainCircuit, Sparkles, Loader2, 
   ChevronRight, Database, Check, Settings, List, FileText, CircleHelp, 
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
-  Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer
+  Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: PORTAL-BASED EDUCATIONAL TOOLTIP WITH PLACEMENT ---
@@ -365,6 +365,7 @@ export interface NodeEditorProps {
 }
 
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
+  const { changeNodeId } = useHotel();
   
   const nodeTypeContent = (
       <div className="space-y-2 text-[11px] font-normal">
@@ -384,6 +385,11 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const [newAttrKey, setNewAttrKey] = useState('');
   const [newAttrValue, setNewAttrValue] = useState('');
   
+  // ID Editing State
+  const [isEditingId, setIsEditingId] = useState(false);
+  const [tempId, setTempId] = useState('');
+  const [idError, setIdError] = useState<string | null>(null);
+  
   const previewRef = useRef<HTMLDivElement>(null);
 
   const defaultEvent: EventData = { schedule: { frequency: 'weekly', activeDays: [], startTime: '21:30' }, location: '', ageGroup: 'all', isPaid: false, requiresReservation: false, status: 'active', tags: [] };
@@ -394,6 +400,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
     setNewAttrKey('');
     setNewAttrValue('');
     setValidationError(null);
+    setIsEditingId(false);
+    setTempId(node?.id || '');
+    setIdError(null);
   }, [node?.id]);
 
   const breadcrumbs = useMemo(() => {
@@ -453,6 +462,42 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
     navigator.clipboard.writeText(id);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  // --- ID CHANGE LOGIC ---
+  const handleStartIdEdit = () => {
+      setTempId(node.id);
+      setIsEditingId(true);
+      setIdError(null);
+  };
+
+  const handleCancelIdEdit = () => {
+      setIsEditingId(false);
+      setTempId(node.id);
+      setIdError(null);
+  };
+
+  const handleSaveId = async () => {
+      if (tempId === node.id) {
+          setIsEditingId(false);
+          return;
+      }
+      
+      const result = await changeNodeId(node.id, tempId);
+      if (result.success) {
+          setIsEditingId(false);
+          // Note: node.id will update via props after context update
+      } else {
+          setIdError(result.message);
+      }
+  };
+
+  const handleGenerateSlugId = () => {
+      if (!node.name) return;
+      const slug = generateSlug(node.name);
+      // Append random hash to ensure uniqueness suggestion
+      const proposedId = `${slug}-${Math.random().toString(36).substr(2, 4)}`;
+      setTempId(proposedId);
   };
 
   const handleAutoGenerateContext = async () => {
@@ -728,7 +773,46 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                  <textarea value={node.description || ''} onChange={(e) => handleChange('description', e.target.value)} rows={2} className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-slate-300 outline-none text-slate-600 italic placeholder:text-slate-300" placeholder="Örn: Bu havuz +18'dir, çocuklu aileleri nazikçe ana havuza yönlendir."/>
             </div>
             
-            <div className="border-t border-slate-200 pt-6 flex justify-between items-center text-xs text-slate-400"><div className="flex items-center gap-4"><div className="flex items-center gap-1 group cursor-pointer" onClick={() => handleCopyId(node.id)}><Database size={12} /> ID: <code className="bg-slate-100 px-1 rounded">{node.id}</code>{copiedId === node.id && <Check size={10} className="text-emerald-500"/>}</div></div></div>
+            <div className="border-t border-slate-200 pt-6 flex justify-between items-center text-xs text-slate-400">
+                <div className="flex items-center gap-4 w-full">
+                    {!isEditingId ? (
+                        <div className="flex items-center gap-2 group w-full">
+                            <div className="flex items-center gap-1 cursor-pointer hover:text-slate-600 transition-colors" onClick={() => handleCopyId(node.id)}>
+                                <Database size={12} /> 
+                                <span className="font-bold">ID:</span> 
+                                <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">{node.id}</code>
+                                {copiedId === node.id && <Check size={10} className="text-emerald-500"/>}
+                            </div>
+                            <button onClick={handleStartIdEdit} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors ml-auto" title="Edit ID">
+                                <Edit3 size={12} />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col w-full gap-2 animate-in fade-in slide-in-from-left-2">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-500">Edit ID:</span>
+                                <input 
+                                    type="text" 
+                                    value={tempId} 
+                                    onChange={(e) => setTempId(e.target.value)}
+                                    className="bg-white border border-blue-300 rounded px-2 py-1 text-xs font-mono text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 flex-1"
+                                />
+                                <button onClick={handleGenerateSlugId} className="p-1.5 bg-violet-50 text-violet-600 rounded border border-violet-100 hover:bg-violet-100" title="Auto-Generate from Name">
+                                    <Wand2 size={12} />
+                                </button>
+                                <button onClick={handleSaveId} className="p-1.5 bg-emerald-50 text-emerald-600 rounded border border-emerald-100 hover:bg-emerald-100">
+                                    <Check size={12} />
+                                </button>
+                                <button onClick={handleCancelIdEdit} className="p-1.5 bg-slate-50 text-slate-500 rounded border border-slate-200 hover:bg-slate-100">
+                                    <X size={12} />
+                                </button>
+                            </div>
+                            {idError && <span className="text-[10px] text-red-500 flex items-center gap-1"><TriangleAlert size={10}/> {idError}</span>}
+                            <p className="text-[10px] text-slate-400 italic">Changing ID allows semantic naming (e.g. 'main-pool') but requires database consistency check.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
             
             {['category', 'list', 'menu'].includes(String(node.type)) && (
                 <div className="mt-8 border-t border-slate-200 pt-8 animate-in fade-in slide-in-from-bottom-2">

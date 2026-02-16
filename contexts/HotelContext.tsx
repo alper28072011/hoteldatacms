@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { HotelNode, AIPersona } from '../types';
-import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree, findNodeById, getSmartDefaultChildType } from '../utils/treeUtils';
+import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree, findNodeById, getSmartDefaultChildType, checkIdExists } from '../utils/treeUtils';
 import { updateHotelData, getPersonas, savePersona as savePersonaToDb, deletePersona as deletePersonaFromDb } from '../services/firestoreService';
 
 interface HotelContextType {
@@ -19,6 +19,7 @@ interface HotelContextType {
   setHotelData: (data: HotelNode | ((prev: HotelNode) => HotelNode)) => void;
   setHotelId: (id: string | null) => void;
   updateNode: (nodeId: string, updates: Partial<HotelNode>) => void;
+  changeNodeId: (oldId: string, newId: string) => Promise<{ success: boolean; message: string }>;
   addChild: (parentId: string, type?: string) => void;
   deleteNode: (nodeId: string) => void;
   moveNode: (sourceId: string, targetId: string, position: 'inside' | 'before' | 'after') => void;
@@ -87,6 +88,26 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSaveStatus('idle');
   }, []);
 
+  const changeNodeId = useCallback(async (oldId: string, newId: string): Promise<{ success: boolean; message: string }> => {
+    // 1. Validation
+    if (!newId || newId.trim() === '') return { success: false, message: 'ID cannot be empty.' };
+    if (oldId === newId) return { success: true, message: 'ID is unchanged.' };
+    
+    // 2. Uniqueness Check
+    if (checkIdExists(hotelData, newId)) {
+        return { success: false, message: 'This ID already exists in the tree.' };
+    }
+
+    // 3. Apply Update
+    // We reuse updateNodeInTree which finds node by OLD ID and applies the NEW ID in updates
+    setHotelDataState((prev) => updateNodeInTree(prev, oldId, { id: newId }));
+    
+    setHasUnsavedChanges(true);
+    setSaveStatus('idle');
+    
+    return { success: true, message: 'ID updated successfully.' };
+  }, [hotelData]);
+
   const addChild = useCallback((parentId: string, type?: string) => {
     setHotelDataState((prev) => {
       // SMART DEFAULT TYPE
@@ -96,8 +117,10 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           finalType = parentNode ? getSmartDefaultChildType(String(parentNode.type)) : 'item';
       }
 
+      // Slightly smarter default ID generation to assist with context
+      const prefix = finalType ? finalType.substring(0, 4) : 'node';
       const newChild: HotelNode = {
-        id: generateId(),
+        id: generateId(prefix),
         type: finalType,
         name: finalType === 'menu_item' ? 'Yeni Ürün' : 'Yeni Öğe',
         value: ''
@@ -170,6 +193,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setHotelId,
       setHotelData,
       updateNode,
+      changeNodeId,
       addChild,
       deleteNode,
       moveNode,

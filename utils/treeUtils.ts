@@ -2,8 +2,31 @@
 import { HotelNode, EventData, DiningData, RoomData, NodeType } from "../types";
 
 // Generate a simple unique ID with high collision resistance
+// Updated to accept a custom prefix derived from content
 export const generateId = (prefix: string = 'node'): string => {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+};
+
+// Converts human readable text to a safe ID slug (e.g. "Main Pool Rules" -> "main-pool-rules")
+export const generateSlug = (text: string): string => {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[\s\W-]+/g, '-') // Replace spaces and non-word chars with -
+    .replace(/^-+|-+$/g, '')   // Remove leading/trailing -
+    .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c'); // Turkish char support
+};
+
+// Recursively checks if an ID exists in the tree
+export const checkIdExists = (root: HotelNode, id: string): boolean => {
+  if (String(root.id) === String(id)) return true;
+  if (root.children) {
+    for (let child of root.children) {
+      if (checkIdExists(child, id)) return true;
+    }
+  }
+  return false;
 };
 
 // Modern, fast deep clone using native browser API
@@ -79,6 +102,10 @@ export const findPathToNode = (root: HotelNode, targetId: string): HotelNode[] |
 };
 
 export const updateNodeInTree = (root: HotelNode, targetId: string, updates: Partial<HotelNode>): HotelNode => {
+  // If we are updating the ID itself, we need to be careful.
+  // The 'updates' object might contain { id: 'new-id' }.
+  // If matches targetId, we apply updates.
+  
   if (String(root.id) === String(targetId)) {
     return { ...root, ...updates };
   }
