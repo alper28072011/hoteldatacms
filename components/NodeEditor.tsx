@@ -11,7 +11,7 @@ import {
   ChevronRight, Database, Check, Settings, List, FileText, CircleHelp, 
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
-  Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe
+  Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: LOCALIZED INPUT WITH AUTO-TRANSLATE ---
@@ -100,7 +100,7 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                         className="absolute right-2 bottom-1.5 p-1 bg-violet-50 text-violet-600 rounded-md hover:bg-violet-100 transition-colors opacity-0 group-hover:opacity-100"
                         title={`Auto Translate to ${activeTab === 'tr' ? 'English' : 'Turkish'}`}
                     >
-                        {isTranslating ? <Loader2 size={10} className="animate-spin"/> : <Sparkles size={10} />}
+                        {isTranslating ? <Loader2 size={10} className="animate-spin"/> : <RefreshCw size={10} />}
                     </button>
                 )}
             </div>
@@ -514,39 +514,65 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const handleAutoGenerateContext = async () => {
     setIsGeneratingContext(true);
     try {
-      const pathString = breadcrumbs.map(b => getLocalizedValue(b.name, activeTab) || getLocalizedValue(b.name, 'en') || 'Untitled').join(' > ');
-      
-      // Pass the active language to the generator
-      const result = await generateNodeContext(node, pathString, activeTab);
-      
-      const currentTags = node.tags || [];
-      const newTags = result.tags || [];
-      const mergedTags = Array.from(new Set([...currentTags, ...newTags]));
-      
-      const currentDesc = ensureLocalized(node.description);
-      // Only update the active language part
-      const newDesc = { ...currentDesc, [activeTab]: result.description }; 
-      
-      onUpdate(node.id, { tags: mergedTags, description: newDesc });
+      if (activeTab === 'en') {
+          // TRANSLATION MODE: Use TR context as source
+          const sourceText = getLocalizedValue(node.description, 'tr');
+          if (!sourceText) {
+              alert("Çeviri için önce Türkçe bağlam (context) notu olmalıdır.");
+              setIsGeneratingContext(false);
+              return;
+          }
+          const translated = await translateText(sourceText, 'en');
+          const currentDesc = ensureLocalized(node.description);
+          onUpdate(node.id, { description: { ...currentDesc, en: translated } });
+      } else {
+          // GENERATION MODE (TR)
+          const pathString = breadcrumbs.map(b => getLocalizedValue(b.name, 'tr') || 'İsimsiz').join(' > ');
+          const result = await generateNodeContext(node, pathString, 'tr');
+          
+          const currentTags = node.tags || [];
+          const newTags = result.tags || [];
+          const mergedTags = Array.from(new Set([...currentTags, ...newTags]));
+          
+          const currentDesc = ensureLocalized(node.description);
+          onUpdate(node.id, { tags: mergedTags, description: { ...currentDesc, tr: result.description } });
+      }
     } catch (error) { console.error(error); } finally { setIsGeneratingContext(false); }
   };
 
   const handleAutoGenerateValue = async () => {
-    if (!node.attributes || node.attributes.length === 0) {
-        alert("Önce birkaç özellik ekleyin.");
-        return;
-    }
     setIsGeneratingValue(true);
     try {
-        const name = getLocalizedValue(node.name, activeTab);
-        // Pass active language to generator
-        const generatedText = await generateValueFromAttributes(name, node.attributes, activeTab);
-        
-        const currentValue = ensureLocalized(node.value);
-        // Only update active language part
-        const val: LocalizedText = { ...currentValue, [activeTab]: generatedText };
-        
-        onUpdate(node.id, { value: val });
+        if (activeTab === 'en') {
+            // TRANSLATION MODE: Translate TR value/answer to EN
+            const sourceText = getLocalizedValue(node.type === 'qa_pair' ? node.answer : node.value, 'tr');
+            
+            if (!sourceText) {
+                alert("Çeviri için önce Türkçe içerik girmelisiniz.");
+                setIsGeneratingValue(false);
+                return;
+            }
+
+            const translated = await translateText(sourceText, 'en');
+            const currentVal = ensureLocalized(node.type === 'qa_pair' ? node.answer : node.value);
+            const newVal = { ...currentVal, en: translated };
+            
+            onUpdate(node.id, { [node.type === 'qa_pair' ? 'answer' : 'value']: newVal });
+        } else {
+            // GENERATION MODE (TR): Create from attributes
+            if (!node.attributes || node.attributes.length === 0) {
+                alert("Önce birkaç özellik ekleyin.");
+                setIsGeneratingValue(false);
+                return;
+            }
+            const name = getLocalizedValue(node.name, 'tr');
+            const generatedText = await generateValueFromAttributes(name, node.attributes, 'tr');
+            
+            const currentVal = ensureLocalized(node.type === 'qa_pair' ? node.answer : node.value);
+            const newVal = { ...currentVal, tr: generatedText };
+            
+            onUpdate(node.id, { [node.type === 'qa_pair' ? 'answer' : 'value']: newVal });
+        }
     } catch (e) { console.error(e); } finally { setIsGeneratingValue(false); }
   };
 
@@ -747,11 +773,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 <button 
                                     onClick={handleAutoGenerateValue} 
                                     disabled={isGeneratingValue} 
-                                    className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded border border-violet-100 transition-colors"
-                                    title={`Generate content in ${activeTab === 'tr' ? 'Turkish' : 'English'}`}
+                                    className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded border transition-colors ${
+                                        activeTab === 'en' 
+                                        ? 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100' 
+                                        : 'text-violet-600 bg-violet-50 border-violet-100 hover:bg-violet-100'
+                                    }`}
+                                    title={activeTab === 'en' ? 'Translate TR content to EN' : 'Generate content from attributes'}
                                 >
-                                    {isGeneratingValue ? <Loader2 size={12} className="animate-spin"/> : <Wand2 size={12} />} 
-                                    AI ile Yaz ({activeTab.toUpperCase()})
+                                    {isGeneratingValue ? <Loader2 size={12} className="animate-spin"/> : (activeTab === 'en' ? <Globe size={12}/> : <Wand2 size={12} />)} 
+                                    {activeTab === 'en' ? "TR'den Çevir" : "AI ile Yaz"}
                                 </button>
                             </div>
                             
@@ -868,11 +898,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     <button 
                         onClick={handleAutoGenerateContext} 
                         disabled={isGeneratingContext} 
-                        className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 bg-white hover:bg-violet-50 px-2 py-1 rounded border border-slate-200 transition-colors"
-                        title={`Generate context in ${activeTab === 'tr' ? 'Turkish' : 'English'}`}
+                        className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded border transition-colors ${
+                            activeTab === 'en' 
+                            ? 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100' 
+                            : 'text-violet-600 bg-violet-50 border-violet-100 hover:bg-violet-100'
+                        }`}
+                        title={activeTab === 'en' ? 'Translate TR context to EN' : 'Generate context from node path'}
                     >
-                        {isGeneratingContext ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12} />} 
-                        Otomatik Doldur ({activeTab.toUpperCase()})
+                        {isGeneratingContext ? <Loader2 size={12} className="animate-spin"/> : (activeTab === 'en' ? <Globe size={12}/> : <Sparkles size={12} />)} 
+                        {activeTab === 'en' ? "TR'den Çevir" : "Otomatik Doldur"}
                     </button>
                  </div>
                  
