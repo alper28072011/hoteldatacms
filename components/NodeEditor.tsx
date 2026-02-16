@@ -15,7 +15,7 @@ import {
   ToggleLeft, AlignLeft, Hash
 } from 'lucide-react';
 
-// --- HELPER COMPONENT: LOCALIZED INPUT WITH AUTO-TRANSLATE ---
+// --- HELPER COMPONENT: LOCALIZED INPUT WITH INTEGRATED ACTIONS ---
 interface LocalizedInputProps {
     value: LocalizedText | string | undefined;
     onChange: (val: LocalizedText) => void;
@@ -27,32 +27,17 @@ interface LocalizedInputProps {
     compact?: boolean;
     activeTab: 'tr' | 'en';
     onTabChange: (tab: 'tr' | 'en') => void;
+    actionButton?: React.ReactNode; // NEW: Allows injecting buttons inside the input
 }
 
-const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeholder, multiline = false, label, tooltip, className, compact = false, activeTab, onTabChange }) => {
-    const [isTranslating, setIsTranslating] = useState(false);
+const LocalizedInput: React.FC<LocalizedInputProps> = ({ 
+    value, onChange, placeholder, multiline = false, label, tooltip, className, compact = false, activeTab, onTabChange, actionButton 
+}) => {
     const data = ensureLocalized(value);
 
     const handleChange = (text: string) => {
         onChange({ ...data, [activeTab]: text });
     };
-
-    const handleAutoTranslate = async () => {
-        setIsTranslating(true);
-        // Logic: If I am in EN, translate FROM TR. If I am in TR, translate FROM EN.
-        const targetLang = activeTab;
-        const sourceLang = activeTab === 'tr' ? 'en' : 'tr';
-        const sourceText = data[sourceLang];
-
-        if (sourceText) {
-            const translated = await translateText(sourceText, targetLang);
-            onChange({ ...data, [targetLang]: translated });
-        }
-        setIsTranslating(false);
-    };
-
-    const sourceLang = activeTab === 'tr' ? 'en' : 'tr';
-    const canTranslate = !data[activeTab] && data[sourceLang] && data[sourceLang].trim().length > 0;
 
     return (
         <div className={`space-y-1 ${className}`}>
@@ -62,7 +47,8 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                         {label && <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>}
                         {tooltip && <InfoTooltip title={label || ''} content={tooltip} placement="bottom" />}
                     </div>
-                    <div className="flex items-center bg-slate-100 rounded-md p-0.5">
+                    {/* Integrated Language Toggle for individual fields if needed, mostly handled by parent now */}
+                    <div className="flex items-center bg-slate-100 rounded-md p-0.5 border border-slate-200">
                         <button 
                             onClick={() => onTabChange('tr')}
                             className={`px-2 py-0.5 text-[10px] font-bold rounded-sm transition-all ${activeTab === 'tr' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
@@ -84,7 +70,7 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                     <textarea 
                         value={data[activeTab]} 
                         onChange={(e) => handleChange(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y min-h-[80px]"
+                        className={`w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y min-h-[80px] ${actionButton ? 'pb-10' : ''}`}
                         placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
                     />
                 ) : (
@@ -92,21 +78,16 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({ value, onChange, placeh
                         type="text" 
                         value={data[activeTab]} 
                         onChange={(e) => handleChange(e.target.value)}
-                        className={`w-full bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}
+                        className={`w-full bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} ${actionButton ? 'pr-24' : ''}`}
                         placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
                     />
                 )}
                 
-                {canTranslate && (
-                    <button 
-                        onClick={handleAutoTranslate}
-                        disabled={isTranslating}
-                        className="absolute right-2 bottom-1.5 p-1 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-md hover:bg-indigo-100 transition-colors z-10 flex items-center gap-1"
-                        title={`Translate from ${sourceLang.toUpperCase()}`}
-                    >
-                        {isTranslating ? <Loader2 size={10} className="animate-spin"/> : <RefreshCw size={10} />}
-                        <span className="text-[9px] font-bold">{sourceLang.toUpperCase()}'den Çevir</span>
-                    </button>
+                {/* INJECTED ACTION BUTTON (Inside the input) */}
+                {actionButton && (
+                    <div className="absolute right-2 bottom-2 z-10">
+                        {actionButton}
+                    </div>
                 )}
             </div>
         </div>
@@ -177,7 +158,8 @@ const DynamicFieldInput: React.FC<{
     onChange: (val: LocalizedText) => void;
     activeTab: 'tr' | 'en';
     onTabChange: (t: 'tr' | 'en') => void;
-}> = ({ attribute, onChange, activeTab, onTabChange }) => {
+    actionButton?: React.ReactNode;
+}> = ({ attribute, onChange, activeTab, onTabChange, actionButton }) => {
     const type = attribute.type;
     const value = ensureLocalized(attribute.value);
 
@@ -252,6 +234,7 @@ const DynamicFieldInput: React.FC<{
                 onTabChange={onTabChange}
                 multiline={true}
                 placeholder="Detaylı açıklama..."
+                actionButton={actionButton}
             />
         );
     }
@@ -280,6 +263,7 @@ const DynamicFieldInput: React.FC<{
             activeTab={activeTab} 
             onTabChange={onTabChange}
             placeholder="Değer giriniz..."
+            actionButton={actionButton}
         />
     );
 };
@@ -308,6 +292,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const [isGeneratingContext, setIsGeneratingContext] = useState(false);
   const [isGeneratingValue, setIsGeneratingValue] = useState(false);
   const [isBulkTranslating, setIsBulkTranslating] = useState(false); 
+  const [translatingFieldId, setTranslatingFieldId] = useState<string | null>(null);
   
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -512,6 +497,21 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       } catch (e) { console.error(e); } finally { setIsBulkTranslating(false); }
   };
 
+  const handleSingleAttributeTranslate = async (attrId: string) => {
+      const attr = node.attributes?.find(a => a.id === attrId);
+      if (!attr) return;
+      
+      setTranslatingFieldId(attrId);
+      try {
+          const valObj = ensureLocalized(attr.value);
+          if (valObj.tr && !valObj.en) {
+              const translated = await translateText(valObj.tr, 'en');
+              handleUpdateAttribute(attrId, 'value', { ...valObj, en: translated });
+          }
+      } catch (e) { console.error(e); }
+      finally { setTranslatingFieldId(null); }
+  };
+
   const handleAddAttribute = () => {
     if (!newAttrKey.tr.trim() && !newAttrKey.en.trim()) return;
     const newAttr: NodeAttribute = { id: generateId('attr'), key: { ...newAttrKey }, value: { ...newAttrValue }, type: 'text' };
@@ -614,6 +614,30 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       );
   };
 
+  // Helper to generate the correct AI button for the active context
+  const renderActionBtn = (
+      isLoading: boolean, 
+      action: () => void, 
+      type: 'translate' | 'generate' | 'context'
+  ) => {
+      const isTranslate = (type === 'translate' || type === 'context') && activeTab === 'en';
+      
+      return (
+        <button 
+            onClick={action} 
+            disabled={isLoading} 
+            className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-md border shadow-sm transition-all z-20 ${
+                isTranslate
+                ? 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100' 
+                : 'text-violet-600 bg-violet-50 border-violet-100 hover:bg-violet-100'
+            }`}
+        >
+            {isLoading ? <Loader2 size={12} className="animate-spin"/> : (isTranslate ? <Globe size={12}/> : <Sparkles size={12} />)} 
+            {isTranslate ? "Çevir" : (type === 'generate' ? "AI Yaz" : "Oto Doldur")}
+        </button>
+      );
+  };
+
   if (node.type === 'root') {
       return (
       <div className="h-full flex flex-col bg-slate-50/30">
@@ -654,7 +678,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
             )}
 
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                {/* JUST NAME - Template Selector Removed from Here */}
+                {/* 1. NAME SECTION */}
                 <div className="mb-2">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">BAŞLIK / İSİM</label>
                     <LocalizedInput 
@@ -663,24 +687,18 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         placeholder="Öğe Başlığı..."
                         activeTab={activeTab}
                         onTabChange={setActiveTab}
+                        // For name, we mostly want translate if in EN mode
+                        actionButton={activeTab === 'en' ? renderActionBtn(false, () => {}, 'translate') : undefined} 
                     />
                 </div>
                 
-                {/* --- STANDARD CONTENT AREA --- */}
+                {/* 2. MAIN VALUE SECTION */}
                 <div className="mt-4 relative animate-in fade-in slide-in-from-top-2">
                     <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-2">
                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{node.type === 'qa_pair' ? 'Cevap' : 'Ana Değer / Özet'}</label>
                             <InfoTooltip title="Ana İçerik" content="Misafire gösterilecek ana metin. Şablon kullanıyorsanız burası 'Özet' olarak kalabilir." />
                         </div>
-                        <button 
-                            onClick={handleAutoGenerateValue} 
-                            disabled={isGeneratingValue} 
-                            className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded border transition-colors ${activeTab === 'en' ? 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100' : 'text-violet-600 bg-violet-50 border-violet-100 hover:bg-violet-100'}`}
-                        >
-                            {isGeneratingValue ? <Loader2 size={12} className="animate-spin"/> : (activeTab === 'en' ? <Globe size={12}/> : <Wand2 size={12} />)} 
-                            {activeTab === 'en' ? "TR'den Çevir" : "AI ile Yaz"}
-                        </button>
                     </div>
                     
                     <LocalizedInput 
@@ -690,6 +708,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         multiline={true}
                         activeTab={activeTab}
                         onTabChange={setActiveTab}
+                        actionButton={renderActionBtn(isGeneratingValue, handleAutoGenerateValue, 'generate')}
                     />
 
                     {node.type === 'qa_pair' && <input type="text" value={node.question || ''} onChange={(e) => handleChange('question', e.target.value)} className="hidden" />}
@@ -703,7 +722,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 </div>
             </div>
 
-            {/* DYNAMIC FIELDS SECTION (If Template Active) */}
+            {/* DYNAMIC FIELDS SECTION (Template) */}
             {activeTemplate && standardAttributes.length > 0 && (
                 <div className="bg-white rounded-xl border border-indigo-100 shadow-sm overflow-hidden animate-in slide-in-from-bottom-2">
                     <div className="bg-indigo-50/50 px-6 py-4 border-b border-indigo-100 flex justify-between items-center">
@@ -722,9 +741,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                             <div key={attr.id} className={attr.type === 'textarea' ? 'md:col-span-2' : ''}>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                                     {getLocalizedValue(attr.key, 'tr')}
-                                    {/* Show AI Description tooltip if available in template definition */}
                                     {(() => {
-                                        const fieldDef = activeTemplate.fields.find(f => f.label.tr === getLocalizedValue(attr.key, 'tr')); // Quick match
+                                        const fieldDef = activeTemplate.fields.find(f => f.label.tr === getLocalizedValue(attr.key, 'tr')); 
                                         if (fieldDef?.aiDescription) {
                                             return <InfoTooltip title="AI Bilgisi" content={fieldDef.aiDescription} placement="left" />;
                                         }
@@ -736,6 +754,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)}
                                     activeTab={activeTab}
                                     onTabChange={setActiveTab}
+                                    actionButton={activeTab === 'en' ? renderActionBtn(translatingFieldId === attr.id, () => handleSingleAttributeTranslate(attr.id), 'translate') : undefined}
                                 />
                             </div>
                         ))}
@@ -743,14 +762,41 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 </div>
             )}
 
-            {/* CUSTOM ATTRIBUTES SECTION */}
+            {/* 3. CUSTOM ATTRIBUTES SECTION */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <Settings size={18} className="text-slate-400" />
                         <h3 className="text-sm font-bold text-slate-700">Özel Alanlar (Custom Fields)</h3>
                     </div>
-                    <span className="text-xs text-slate-400">{customAttributes.length} ek özellik</span>
+                    
+                    {/* CUSTOM FIELDS HEADER CONTROLS (Lang + Bulk) */}
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center bg-white rounded-md p-0.5 border border-slate-200 shadow-sm">
+                            <button 
+                                onClick={() => setActiveTab('tr')}
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded-sm transition-all ${activeTab === 'tr' ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                TR
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('en')}
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded-sm transition-all ${activeTab === 'en' ? 'bg-slate-100 text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                EN
+                            </button>
+                        </div>
+                        {activeTab === 'en' && customAttributes.length > 0 && (
+                            <button 
+                                onClick={handleBulkTranslateAttributes} 
+                                disabled={isBulkTranslating} 
+                                className="flex items-center gap-1.5 px-2 py-1 bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 rounded text-[10px] font-bold transition-colors shadow-sm"
+                            >
+                                {isBulkTranslating ? <Loader2 size={12} className="animate-spin"/> : <Globe size={12} />} Toplu Çevir
+                            </button>
+                        )}
+                        <span className="text-xs text-slate-400">{customAttributes.length} özellik</span>
+                    </div>
                 </div>
                 
                 <div className="p-6 space-y-3">
@@ -764,10 +810,21 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 />
                             </div>
                             <div className="flex-1">
+                                {/* Pass specific translate button to custom fields when in EN mode */}
                                 <LocalizedInput 
                                     value={attr.value} 
                                     onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)} 
                                     placeholder="Value" compact activeTab={activeTab} onTabChange={setActiveTab}
+                                    actionButton={activeTab === 'en' ? (
+                                        <button 
+                                            onClick={() => handleSingleAttributeTranslate(attr.id)}
+                                            disabled={translatingFieldId === attr.id}
+                                            className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                            title="Translate this field"
+                                        >
+                                            {translatingFieldId === attr.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                        </button>
+                                    ) : undefined}
                                 />
                             </div>
                             <button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all mt-1">
@@ -791,18 +848,23 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 </div>
             </div>
 
+            {/* 4. AI CONTEXT SECTION */}
             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 border-dashed">
                  <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center gap-2">
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">AI Context (Gizli Notlar)</label>
                         <InfoTooltip title="Yapay Zeka Notları" content="Bu alan sadece AI tarafından okunur." />
                     </div>
-                    <button onClick={handleAutoGenerateContext} disabled={isGeneratingContext} className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded border transition-colors ${activeTab === 'en' ? 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100' : 'text-violet-600 bg-violet-50 border-violet-100 hover:bg-violet-100'}`}>
-                        {isGeneratingContext ? <Loader2 size={12} className="animate-spin"/> : (activeTab === 'en' ? <Globe size={12}/> : <Sparkles size={12} />)} 
-                        {activeTab === 'en' ? "TR'den Çevir" : "Otomatik Doldur"}
-                    </button>
                  </div>
-                 <LocalizedInput value={node.description} onChange={(val) => handleChange('description', val)} placeholder="AI Bağlam Notu..." multiline={true} activeTab={activeTab} onTabChange={setActiveTab}/>
+                 <LocalizedInput 
+                    value={node.description} 
+                    onChange={(val) => handleChange('description', val)} 
+                    placeholder="AI Bağlam Notu..." 
+                    multiline={true} 
+                    activeTab={activeTab} 
+                    onTabChange={setActiveTab}
+                    actionButton={renderActionBtn(isGeneratingContext, handleAutoGenerateContext, 'context')}
+                 />
             </div>
         </div>
       </div>
