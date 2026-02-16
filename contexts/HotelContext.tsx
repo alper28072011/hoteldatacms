@@ -1,8 +1,8 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { HotelNode, AIPersona } from '../types';
+import { HotelNode, AIPersona, NodeTemplate } from '../types';
 import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree, findNodeById, getSmartDefaultChildType, checkIdExists } from '../utils/treeUtils';
-import { updateHotelData, getPersonas, savePersona as savePersonaToDb, deletePersona as deletePersonaFromDb } from '../services/firestoreService';
+import { updateHotelData, getPersonas, savePersona as savePersonaToDb, deletePersona as deletePersonaFromDb, getNodeTemplates, saveNodeTemplate, deleteNodeTemplate } from '../services/firestoreService';
 
 interface HotelContextType {
   hotelData: HotelNode;
@@ -19,6 +19,9 @@ interface HotelContextType {
   personas: AIPersona[];
   activePersonaId: string;
   
+  // Template State
+  nodeTemplates: NodeTemplate[];
+
   // Actions
   setHotelData: (data: HotelNode | ((prev: HotelNode) => HotelNode)) => void;
   setHotelId: (id: string | null) => void;
@@ -34,6 +37,11 @@ interface HotelContextType {
   updatePersona: (persona: AIPersona) => Promise<void>;
   deletePersona: (id: string) => Promise<void>;
   setActivePersonaId: (id: string) => void;
+
+  // Template Actions
+  addNodeTemplate: (template: NodeTemplate) => Promise<void>;
+  updateNodeTemplate: (template: NodeTemplate) => Promise<void>;
+  deleteNodeTemplate: (id: string) => Promise<void>;
 }
 
 const HotelContext = createContext<HotelContextType | undefined>(undefined);
@@ -55,18 +63,24 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [personas, setPersonas] = useState<AIPersona[]>([]);
   const [activePersonaId, setActivePersonaId] = useState<string>('default');
 
-  // Load Personas when Hotel ID changes
+  // Node Templates State
+  const [nodeTemplates, setNodeTemplates] = useState<NodeTemplate[]>([]);
+
+  // Load Personas & Templates when Hotel ID changes
   useEffect(() => {
-    const loadPersonas = async () => {
+    const loadSubCollections = async () => {
         if (hotelId) {
-            const list = await getPersonas(hotelId);
-            setPersonas(list);
+            const pList = await getPersonas(hotelId);
+            setPersonas(pList);
+            const tList = await getNodeTemplates(hotelId);
+            setNodeTemplates(tList);
         } else {
             setPersonas([]);
+            setNodeTemplates([]);
         }
         setActivePersonaId('default');
     };
-    loadPersonas();
+    loadSubCollections();
   }, [hotelId]);
 
   // --- ACTIONS (Wrapped in useCallback to prevent re-renders) ---
@@ -193,6 +207,25 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await deletePersonaFromDb(hotelId, id);
   }, [hotelId, activePersonaId]);
 
+  // Template Actions
+  const addNodeTemplate = useCallback(async (template: NodeTemplate) => {
+      if (!hotelId) return;
+      setNodeTemplates(prev => [...prev, template]);
+      await saveNodeTemplate(hotelId, template);
+  }, [hotelId]);
+
+  const updateNodeTemplate = useCallback(async (template: NodeTemplate) => {
+      if (!hotelId) return;
+      setNodeTemplates(prev => prev.map(t => t.id === template.id ? template : t));
+      await saveNodeTemplate(hotelId, template);
+  }, [hotelId]);
+
+  const deleteNodeTemplate = useCallback(async (id: string) => {
+      if (!hotelId) return;
+      setNodeTemplates(prev => prev.filter(t => t.id !== id));
+      await deleteNodeTemplate(hotelId, id);
+  }, [hotelId]);
+
   return (
     <HotelContext.Provider value={{
       hotelData,
@@ -215,7 +248,11 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setActivePersonaId,
       addPersona,
       updatePersona,
-      deletePersona
+      deletePersona,
+      nodeTemplates,
+      addNodeTemplate,
+      updateNodeTemplate,
+      deleteNodeTemplate
     }}>
       {children}
     </HotelContext.Provider>

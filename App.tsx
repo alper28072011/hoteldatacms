@@ -1,7 +1,8 @@
+
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from './types';
 import { 
-  getInitialData, generateId as genId, findNodeById, regenerateIds, cleanTreeValues, 
+  getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
   analyzeHotelStats, filterHotelTree, generateOptimizedCSV, generateCleanAIJSON, 
   generateAIText, addChildToNode 
 } from './utils/treeUtils';
@@ -14,9 +15,9 @@ import CreateHotelModal from './components/CreateHotelModal';
 import TemplateModal from './components/TemplateModal';
 import DataCheckModal from './components/DataCheckModal'; 
 import AIPersonaModal from './components/AIPersonaModal';
+import TemplateManager from './components/TemplateManager'; // NEW
 import { fetchHotelById, getHotelsList, createNewHotel } from './services/firestoreService';
 import { useHotel } from './contexts/HotelContext'; 
-import { AutoFixAction } from './services/geminiService'; // Import the correct type
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
@@ -47,7 +48,7 @@ const App: React.FC = () => {
     updateNode, 
     addChild, 
     deleteNode, 
-    moveNode, // Context action for moving
+    moveNode,
     saveStatus, 
     hasUnsavedChanges,
     forceSave,
@@ -71,6 +72,7 @@ const App: React.FC = () => {
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isDataCheckOpen, setIsDataCheckOpen] = useState(false);
   const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
+  const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false); // NEW
   
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -190,7 +192,7 @@ const App: React.FC = () => {
           try {
               if (action.type === 'add' && action.data) {
                   setHotelData(prev => {
-                      const newNode = { ...action.data, id: action.data?.id || genId('ai') } as HotelNode;
+                      const newNode = { ...action.data, id: action.data?.id || generateId('ai') } as HotelNode;
                       // Ensure localized text
                       if(typeof newNode.name === 'string') newNode.name = { tr: newNode.name, en: '' };
                       return addChildToNode(prev, action.targetId, newNode);
@@ -351,7 +353,7 @@ const App: React.FC = () => {
       <DataCheckModal isOpen={isDataCheckOpen} onClose={() => setIsDataCheckOpen(false)} data={hotelData} onApplyAction={(action) => {
             if (action.type === 'add') {
                 setHotelData(prev => {
-                     const newNode = { ...action.data, id: action.data.id || genId('import') } as HotelNode;
+                     const newNode = { ...action.data, id: action.data.id || generateId('import') } as HotelNode;
                      // Ensure localization for new nodes
                      if(typeof newNode.name === 'string') newNode.name = { tr: newNode.name, en: '' };
                      const targetId = action.targetId === 'root' ? prev.id : action.targetId;
@@ -363,6 +365,7 @@ const App: React.FC = () => {
       <CreateHotelModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onCreate={handleCreateNewHotel} />
       <TemplateModal isOpen={isTemplateModalOpen} onClose={() => setIsTemplateModalOpen(false)} data={hotelData} />
       <AIPersonaModal isOpen={isPersonaModalOpen} onClose={() => setIsPersonaModalOpen(false)} />
+      <TemplateManager isOpen={isTemplateManagerOpen} onClose={() => setIsTemplateManagerOpen(false)} />
 
       <header className="h-20 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-30 shrink-0 shadow-sm relative">
         <div className="flex items-center gap-3">
@@ -448,6 +451,7 @@ const App: React.FC = () => {
 
         <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center">
+              <button onClick={() => setIsTemplateManagerOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-100 rounded hover:bg-indigo-200 mr-2"><LayoutTemplate size={14} className="mr-1.5" /> Şablonlar</button>
               <button onClick={() => setIsDataCheckOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-cyan-700 bg-cyan-100 rounded hover:bg-cyan-200 mr-2"><Scale size={14} className="mr-1.5" /> Veri Kontrol</button>
               <button onClick={() => setIsHealthModalOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
               <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded hover:shadow-md mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
@@ -481,6 +485,7 @@ const App: React.FC = () => {
                <button onClick={() => setMobileToolsOpen(!mobileToolsOpen)} className="p-2 text-slate-600"><Wrench size={20} /></button>
                {mobileToolsOpen && (
                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-2">
+                    <button onClick={() => { setIsTemplateManagerOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><LayoutTemplate size={16} /> Şablonlar</button>
                     <button onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>
                     <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>
                  </div>
@@ -534,6 +539,7 @@ const App: React.FC = () => {
       </div>
 
       <footer className="bg-slate-50 border-t border-slate-200 text-xs text-slate-600 relative z-30 shrink-0">
+        {/* Footer content same as before */}
         <div className="lg:hidden h-10 flex items-center justify-between px-4 cursor-pointer hover:bg-slate-100 border-b border-slate-100" onClick={() => setMobileStatsOpen(!mobileStatsOpen)}>
           <div className="flex items-center gap-2"><Activity size={14} /><span className="font-semibold">Doluluk: %{stats.completionRate}</span></div>
           <ChevronUp size={14} className={`transition-transform duration-300 ${mobileStatsOpen ? 'rotate-180' : ''}`} />

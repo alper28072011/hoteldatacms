@@ -116,6 +116,23 @@ export interface NodeAttribute {
   options?: string[]; 
 }
 
+// --- DYNAMIC TEMPLATES ---
+export interface TemplateField {
+  id: string;
+  key: string; // Internal machine key (e.g. 'calories')
+  label: LocalizedText; // Display label (e.g. TR: 'Kalori', EN: 'Calories')
+  type: 'text' | 'number' | 'boolean' | 'select';
+  options?: string[]; // CSV string or array for selects
+  required: boolean;
+}
+
+export interface NodeTemplate {
+  id: string;
+  name: string; // Template name (e.g. "Food Item Template")
+  description?: string;
+  fields: TemplateField[];
+}
+
 export interface HotelNode {
   id: string;
   type: NodeType | string;
@@ -129,6 +146,9 @@ export interface HotelNode {
   // NEW: SCHEMA AWARENESS
   schemaType?: SchemaType; 
   data?: EventData | DiningData | RoomData | any; // Structured payload based on schemaType
+
+  // NEW: TEMPLATE SYSTEM
+  appliedTemplateId?: string | null;
 
   // PRIMARY CONTENT
   value?: LocalizedText | string; // Main description or generated summary
@@ -157,7 +177,7 @@ export interface HotelSummary {
   name: string;
 }
 
-// Template definition
+// Template definition (Hotel Cloning)
 export interface HotelTemplate {
   id: string;
   name: string;

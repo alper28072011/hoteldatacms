@@ -11,7 +11,7 @@ import {
   ChevronRight, Database, Check, Settings, List, FileText, CircleHelp, 
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
-  Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw
+  Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: LOCALIZED INPUT WITH AUTO-TRANSLATE ---
@@ -386,7 +386,7 @@ export interface NodeEditorProps {
 }
 
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
-  const { changeNodeId, displayLanguage } = useHotel();
+  const { changeNodeId, displayLanguage, nodeTemplates } = useHotel(); // Consuming nodeTemplates
   
   // Shared active tab state for all inputs in the editor
   const [activeTab, setActiveTab] = useState<'tr' | 'en'>(displayLanguage);
@@ -444,6 +444,34 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       return getAllowedTypes(String(parentNode.type));
   }, [parentNode]);
 
+  // Determine active template and attributes
+  const activeTemplate = useMemo(() => {
+      return nodeTemplates.find(t => t.id === node?.appliedTemplateId) || null;
+  }, [node?.appliedTemplateId, nodeTemplates]);
+
+  const { standardAttributes, customAttributes } = useMemo(() => {
+      if (!node?.attributes) return { standardAttributes: [], customAttributes: [] };
+      if (!activeTemplate) return { standardAttributes: [], customAttributes: node.attributes };
+
+      const std: NodeAttribute[] = [];
+      const custom: NodeAttribute[] = [];
+
+      node.attributes.forEach(attr => {
+          // Check if this attribute belongs to the template via key match
+          const isFromTemplate = activeTemplate.fields.some(f => {
+              const fKey = f.key.toLowerCase();
+              const aKeyEn = typeof attr.key === 'string' ? attr.key.toLowerCase() : attr.key.en.toLowerCase();
+              return fKey === aKeyEn || (attr.key as any).tr?.toLowerCase() === f.label.tr.toLowerCase(); // Fuzzy match fallback
+          });
+
+          if (isFromTemplate) std.push(attr);
+          else custom.push(attr);
+      });
+
+      return { standardAttributes: std, customAttributes: custom };
+  }, [node, activeTemplate]);
+
+
   if (!node) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50/50">
@@ -469,6 +497,39 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
      else if (schema === 'room') newData = { sizeSqM: 35, maxOccupancy: { adults: 2, children: 1, total: 3 }, bedConfiguration: '', view: 'land', hasBalcony: true, hasJacuzzi: false, pillowMenuAvailable: false, amenities: [], minibarContent: [], bathroomDetails: '' };
      else newData = {};
      onUpdate(node.id, { schemaType: schema, data: newData });
+  };
+
+  const handleApplyTemplate = (templateId: string) => {
+      const template = nodeTemplates.find(t => t.id === templateId);
+      if (!template) {
+          onUpdate(node.id, { appliedTemplateId: null });
+          return;
+      }
+
+      // Merge Logic:
+      // 1. Keep existing attributes
+      // 2. Add new empty attributes for fields in template that don't exist yet
+      
+      const currentAttrs = [...(node.attributes || [])];
+      
+      template.fields.forEach(field => {
+          const exists = currentAttrs.some(attr => {
+              const aKey = getLocalizedValue(attr.key, 'en').toLowerCase();
+              return aKey === field.key.toLowerCase() || aKey === field.label.en.toLowerCase();
+          });
+
+          if (!exists) {
+              currentAttrs.push({
+                  id: generateId('attr'),
+                  key: field.label, // Use template label as key
+                  value: { tr: '', en: '' },
+                  type: field.type as any,
+                  options: field.options
+              });
+          }
+      });
+
+      onUpdate(node.id, { appliedTemplateId: templateId, attributes: currentAttrs });
   };
 
   const handleDataUpdate = (newData: any) => {
@@ -785,6 +846,23 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     </div>
                     
                     <div className="flex items-center gap-2">
+                        {/* TEMPLATE SELECTOR */}
+                        {nodeTemplates.length > 0 && (
+                            <div className="flex items-center gap-2 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                                <LayoutTemplate size={14} className="text-indigo-600"/>
+                                <select 
+                                    value={node.appliedTemplateId || ''}
+                                    onChange={(e) => handleApplyTemplate(e.target.value)}
+                                    className="text-xs bg-transparent font-bold text-indigo-700 outline-none cursor-pointer"
+                                >
+                                    <option value="">-- Şablon Yok --</option>
+                                    {nodeTemplates.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <span className="text-xs font-bold text-slate-400 uppercase">Şablon:</span>
                         <select 
                             value={node.schemaType || 'generic'} 
@@ -862,6 +940,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 )}
             </div>
 
+            {/* ATTRIBUTES SECTION - NOW SPLIT BY TEMPLATE VS CUSTOM */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                     <div className="flex items-center gap-2">
@@ -885,36 +964,84 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <span className="text-xs text-slate-400">{node.attributes?.length || 0} özellik</span>
                     </div>
                 </div>
-                <div className="p-6 space-y-3">
-                    {node.attributes && node.attributes.map(attr => (
-                        <div key={attr.id} className="flex items-start gap-3 group">
-                            {/* Key Input */}
-                            <div className="w-1/3 min-w-[120px]">
-                                <LocalizedInput 
-                                    value={attr.key} 
-                                    onChange={(val) => handleUpdateAttribute(attr.id, 'key', val)} 
-                                    placeholder="Key"
-                                    compact
-                                    activeTab={activeTab}
-                                    onTabChange={setActiveTab}
-                                />
+                
+                <div className="p-6 space-y-4">
+                    
+                    {/* STANDARD ATTRIBUTES (FROM TEMPLATE) */}
+                    {activeTemplate && standardAttributes.length > 0 && (
+                        <div className="mb-6 animate-in slide-in-from-left-2">
+                            <div className="text-xs font-bold text-indigo-500 uppercase mb-3 flex items-center gap-2">
+                                <LayoutTemplate size={12} /> {activeTemplate.name} Alanları
                             </div>
-                            {/* Value Input */}
-                            <div className="flex-1">
-                                <LocalizedInput 
-                                    value={attr.value} 
-                                    onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)} 
-                                    placeholder="Value"
-                                    compact
-                                    activeTab={activeTab}
-                                    onTabChange={setActiveTab}
-                                />
+                            <div className="space-y-3 pl-2 border-l-2 border-indigo-100">
+                                {standardAttributes.map(attr => (
+                                    <div key={attr.id} className="flex items-start gap-3 group">
+                                        <div className="w-1/3 min-w-[120px]">
+                                            {/* Key is read-only for template fields visually */}
+                                            <LocalizedInput 
+                                                value={attr.key} 
+                                                onChange={(val) => handleUpdateAttribute(attr.id, 'key', val)} 
+                                                placeholder="Key"
+                                                compact
+                                                activeTab={activeTab}
+                                                onTabChange={setActiveTab}
+                                                className="opacity-70 pointer-events-none" 
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <LocalizedInput 
+                                                value={attr.value} 
+                                                onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)} 
+                                                placeholder="Value"
+                                                compact
+                                                activeTab={activeTab}
+                                                onTabChange={setActiveTab}
+                                            />
+                                        </div>
+                                        {/* Template attributes cannot be deleted individually, only by changing template */}
+                                        <div className="w-6"></div>
+                                    </div>
+                                ))}
                             </div>
-                            <button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all mt-1">
-                                <X size={14} />
-                            </button>
                         </div>
-                    ))}
+                    )}
+
+                    {/* CUSTOM ATTRIBUTES */}
+                    <div className="space-y-3">
+                        {activeTemplate && standardAttributes.length > 0 && customAttributes.length > 0 && (
+                             <div className="text-xs font-bold text-slate-400 uppercase mb-2">Özel Alanlar</div>
+                        )}
+
+                        {customAttributes.map(attr => (
+                            <div key={attr.id} className="flex items-start gap-3 group">
+                                {/* Key Input */}
+                                <div className="w-1/3 min-w-[120px]">
+                                    <LocalizedInput 
+                                        value={attr.key} 
+                                        onChange={(val) => handleUpdateAttribute(attr.id, 'key', val)} 
+                                        placeholder="Key"
+                                        compact
+                                        activeTab={activeTab}
+                                        onTabChange={setActiveTab}
+                                    />
+                                </div>
+                                {/* Value Input */}
+                                <div className="flex-1">
+                                    <LocalizedInput 
+                                        value={attr.value} 
+                                        onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)} 
+                                        placeholder="Value"
+                                        compact
+                                        activeTab={activeTab}
+                                        onTabChange={setActiveTab}
+                                    />
+                                </div>
+                                <button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all mt-1">
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                     
                     {/* Add New Attribute Row */}
                     <div className="flex items-start gap-3 pt-4 border-t border-slate-100 mt-2">

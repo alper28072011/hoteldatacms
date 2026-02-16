@@ -12,13 +12,14 @@ import {
   query,
   select
 } from 'firebase/firestore';
-import { HotelNode, HotelSummary, HotelTemplate, AIPersona } from '../types';
+import { HotelNode, HotelSummary, HotelTemplate, AIPersona, NodeTemplate } from '../types';
 import { getLocalizedValue } from '../utils/treeUtils';
 
 const HOTELS_COLLECTION = 'hotels';
 const STRUCTURE_SUBCOLLECTION = 'structure'; // The sub-collection for sharded data
-const PERSONAS_SUBCOLLECTION = 'personas'; // New sub-collection for personas
-const TEMPLATES_COLLECTION = 'templates';
+const PERSONAS_SUBCOLLECTION = 'personas'; // Sub-collection for personas
+const NODE_TEMPLATES_SUBCOLLECTION = 'node_templates'; // NEW: Sub-collection for dynamic templates
+const TEMPLATES_COLLECTION = 'templates'; // Global templates for cloning hotels
 
 // --- LOCAL STORAGE HELPERS (OFFLINE FALLBACK & HYBRID SYNC) ---
 const LS_KEYS = {
@@ -26,6 +27,7 @@ const LS_KEYS = {
   TEMPLATES_LIST: 'cms_templates_list',
   HOTEL_PREFIX: 'cms_hotel_data_',
   PERSONAS_PREFIX: 'cms_personas_',
+  NODE_TEMPLATES_PREFIX: 'cms_node_templates_',
 };
 
 const getLocalHotelsList = (): HotelSummary[] => {
@@ -76,6 +78,18 @@ const getLocalPersonas = (hotelId: string): AIPersona[] => {
 
 const saveLocalPersonas = (hotelId: string, personas: AIPersona[]) => {
   localStorage.setItem(LS_KEYS.PERSONAS_PREFIX + hotelId, JSON.stringify(personas));
+};
+
+// Node Template Local Storage Helpers
+const getLocalNodeTemplates = (hotelId: string): NodeTemplate[] => {
+  try {
+    const data = localStorage.getItem(LS_KEYS.NODE_TEMPLATES_PREFIX + hotelId);
+    return data ? JSON.parse(data) : [];
+  } catch (e) { return []; }
+};
+
+const saveLocalNodeTemplates = (hotelId: string, templates: NodeTemplate[]) => {
+  localStorage.setItem(LS_KEYS.NODE_TEMPLATES_PREFIX + hotelId, JSON.stringify(templates));
 };
 
 
@@ -379,7 +393,46 @@ export const deletePersona = async (hotelId: string, personaId: string): Promise
     }
 };
 
-// --- TEMPLATE SERVICES ---
+// --- NODE TEMPLATE SERVICES (SUB-COLLECTION) ---
+
+export const getNodeTemplates = async (hotelId: string): Promise<NodeTemplate[]> => {
+    try {
+        const templatesRef = collection(db, HOTELS_COLLECTION, hotelId, NODE_TEMPLATES_SUBCOLLECTION);
+        const snapshot = await getDocs(templatesRef);
+        const templates: NodeTemplate[] = [];
+        snapshot.forEach(doc => templates.push(sanitizeFromFirestore(doc.data()) as NodeTemplate));
+        return templates;
+    } catch (e) {
+        console.warn("Fetching local node templates.", e);
+        return getLocalNodeTemplates(hotelId);
+    }
+};
+
+export const saveNodeTemplate = async (hotelId: string, template: NodeTemplate): Promise<void> => {
+    try {
+        const docRef = doc(db, HOTELS_COLLECTION, hotelId, NODE_TEMPLATES_SUBCOLLECTION, template.id);
+        await setDoc(docRef, sanitizeForFirestore(template));
+    } catch (e) {
+        console.warn("Saving node template locally.", e);
+        const current = getLocalNodeTemplates(hotelId);
+        const index = current.findIndex(t => t.id === template.id);
+        if (index >= 0) current[index] = template;
+        else current.push(template);
+        saveLocalNodeTemplates(hotelId, current);
+    }
+};
+
+export const deleteNodeTemplate = async (hotelId: string, templateId: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, HOTELS_COLLECTION, hotelId, NODE_TEMPLATES_SUBCOLLECTION, templateId));
+    } catch (e) {
+        console.warn("Deleting node template locally.", e);
+        const current = getLocalNodeTemplates(hotelId);
+        saveLocalNodeTemplates(hotelId, current.filter(t => t.id !== templateId));
+    }
+};
+
+// --- TEMPLATE SERVICES (GLOBAL) ---
 
 export const saveTemplate = async (template: Omit<HotelTemplate, 'id'>): Promise<string> => {
   try {
