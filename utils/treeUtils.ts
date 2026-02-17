@@ -1,4 +1,5 @@
 
+
 import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText } from "../types";
 
 // Generate a simple unique ID with high collision resistance
@@ -451,92 +452,122 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   return null;
 };
 
-// --- AI TEXT GENERATION (CRITICAL FOR CHATBOT) ---
+// --- AI TEXT GENERATION (REWRITTEN FOR DEEP CONTEXT & BILINGUAL SUPPORT) ---
 
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
 ): Promise<string> => {
   
-  const flattenTree = (node: HotelNode, depth: number): { node: HotelNode, depth: number }[] => {
-    const result: { node: HotelNode, depth: number }[] = [{ node, depth }];
-    if (node.children) {
-      node.children.forEach(child => result.push(...flattenTree(child, depth + 1)));
-    }
-    return result;
+  const lines: string[] = [];
+  let processedCount = 0;
+  
+  // 1. First Pass: Count total nodes to manage progress bar accurately
+  const countNodes = (node: HotelNode): number => {
+      let count = 1;
+      if (node.children) {
+          count += node.children.reduce((acc, child) => acc + countNodes(child), 0);
+      }
+      return count;
+  };
+  const totalNodes = countNodes(root);
+
+  // 2. Recursive Traversal Function
+  const processNode = async (node: HotelNode, depth: number, parentPath: string) => {
+      processedCount++;
+      if (processedCount % 50 === 0) {
+          onProgress(Math.round((processedCount / totalNodes) * 100));
+          await new Promise(resolve => setTimeout(resolve, 1)); // Yield for UI updates
+      }
+
+      const indent = "  ".repeat(depth);
+      const name = getRosettaText(node.name);
+      
+      // Update Path: Root > Category > Item
+      const currentPath = parentPath ? `${parentPath} > ${name}` : name;
+      
+      // Determine Header Level or Bullet
+      // Categories get Headers (#), Items get Bullets (-)
+      let prefix = "- ";
+      if (depth === 0) prefix = "# ";
+      else if (depth === 1) prefix = "## ";
+      else if (depth === 2) prefix = "### ";
+      
+      // Force bullet for deeper levels or specific item types to keep Markdown clean
+      if (depth > 2 || ['item', 'field', 'menu_item', 'qa_pair'].includes(String(node.type))) {
+          prefix = "- ";
+      }
+
+      // LINE 1: Title & Metadata
+      const intentTag = node.intent ? `[INTENT: ${node.intent.toUpperCase()}]` : '';
+      const typeTag = `[TYPE: ${String(node.type).toUpperCase()}]`;
+      const pathTag = `[Path: ${currentPath}]`;
+      
+      lines.push(`${indent}${prefix}${name} ${intentTag} ${typeTag} ${pathTag}`);
+
+      // LINE 2: Content / Value / Answer
+      const value = getRosettaText(node.value || node.answer);
+      if (value) {
+          lines.push(`${indent}  * Content: ${value}`);
+      }
+
+      // LINE 3: Question (for QA pairs)
+      if (node.question) {
+          lines.push(`${indent}  * Question: ${node.question}`);
+      }
+
+      // LINE 4: Price
+      if (node.price) {
+          lines.push(`${indent}  * Price: ${node.price}`);
+      }
+
+      // LINE 5: Attributes (Smart Formatting)
+      if (node.attributes && node.attributes.length > 0) {
+          const validAttributes = node.attributes
+              .map(attr => {
+                  const k = getRosettaText(attr.key);
+                  const v = getRosettaText(attr.value);
+                  if (!k || !v) return null;
+                  return `${k}: ${v}`;
+              })
+              .filter(Boolean); // Remove nulls
+          
+          if (validAttributes.length > 0) {
+              lines.push(`${indent}  * Attributes: ${validAttributes.join(' | ')}`);
+          }
+      }
+
+      // LINE 6: AI Hidden Note
+      const desc = getRosettaText(node.description);
+      if (desc) {
+          lines.push(`${indent}  * AI_Note: ${desc}`);
+      }
+
+      // LINE 7: Structured Data (Legacy support)
+      if (node.data) {
+          try {
+             const dataStr = JSON.stringify(node.data);
+             if (dataStr.length > 4) lines.push(`${indent}  * MetaData: ${dataStr}`);
+          } catch(e) {}
+      }
+
+      // RECURSION: Process Children
+      if (node.children && node.children.length > 0) {
+          // Add a small header if it's an item having children (e.g. "Contains:")
+          if (['item', 'room'].includes(String(node.type))) {
+              lines.push(`${indent}  * Includes / Contains:`);
+          }
+          
+          for (const child of node.children) {
+              // Increase depth for children
+              await processNode(child, depth + 1, currentPath);
+          }
+      }
   };
 
-  const flatNodes = flattenTree(root, 0);
-  const totalNodes = flatNodes.length;
-  const lines: string[] = [];
-  const CHUNK_SIZE = 50;
-
-  for (let i = 0; i < totalNodes; i++) {
-    const { node, depth } = flatNodes[i];
-    
-    // ROSETTA STONE FORMAT: Ensures AI sees both languages
-    const name = getRosettaText(node.name);
-    const value = getRosettaText(node.value || node.answer);
-    
-    const intentTag = node.intent ? `[INTENT: ${node.intent.toUpperCase()}]` : '';
-    const indent = " ".repeat(depth * 2); // 2 spaces per level indentation
-    
-    // 1. HEADER LINE
-    let headerLine = `${indent}- **${name}** ${intentTag}`;
-    
-    // If it's a category/root, make it look like a section
-    if (['root', 'category', 'list', 'menu'].includes(String(node.type))) {
-        headerLine = `${indent}# [${String(node.type).toUpperCase()}] ${name} ${intentTag}`;
-    }
-    lines.push(headerLine);
-
-    // 2. MAIN VALUE / SUMMARY
-    if (value && value.trim()) {
-        lines.push(`${indent}  • Summary: ${value}`);
-    }
-
-    // 3. AI CONTEXT (Priority Information)
-    if (node.description) {
-       const desc = getRosettaText(node.description);
-       if (desc.trim()) {
-           lines.push(`${indent}  • [AI_NOTE]: ${desc}`);
-       }
-    }
-
-    // 4. ATTRIBUTES (The Data Payload) - KEY SECTION FOR TEMPLATES
-    if (node.price) {
-        lines.push(`${indent}  • Price: ${node.price}`);
-    }
-    
-    if (node.attributes && node.attributes.length > 0) {
-       // Ensure attributes are listed explicitly, line by line
-       node.attributes.forEach(attr => {
-          const key = getRosettaText(attr.key);
-          const val = getRosettaText(attr.value);
-          
-          if (key && val && val.trim() !== '') {
-             // Example: "  • Bed Type (Yatak Tipi): King Size (Büyük Boy)"
-             lines.push(`${indent}  • ${key}: ${val}`);
-          }
-       });
-    }
-
-    // 5. STRUCTURED DATA (Legacy)
-    if (node.data) {
-        try {
-            const jsonStr = JSON.stringify(node.data);
-            if (jsonStr.length > 2) {
-                lines.push(`${indent}  • SchemaData: ${jsonStr}`);
-            }
-        } catch(e) {}
-    }
-
-    if (i % CHUNK_SIZE === 0) {
-      onProgress(Math.round((i / totalNodes) * 100));
-      await new Promise(resolve => setTimeout(resolve, 2)); // Tiny yield
-    }
-  }
-
+  // Start Recursion
+  await processNode(root, 0, "");
+  
   return lines.join('\n');
 };
 
