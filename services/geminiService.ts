@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
@@ -113,16 +114,14 @@ export const chatWithData = async (
     Aşağıdaki otel veritabanı "Hiyerarşik Liste" formatındadır.
     1. **Ana Başlıklar (#)**: Kategori veya alanları gösterir.
     2. **Öğeler (-)**: Spesifik hizmetleri veya odaları gösterir.
-    3. **Detaylar (•)**: Bu işaretin olduğu satırlar teknik özellikleri (Attributes) ve detayları içerir.
-       - "Summary": Genel açıklama.
-       - "AI_NOTE": Sadece senin görmen gereken özel notlar/kurallar.
-       - "Key (TR) (Key EN): Value (TR) (Value EN)": Özellikler.
+    3. **Detaylar (Feature)**: Bu işaretin olduğu satırlar teknik özellikleri (Attributes) ve detayları içerir.
+       - "Feature Key: Value": Bu formatı görürsen, bu özellik doğrudan üstteki öğeye aittir. Örn: "Oda Alanı: 58m2".
     
     **GÖREV AKIŞI:**
     
     ADIM 1: ARA VE BUL
     Kullanıcının sorusundaki anahtar kelimeleri (Örn: "Yatak", "Bed", "Manzara") veritabanında ara.
-    - Eğer bir oda soruluyorsa, o odanın altındaki (•) ile başlayan tüm özelliklere bak.
+    - Eğer bir oda soruluyorsa, o odanın altındaki (+ [Feature]) ile başlayan tüm özelliklere bak.
     - Eğer "AI_NOTE" varsa, o bilgiyi öncelikli kural olarak kabul et.
     
     ADIM 2: CEVAPLA
@@ -284,34 +283,45 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
     }
     
     const prompt = `
-    Sen bir Otel Veritabanı için "Semantik Tutarlılık ve Veri İlişkisi Denetçisi"sin.
+    Sen bir Otel Veritabanı için "Semantik Tutarlılık ve Veri Körlüğü Denetçisi"sin (Data Blindness Auditor).
     
     GÖREV:
-    Aşağıdaki otel verilerini (Markdown formatında, [INTENT] etiketleri ile) analiz et.
+    Aşağıdaki otel verilerini (Markdown formatında, [ID: xxx] etiketleri ile) analiz et. Bir yapay zeka botunun bu veriyi okurken zorlanacağı noktaları (Veri Körlüğü) tespit et.
     
-    ŞUNLARA ODAKLAN:
-    1. **Niyet (Intent) Uyuşmazlığı**: Bir kategori "Bilgi" ise, altında sert bir "Yasak/Policy" niyeti taşıyan öğe varsa uyar.
-    2. **Mantıksal Tutarsızlık**: "7/24 Açık" yazıp attribute olarak "Kapanış: 22:00" girilmişse uyar.
-    3. **Kırık Referanslar**: (Örn: Bir oda "VIP Kahvaltı" içeriyor diyor ama "VIP Kahvaltı" listelerde yok).
+    ODAKLANMAN GEREKEN VERİ KÖRLÜĞÜ SEBEPLERİ:
+    1. **Kopuk Nitelikler (Attribute Blindness):** Örn: "Oda Alanı: 58" yazılmış ama birim (m2) yok veya anahtar kelime çok belirsiz ("Değer: 58").
+    2. **Eksik Bağlam (Missing Context):** Bir özellik tanımlanmış ama hangi odaya veya hizmete ait olduğu ağaç yapısında çok derin veya belirsiz.
+    3. **Dil Eksikliği:** Kritik bir özellik sadece Türkçe girilmiş, İngilizce yok. Bu, uluslararası botlar için veri körlüğüdür.
+    4. **Niyet (Intent) Uyuşmazlığı**: Bir kategori "Bilgi" ise, altında sert bir "Yasak/Policy" niyeti taşıyan öğe varsa uyar.
     
+    PUANLAMA SİSTEMİ (0-100):
+    Her analiz edilen düğüm (Node) için bir "AI Okunabilirlik Puanı" ver.
+    - 0-40 (Kırmızı): Kritik eksik (İsim yok, değer yok, tamamen yanlış yerde).
+    - 41-79 (Turuncu): Ortalama (Bağlam var ama birim eksik, sadece tek dil).
+    - 80-100 (Yeşil): Mükemmel (Çift dilli, net anahtarlar, doğru hiyerarşi).
+
     GİRDİ VERİSİ:
     ${textContext}
     
     ÇIKTI ŞEMASI (JSON) - TÜM METİNLER TÜRKÇE OLMALI:
     {
-      "score": number (0-100),
-      "summary": "Kısa analiz özeti (Türkçe).",
+      "score": number (Genel ortalama puan),
+      "summary": "Genel analiz özeti (Türkçe).",
+      "nodeScores": {
+          "node_id_1": 85,
+          "node_id_2": 40
+      },
       "issues": [
         {
           "id": "ai_issue_x",
-          "nodeId": "Bulabildiğin en yakın ID veya öğe ismi",
+          "nodeId": "Sorunlu Node ID'si (textContext içindeki [ID: xxx] tag'inden al)",
           "nodeName": "Öğe ismi",
           "severity": "critical" | "warning" | "optimization",
-          "message": "Sorunun Türkçe açıklaması (Örn: Bu bir KURAL verisidir, 'policies_rules' altına taşınması önerilir)",
+          "message": "Sorunun Türkçe açıklaması (Örn: 'Oda Alanı' özelliği için birim (m2) eksik, AI bunu anlayamayabilir.)",
           "fix": { // OPSİYONEL
              "targetId": "ilgili ID",
              "action": "update",
-             "data": { "intent": "policy" }, // Örn: Niyeti düzelt
+             "data": { "intent": "policy" }, 
              "description": "Öneri (Türkçe)"
           }
         }

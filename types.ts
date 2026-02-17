@@ -1,4 +1,5 @@
 
+
 export type NodeType = 'root' | 'category' | 'item' | 'field' | 'list' | 'menu' | 'menu_item' | 'event' | 'qa_pair' | 'policy' | 'note';
 
 // Legacy SchemaType kept for backward compatibility but deprecated in UI
@@ -134,6 +135,10 @@ export interface HotelNode {
   question?: string;
   answer?: LocalizedText | string;
   
+  // New Fields for AI Data Blindness Prevention
+  aiConfidence?: number; // 0-100 score of how well AI understands this node
+  aiIssues?: string[]; // Reasons for low confidence (e.g. "Missing Unit", "Ambiguous Key")
+
   lastSaved?: number;
   lastModified?: number; // Granular update tracking per node
   [key: string]: any;
@@ -210,6 +215,7 @@ export interface HealthReport {
   score: number; 
   summary: string;
   issues: HealthIssue[];
+  nodeScores?: Record<string, number>; // New: Score map by NodeID
 }
 
 export interface SuggestedAction {

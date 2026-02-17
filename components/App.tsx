@@ -1,11 +1,12 @@
 
+
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from '../types';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
   analyzeHotelStats, filterHotelTree, generateOptimizedCSV, generateCleanAIJSON, 
   generateAIText, addChildToNode 
-} from './utils/treeUtils';
+} from '../utils/treeUtils';
 import TreeViewNode from './components/TreeViewNode';
 import NodeEditor from './components/NodeEditor';
 import ChatBot from './components/ChatBot';
@@ -15,13 +16,14 @@ import CreateHotelModal from './components/CreateHotelModal';
 import TemplateModal from './components/TemplateModal';
 import DataCheckModal from './components/DataCheckModal'; 
 import AIPersonaModal from './components/AIPersonaModal';
+import TemplateManager from './components/TemplateManager';
 import { fetchHotelById, getHotelsList, createNewHotel } from './services/firestoreService';
 import { useHotel } from './contexts/HotelContext'; 
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
   ChevronDown, LayoutTemplate, Activity, Database, Clock, Save, 
-  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages
+  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages, Brain
 } from 'lucide-react';
 
 const Toast = ({ message, type }: { message: string, type: 'success' | 'error' | 'loading' }) => (
@@ -71,6 +73,7 @@ const App: React.FC = () => {
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isDataCheckOpen, setIsDataCheckOpen] = useState(false);
   const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
+  const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false);
   
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -182,9 +185,8 @@ const App: React.FC = () => {
     setTimeout(() => setNotification(null), 2000);
   };
 
-  // --- ARCHITECT & EXPORT HANDLERS (Same as before, abbreviated for brevity) ---
+  // --- ARCHITECT & EXPORT HANDLERS ---
   const handleArchitectActions = (actions: ArchitectAction[]) => {
-      // (Keep existing implementation but map features to attributes correctly)
       let successCount = 0;
       actions.forEach(action => {
           try {
@@ -363,6 +365,7 @@ const App: React.FC = () => {
       <CreateHotelModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onCreate={handleCreateNewHotel} />
       <TemplateModal isOpen={isTemplateModalOpen} onClose={() => setIsTemplateModalOpen(false)} data={hotelData} />
       <AIPersonaModal isOpen={isPersonaModalOpen} onClose={() => setIsPersonaModalOpen(false)} />
+      <TemplateManager isOpen={isTemplateManagerOpen} onClose={() => setIsTemplateManagerOpen(false)} />
 
       <header className="h-20 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-30 shrink-0 shadow-sm relative">
         <div className="flex items-center gap-3">
@@ -448,6 +451,7 @@ const App: React.FC = () => {
 
         <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center">
+              <button onClick={() => setIsTemplateManagerOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-100 rounded hover:bg-indigo-200 mr-2"><LayoutTemplate size={14} className="mr-1.5" /> Şablonlar</button>
               <button onClick={() => setIsDataCheckOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-cyan-700 bg-cyan-100 rounded hover:bg-cyan-200 mr-2"><Scale size={14} className="mr-1.5" /> Veri Kontrol</button>
               <button onClick={() => setIsHealthModalOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
               <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded hover:shadow-md mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
@@ -481,6 +485,7 @@ const App: React.FC = () => {
                <button onClick={() => setMobileToolsOpen(!mobileToolsOpen)} className="p-2 text-slate-600"><Wrench size={20} /></button>
                {mobileToolsOpen && (
                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-2">
+                    <button onClick={() => { setIsTemplateManagerOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><LayoutTemplate size={16} /> Şablonlar</button>
                     <button onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>
                     <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>
                  </div>
@@ -534,7 +539,6 @@ const App: React.FC = () => {
       </div>
 
       <footer className="bg-slate-50 border-t border-slate-200 text-xs text-slate-600 relative z-30 shrink-0">
-        {/* Footer content same as before */}
         <div className="lg:hidden h-10 flex items-center justify-between px-4 cursor-pointer hover:bg-slate-100 border-b border-slate-100" onClick={() => setMobileStatsOpen(!mobileStatsOpen)}>
           <div className="flex items-center gap-2"><Activity size={14} /><span className="font-semibold">Doluluk: %{stats.completionRate}</span></div>
           <ChevronUp size={14} className={`transition-transform duration-300 ${mobileStatsOpen ? 'rotate-180' : ''}`} />
@@ -548,11 +552,30 @@ const App: React.FC = () => {
                 <span className="font-mono font-bold text-slate-800">{formatLastSaved(hotelData.lastSaved)}</span>
              </div>
           </div>
-          <div className="flex items-center gap-4 flex-1 lg:justify-center">
-             <div className="w-full max-w-xs flex flex-col gap-1">
-                <div className="flex justify-between items-center text-[10px] uppercase font-bold text-slate-500"><span>Veri Doluluğu</span><span>%{stats.completionRate}</span></div>
+
+          <div className="flex items-center gap-6 flex-1 lg:justify-end pr-4">
+             {/* DATA COMPLETION BAR */}
+             <div className="w-full max-w-[140px] flex flex-col gap-1">
+                <div className="flex justify-between items-center text-[9px] uppercase font-bold text-slate-500"><span>Veri Doluluğu</span><span>%{stats.completionRate}</span></div>
                 <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                   <div className={`h-full rounded-full transition-all duration-500 ${stats.completionRate >= 80 ? 'bg-emerald-500' : stats.completionRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${stats.completionRate}%` }} />
+                   <div className={`h-full rounded-full transition-all duration-500 ${stats.completionRate >= 80 ? 'bg-blue-500' : stats.completionRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${stats.completionRate}%` }} />
+                </div>
+             </div>
+
+             {/* AI READABILITY BAR (NEW) */}
+             <div className="w-full max-w-[140px] flex flex-col gap-1">
+                <div className="flex justify-between items-center text-[9px] uppercase font-bold text-slate-500">
+                    <span className="flex items-center gap-1"><Brain size={10} className="text-violet-500" /> AI Okunabilirlik</span>
+                    <span>%{stats.aiReadabilityScore}</span>
+                </div>
+                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden" title="Yapay zeka için verilerin ne kadar anlaşılır olduğu">
+                   <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                            stats.aiReadabilityScore >= 80 ? 'bg-emerald-500' : 
+                            stats.aiReadabilityScore >= 40 ? 'bg-amber-500' : 'bg-red-500'
+                        }`} 
+                        style={{ width: `${stats.aiReadabilityScore}%` }} 
+                   />
                 </div>
              </div>
           </div>

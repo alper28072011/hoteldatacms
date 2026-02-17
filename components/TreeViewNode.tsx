@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { HotelNode } from '../types';
 import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield, Tag, Box } from 'lucide-react';
@@ -128,6 +129,14 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     onDrop(e, node.id, position);
   };
 
+  // Determine Dot Color for AI Health
+  let aiDotColor = 'bg-slate-300'; // Default gray (not scanned)
+  if (node.aiConfidence !== undefined) {
+      if (node.aiConfidence >= 80) aiDotColor = 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]'; // Green
+      else if (node.aiConfidence >= 41) aiDotColor = 'bg-amber-400'; // Orange
+      else aiDotColor = 'bg-red-500 animate-pulse'; // Red
+  }
+
   return (
     <div className="select-none relative">
       <div 
@@ -174,8 +183,14 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
           </span>
         </div>
 
+        {/* AI Health Dot - Positioned absolutely to the right */}
+        <div 
+            className={`w-2 h-2 rounded-full ml-2 shrink-0 ${aiDotColor}`} 
+            title={`AI Confidence: ${node.aiConfidence !== undefined ? node.aiConfidence + '%' : 'Not Scanned'}`}
+        />
+
         {!isLeaf && (
-            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 backdrop-blur-[2px] rounded p-0.5 z-10 shadow-sm">
+            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 backdrop-blur-[2px] rounded p-0.5 z-10 shadow-sm ml-6">
             <button 
                 type="button"
                 onClick={(e) => { 
@@ -223,8 +238,11 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
     </div>
   );
 }, (prev, next) => {
-  // Relaxed comparison
-  return prev.node === next.node && prev.selectedId === next.selectedId && prev.forceExpand === next.forceExpand;
+  // Relaxed comparison - Now includes aiConfidence check
+  return prev.node === next.node && 
+         prev.node.aiConfidence === next.node.aiConfidence &&
+         prev.selectedId === next.selectedId && 
+         prev.forceExpand === next.forceExpand;
 });
 
 export default TreeViewNode;

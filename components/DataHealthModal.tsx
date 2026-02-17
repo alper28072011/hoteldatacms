@@ -1,8 +1,10 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { HotelNode, HealthReport, HealthIssue } from '../types';
 import { generateHealthReport, autoFixDatabase, AutoFixAction } from '../services/geminiService';
 import { runLocalValidation } from '../utils/validationUtils';
+import { useHotel } from '../contexts/HotelContext'; // Context access needed for updating tree scores
 import { X, Activity, Check, TriangleAlert, Sparkles, Loader2, RefreshCw, Zap, Search, BrainCircuit, Wand2, ArrowRight } from 'lucide-react';
 
 interface DataHealthModalProps {
@@ -11,12 +13,15 @@ interface DataHealthModalProps {
   data: HotelNode;
   onApplyFix: (nodeId: string, updates: Partial<HotelNode>) => void;
   onLocate?: (nodeId: string) => void;
-  onAutoFixApply?: (action: AutoFixAction) => void; // Robust action handler
+  onAutoFixApply?: (action: AutoFixAction) => void;
 }
 
 const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data, onApplyFix, onLocate, onAutoFixApply }) => {
+  const { updateNode } = useHotel(); // Get updateNode to save scores
+  
   const [localReport, setLocalReport] = useState<HealthIssue[]>([]);
   const [autoFixes, setAutoFixes] = useState<AutoFixAction[]>([]);
+  const [reportSummary, setReportSummary] = useState<string>('');
   
   const [isScanning, setIsScanning] = useState(false);
   const [activeTab, setActiveTab] = useState<'local' | 'autofix'>('local');
@@ -34,8 +39,27 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
     setIsScanning(true);
     setFixedIds(new Set()); // Reset fixed state on new scan
     try {
-      const result = await autoFixDatabase(data);
-      setAutoFixes(result);
+      // 1. Run Structural AutoFix Analysis
+      const structuralResult = await autoFixDatabase(data);
+      setAutoFixes(structuralResult);
+      
+      // 2. Run Deep Semantic Health Report (Scores)
+      const healthReport = await generateHealthReport(data);
+      setReportSummary(healthReport.summary);
+      
+      // 3. Update the global tree with AI Confidence Scores
+      if (healthReport.nodeScores) {
+          Object.entries(healthReport.nodeScores).forEach(([nodeId, score]) => {
+              // Update each node silently without triggering a re-render storm
+              updateNode(nodeId, { aiConfidence: score });
+          });
+      }
+
+      // 4. Merge issues from report into local view if any
+      if (healthReport.issues && healthReport.issues.length > 0) {
+          // You might want to display semantic issues here too
+      }
+
       setActiveTab('autofix');
     } catch (error) {
       console.error("AutoFix Scan failed", error);
@@ -138,7 +162,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                             <span className="text-[10px] uppercase text-slate-400 font-bold">Hazır</span>
                         )}
                     </div>
-                    <div className="text-xs text-slate-500 mb-4">Veri ağacını tarar, anlamsal hataları ve yanlış tipleri bulur.</div>
+                    <div className="text-xs text-slate-500 mb-4">Veri ağacını tarar, anlamsal hataları bulur ve <strong>Veri Körlüğü Puanlarını</strong> günceller.</div>
                     
                     {!isScanning ? (
                          <button 
@@ -178,42 +202,55 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                         autoFixes.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
                                 <Sparkles size={48} className="mb-2 text-violet-300" />
-                                <p>Derin analiz sonuçlarını görmek için taramayı başlatın.</p>
+                                <p className="mb-2">Derin analiz sonuçlarını görmek için taramayı başlatın.</p>
+                                {reportSummary && <div className="text-xs max-w-md text-center text-slate-500 mt-4 bg-slate-50 p-3 rounded">{reportSummary}</div>}
                             </div>
                         ) : (
-                            autoFixes.map(action => {
-                                const isFixed = fixedIds.has(action.id);
-                                return (
-                                    <div key={action.id} className={`border rounded-lg p-4 transition-all ${isFixed ? 'bg-slate-50 border-slate-100 opacity-50' : 'bg-white border-slate-200 shadow-sm'}`}>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                                    action.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                                                    action.type === 'move' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                                                }`}>
-                                                    {action.type === 'move' ? 'TAŞI (Semantik)' : action.type === 'update' ? 'GÜNCELLE' : 'TİP DEĞİŞTİR'}
-                                                </span>
-                                                <span className="font-mono text-xs text-slate-400">ID: {action.targetId}</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <p className="text-slate-700 text-sm mb-3 font-medium">{action.reasoning}</p>
-
-                                        <div className="flex items-center gap-2">
-                                            {!isFixed ? (
-                                                <button 
-                                                    onClick={() => handleApplyFix(action)}
-                                                    className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100"
-                                                >
-                                                    <Wand2 size={12} /> Düzeltmeyi Uygula
-                                                </button>
-                                            ) : (
-                                                <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check size={12}/> UYGULANDI</span>
-                                            )}
+                            <>
+                                {reportSummary && (
+                                    <div className="bg-emerald-50 text-emerald-700 p-3 rounded-lg text-sm border border-emerald-100 mb-4 flex items-start gap-2">
+                                        <Check size={16} className="mt-0.5 shrink-0"/>
+                                        <div>
+                                            <div className="font-bold mb-1">Analiz Tamamlandı</div>
+                                            {reportSummary}
+                                            <div className="mt-2 text-xs opacity-80">Ağaç yapısındaki renkli noktalar güncellendi.</div>
                                         </div>
                                     </div>
-                                );
-                            })
+                                )}
+                                {autoFixes.map(action => {
+                                    const isFixed = fixedIds.has(action.id);
+                                    return (
+                                        <div key={action.id} className={`border rounded-lg p-4 transition-all ${isFixed ? 'bg-slate-50 border-slate-100 opacity-50' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                                        action.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                                                        action.type === 'move' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                                                    }`}>
+                                                        {action.type === 'move' ? 'TAŞI (Semantik)' : action.type === 'update' ? 'GÜNCELLE' : 'TİP DEĞİŞTİR'}
+                                                    </span>
+                                                    <span className="font-mono text-xs text-slate-400">ID: {action.targetId}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <p className="text-slate-700 text-sm mb-3 font-medium">{action.reasoning}</p>
+
+                                            <div className="flex items-center gap-2">
+                                                {!isFixed ? (
+                                                    <button 
+                                                        onClick={() => handleApplyFix(action)}
+                                                        className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100"
+                                                    >
+                                                        <Wand2 size={12} /> Düzeltmeyi Uygula
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check size={12}/> UYGULANDI</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </>
                         )
                     )}
 

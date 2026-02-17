@@ -347,6 +347,7 @@ export interface HotelStats {
   emptyItems: number;
   completionRate: number;
   depth: number;
+  aiReadabilityScore: number; // New metric for Data Blindness Prevention
 }
 
 export const analyzeHotelStats = (root: HotelNode): HotelStats => {
@@ -356,14 +357,31 @@ export const analyzeHotelStats = (root: HotelNode): HotelStats => {
     fillableItems: 0,
     emptyItems: 0,
     completionRate: 0,
-    depth: 0
+    depth: 0,
+    aiReadabilityScore: 0
   };
+
+  let totalAiScore = 0;
+  let scoredNodesCount = 0;
 
   const traverse = (node: HotelNode, currentDepth: number) => {
     stats.totalNodes++;
     stats.depth = Math.max(stats.depth, currentDepth);
     const type = String(node.type);
     
+    // AI Score Aggregation
+    if (node.aiConfidence !== undefined) {
+        totalAiScore += node.aiConfidence;
+        scoredNodesCount++;
+    } else {
+        // Default heuristics for non-scored nodes
+        // If it has good content, give it a base score
+        if (node.name && node.value) {
+            totalAiScore += 50; 
+            scoredNodesCount++;
+        }
+    }
+
     if (type === 'category' || type === 'root' || type === 'menu' || type === 'list') {
       stats.categories++;
     } else {
@@ -388,11 +406,16 @@ export const analyzeHotelStats = (root: HotelNode): HotelStats => {
   };
 
   traverse(root, 1);
+  
   if (stats.fillableItems > 0) {
     stats.completionRate = Math.round(((stats.fillableItems - stats.emptyItems) / stats.fillableItems) * 100);
   } else {
     stats.completionRate = 100;
   }
+  
+  // Calculate AI Score average
+  stats.aiReadabilityScore = scoredNodesCount > 0 ? Math.round(totalAiScore / scoredNodesCount) : 0;
+  
   return stats;
 };
 
@@ -452,7 +475,8 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   return null;
 };
 
-// --- AI TEXT GENERATION (REWRITTEN FOR DEEP CONTEXT & BILINGUAL SUPPORT) ---
+// --- AI TEXT GENERATION (UPDATED FOR DATA BLINDNESS PREVENTION) ---
+// This function structures the text so the LLM can associate attributes strictly with their parent.
 
 export const generateAIText = async (
   root: HotelNode, 
@@ -487,7 +511,6 @@ export const generateAIText = async (
       const currentPath = parentPath ? `${parentPath} > ${name}` : name;
       
       // Determine Header Level or Bullet
-      // Categories get Headers (#), Items get Bullets (-)
       let prefix = "- ";
       if (depth === 0) prefix = "# ";
       else if (depth === 1) prefix = "## ";
@@ -498,12 +521,12 @@ export const generateAIText = async (
           prefix = "- ";
       }
 
-      // LINE 1: Title & Metadata
+      // LINE 1: Title & Metadata & Unique ID (Critical for AI referencing)
       const intentTag = node.intent ? `[INTENT: ${node.intent.toUpperCase()}]` : '';
       const typeTag = `[TYPE: ${String(node.type).toUpperCase()}]`;
-      const pathTag = `[Path: ${currentPath}]`;
+      const idTag = `[ID: ${node.id}]`; // Add ID to context
       
-      lines.push(`${indent}${prefix}${name} ${intentTag} ${typeTag} ${pathTag}`);
+      lines.push(`${indent}${prefix}${name} ${intentTag} ${typeTag} ${idTag}`);
 
       // LINE 2: Content / Value / Answer
       const value = getRosettaText(node.value || node.answer);
@@ -521,20 +544,17 @@ export const generateAIText = async (
           lines.push(`${indent}  * Price: ${node.price}`);
       }
 
-      // LINE 5: Attributes (Smart Formatting)
+      // LINE 5: Attributes (UPDATED FOR DATA BLINDNESS PREVENTION)
+      // We format attributes with a specific 'Feature' tag so the AI treats them as first-class citizens of the object.
       if (node.attributes && node.attributes.length > 0) {
-          const validAttributes = node.attributes
-              .map(attr => {
-                  const k = getRosettaText(attr.key);
-                  const v = getRosettaText(attr.value);
-                  if (!k || !v) return null;
-                  return `${k}: ${v}`;
-              })
-              .filter(Boolean); // Remove nulls
-          
-          if (validAttributes.length > 0) {
-              lines.push(`${indent}  * Attributes: ${validAttributes.join(' | ')}`);
-          }
+          node.attributes.forEach(attr => {
+              const k = getRosettaText(attr.key);
+              const v = getRosettaText(attr.value);
+              if (k && v) {
+                  // Using '+' bullet to distinguish attributes from general content
+                  lines.push(`${indent}  + [Feature] ${k}: ${v}`);
+              }
+          });
       }
 
       // LINE 6: AI Hidden Note
