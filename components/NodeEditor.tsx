@@ -12,7 +12,7 @@ import {
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
-  ToggleLeft, AlignLeft, Hash, CheckSquare, History
+  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: LANGUAGE TOGGLE ---
@@ -442,7 +442,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const [isBulkTranslating, setIsBulkTranslating] = useState(false); 
   const [translatingFieldId, setTranslatingFieldId] = useState<string | null>(null);
   
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   
   // Custom Attribute State
@@ -467,71 +466,65 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
     return findPathToNode(root, node.id) || [];
   }, [root, node]);
 
-  const parentNode = useMemo(() => {
-      if (breadcrumbs.length < 2) return null;
-      return breadcrumbs[breadcrumbs.length - 2];
-  }, [breadcrumbs]);
-
-  const allowedTypes = useMemo(() => {
-      if (!parentNode) return getAllowedTypes('root'); 
-      return getAllowedTypes(String(parentNode.type));
-  }, [parentNode]);
-
   // Determine active template
   const activeTemplate = useMemo(() => {
       return nodeTemplates.find(t => t.id === node?.appliedTemplateId) || null;
   }, [node?.appliedTemplateId, nodeTemplates]);
 
-  // Derive template fields and custom fields
-  const { templateFields, customAttributes, missingRequiredCount } = useMemo(() => {
-      if (!node) return { templateFields: [], customAttributes: [], missingRequiredCount: 0 };
+  // COMBINED LIST DERIVATION
+  // We merge "Template Fields" and "Custom Attributes" into one display list.
+  // BUT: The Source of Truth is `node.attributes`.
+  // If a template is active, we check if `node.attributes` has all the fields.
+  // If not, we create 'virtual' placeholders for display (which become real when edited).
+  const { combinedAttributes, missingRequiredCount } = useMemo(() => {
+      if (!node) return { combinedAttributes: [], missingRequiredCount: 0 };
       
-      const custom: NodeAttribute[] = [];
-      const templateData: { def: TemplateField, attr: NodeAttribute }[] = [];
+      const currentAttributes = node.attributes || [];
+      const processed: { attr: NodeAttribute, def?: TemplateField }[] = [];
       let missingCount = 0;
 
+      // 1. Process Template Fields First (if any)
       if (activeTemplate) {
-          // 1. Iterate through Template Fields (Source of Truth)
           activeTemplate.fields.forEach(field => {
               // Find matching attribute in node
-              let match = node.attributes?.find(a => {
+              let match = currentAttributes.find(a => {
                    const aKey = getLocalizedValue(a.key, 'en').toLowerCase();
                    return aKey === field.key.toLowerCase();
               });
 
-              // If missing, create a temporary empty one for display (don't save yet unless edited)
+              // Create placeholder if missing
               if (!match) {
                    match = {
                        id: `temp_${field.id}`,
-                       key: field.label, // Use label from template
+                       key: field.label, 
                        value: { tr: '', en: '' },
                        type: field.type,
                        options: field.options
                    };
               }
 
-              // Check required status
+              // Validation
               if (field.required) {
                   const val = match.value[activeTab];
                   if (!val || val.trim() === '') missingCount++;
               }
 
-              templateData.push({ def: field, attr: match });
+              processed.push({ attr: match, def: field });
           });
-
-          // 2. Identify Custom Attributes (orphans not in template)
-          if (node.attributes) {
-              node.attributes.forEach(attr => {
-                  const isTemplateMatch = activeTemplate.fields.some(f => f.key.toLowerCase() === getLocalizedValue(attr.key, 'en').toLowerCase());
-                  if (!isTemplateMatch) custom.push(attr);
-              });
-          }
-      } else {
-          // No template, all are custom
-          if (node.attributes) custom.push(...node.attributes);
       }
 
-      return { templateFields: templateData, customAttributes: custom, missingRequiredCount: missingCount };
+      // 2. Add remaining Custom Attributes (that didn't match a template field)
+      currentAttributes.forEach(attr => {
+          const isTemplateMatch = activeTemplate 
+            ? activeTemplate.fields.some(f => f.key.toLowerCase() === getLocalizedValue(attr.key, 'en').toLowerCase())
+            : false;
+          
+          if (!isTemplateMatch) {
+              processed.push({ attr: attr }); // No definition
+          }
+      });
+
+      return { combinedAttributes: processed, missingRequiredCount: missingCount };
 
   }, [node, activeTemplate, activeTab]);
 
@@ -676,27 +669,39 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       finally { setTranslatingFieldId(null); }
   };
 
-  // Safe Attribute Updates that handles "Template Data" vs "Custom Data"
-  // If we update a template field, we must ensure the attribute actually exists in the node
-  const handleTemplateFieldUpdate = (fieldDef: TemplateField, value: LocalizedText) => {
+  // UNIFIED UPDATE HANDLER
+  // Handles updates for both Template-based and Custom attributes
+  const handleAttributeUpdate = (attrId: string, fieldDef: TemplateField | undefined, value: LocalizedText, keyUpdate?: LocalizedText) => {
       const currentAttrs = [...(node.attributes || [])];
-      const existingIdx = currentAttrs.findIndex(a => {
-          const aKey = getLocalizedValue(a.key, 'en').toLowerCase();
-          return aKey === fieldDef.key.toLowerCase();
-      });
-
-      if (existingIdx >= 0) {
-          currentAttrs[existingIdx] = { ...currentAttrs[existingIdx], value };
-      } else {
-          // Create new
-          currentAttrs.push({
-              id: generateId('attr'),
-              key: fieldDef.label, 
-              value: value,
-              type: fieldDef.type,
-              options: fieldDef.options
+      
+      // If we are updating based on a template field definition
+      if (fieldDef) {
+          const existingIdx = currentAttrs.findIndex(a => {
+              const aKey = getLocalizedValue(a.key, 'en').toLowerCase();
+              return aKey === fieldDef.key.toLowerCase();
           });
+
+          if (existingIdx >= 0) {
+              currentAttrs[existingIdx] = { ...currentAttrs[existingIdx], value };
+          } else {
+              // Create new REAL attribute from the virtual one
+              currentAttrs.push({
+                  id: generateId('attr'),
+                  key: fieldDef.label, 
+                  value: value,
+                  type: fieldDef.type,
+                  options: fieldDef.options
+              });
+          }
+      } else {
+          // Custom Attribute Update
+          const existingIdx = currentAttrs.findIndex(a => a.id === attrId);
+          if (existingIdx >= 0) {
+              if (keyUpdate) currentAttrs[existingIdx].key = keyUpdate;
+              else currentAttrs[existingIdx].value = value;
+          }
       }
+      
       onUpdate(node.id, { attributes: currentAttrs });
   };
 
@@ -917,7 +922,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <Tag size={18} className="text-slate-400" />
                         <h3 className="text-sm font-bold text-slate-700">Başlık / İsim</h3>
                     </div>
-                    {/* Added Language Toggle to Header */}
                     <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
                 </div>
                 <div className="p-6">
@@ -942,7 +946,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         </h3>
                         <InfoTooltip title="Ana İçerik" content="Misafire gösterilecek ana metin. Şablon kullanıyorsanız burası 'Özet' olarak kalabilir." />
                     </div>
-                    {/* Added Language Toggle to Header */}
                     <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
                 </div>
                 
@@ -968,57 +971,19 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 </div>
             </div>
 
-            {/* DYNAMIC FIELDS SECTION (Strictly from Template) */}
-            {activeTemplate && templateFields.length > 0 && (
-                <div className="bg-white rounded-xl border border-indigo-100 shadow-sm overflow-hidden animate-in slide-in-from-bottom-2">
-                    <div className="bg-indigo-50/50 px-6 py-4 border-b border-indigo-100 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-indigo-100 p-1.5 rounded-lg text-indigo-600"><LayoutTemplate size={16}/></div>
-                            <h3 className="text-sm font-bold text-indigo-900">{activeTemplate.name} Verileri</h3>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
-                            {activeTab === 'en' && (
-                                <button onClick={handleBulkTranslateAttributes} disabled={isBulkTranslating} className="flex items-center gap-1.5 px-2 py-1 bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 rounded text-[10px] font-bold transition-colors shadow-sm">
-                                    {isBulkTranslating ? <Loader2 size={12} className="animate-spin"/> : <Globe size={12} />} Çevir
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {templateFields.map(({ def, attr }) => (
-                            <div key={def.id} className={def.type === 'textarea' ? 'md:col-span-2' : ''}>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                                    {getLocalizedValue(def.label, 'tr')}
-                                    {def.required && <span className="text-red-500 text-lg leading-none">*</span>}
-                                    {def.aiDescription && <InfoTooltip title="AI Bilgisi" content={def.aiDescription} placement="right" />}
-                                </label>
-                                <DynamicFieldInput 
-                                    attribute={attr}
-                                    fieldDef={def}
-                                    onChange={(val) => handleTemplateFieldUpdate(def, val)}
-                                    activeTab={activeTab}
-                                    onTabChange={setDisplayLanguage}
-                                    actionButton={activeTab === 'en' ? renderActionBtn(translatingFieldId === attr.id, () => handleSingleAttributeTranslate(attr.id), 'translate') : undefined}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* 3. CUSTOM ATTRIBUTES SECTION (Already in Card Style) */}
+            {/* 3. UNIFIED ATTRIBUTES SECTION */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <Settings size={18} className="text-slate-400" />
-                        <h3 className="text-sm font-bold text-slate-700">Özel Alanlar (Custom Fields)</h3>
+                        <Sliders size={18} className="text-slate-400" />
+                        <h3 className="text-sm font-bold text-slate-700">
+                            {activeTemplate ? `${activeTemplate.name} Verileri & Özellikler` : 'Özellikler & Veriler'}
+                        </h3>
+                        <InfoTooltip title="Özellikler" content="Bu öğeye ait tüm teknik detaylar ve şablon verileri burada toplanır." />
                     </div>
                     
-                    {/* CUSTOM FIELDS HEADER CONTROLS (Lang + Bulk) */}
                     <div className="flex items-center gap-3">
-                        {/* Changed Order: Bulk Button First */}
-                        {activeTab === 'en' && customAttributes.length > 0 && (
+                        {activeTab === 'en' && combinedAttributes.length > 0 && (
                             <button 
                                 onClick={handleBulkTranslateAttributes} 
                                 disabled={isBulkTranslating} 
@@ -1028,54 +993,75 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                             </button>
                         )}
                         <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
-                        <span className="text-xs text-slate-400">{customAttributes.length} özellik</span>
                     </div>
                 </div>
                 
-                <div className="p-6 space-y-3">
-                    {customAttributes.map(attr => (
-                        <div key={attr.id} className="flex items-start gap-3 group">
-                            <div className="w-1/3 min-w-[120px]">
-                                <LocalizedInput 
-                                    value={attr.key} 
-                                    onChange={(val) => handleUpdateAttribute(attr.id, 'key', val)} 
-                                    placeholder="Key" compact activeTab={activeTab} onTabChange={setDisplayLanguage}
-                                />
+                <div className="p-6 space-y-4">
+                    {/* Render Combined Attributes */}
+                    {combinedAttributes.map(({ attr, def }, index) => {
+                        const isTemplateField = !!def;
+                        return (
+                            <div key={attr.id} className={`flex items-start gap-3 group ${isTemplateField ? 'pb-4 border-b border-slate-50 last:border-0' : ''}`}>
+                                <div className="w-1/3 min-w-[120px]">
+                                    {isTemplateField ? (
+                                        // Template Label (Read-Only Key)
+                                        <div className="pt-2">
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="w-1 h-3 bg-indigo-400 rounded-full"></div>
+                                                <span className="text-xs font-bold text-slate-700">{getLocalizedValue(def.label, activeTab)}</span>
+                                                {def.required && <span className="text-red-500">*</span>}
+                                            </div>
+                                            {def.aiDescription && <div className="text-[10px] text-slate-400 mt-0.5 ml-2.5">{def.aiDescription}</div>}
+                                        </div>
+                                    ) : (
+                                        // Custom Field Key (Editable)
+                                        <LocalizedInput 
+                                            value={attr.key} 
+                                            onChange={(val) => handleAttributeUpdate(attr.id, undefined, attr.value as LocalizedText, val)} 
+                                            placeholder="Özellik Adı" 
+                                            compact 
+                                            activeTab={activeTab} 
+                                            onTabChange={setDisplayLanguage}
+                                        />
+                                    )}
+                                </div>
+                                <div className="flex-1 relative">
+                                    <DynamicFieldInput 
+                                        attribute={attr}
+                                        fieldDef={def}
+                                        onChange={(val) => handleAttributeUpdate(attr.id, def, val)}
+                                        activeTab={activeTab}
+                                        onTabChange={setDisplayLanguage}
+                                        actionButton={activeTab === 'en' ? (
+                                            <button 
+                                                onClick={() => handleSingleAttributeTranslate(attr.id)}
+                                                disabled={translatingFieldId === attr.id}
+                                                className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                title="Translate this field"
+                                            >
+                                                {translatingFieldId === attr.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                            </button>
+                                        ) : undefined}
+                                    />
+                                </div>
+                                {!isTemplateField && (
+                                    <button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all mt-1">
+                                        <X size={14} />
+                                    </button>
+                                )}
                             </div>
-                            <div className="flex-1">
-                                <DynamicFieldInput 
-                                    attribute={attr}
-                                    // No field definition for custom fields
-                                    onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)}
-                                    activeTab={activeTab}
-                                    onTabChange={setDisplayLanguage}
-                                    actionButton={activeTab === 'en' ? (
-                                        <button 
-                                            onClick={() => handleSingleAttributeTranslate(attr.id)}
-                                            disabled={translatingFieldId === attr.id}
-                                            className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
-                                            title="Translate this field"
-                                        >
-                                            {translatingFieldId === attr.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
-                                        </button>
-                                    ) : undefined}
-                                />
-                            </div>
-                            <button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all mt-1">
-                                <X size={14} />
-                            </button>
-                        </div>
-                    ))}
+                        );
+                    })}
                     
                     {/* Add New Attribute Row */}
-                    <div className="flex items-start gap-3 pt-4 border-t border-slate-100 mt-2">
+                    <div className="flex items-start gap-3 pt-4 border-t border-slate-100 mt-2 bg-slate-50/50 p-3 rounded-lg border-dashed">
                         <div className="w-1/3 min-w-[120px]">
                             <LocalizedInput value={newAttrKey} onChange={setNewAttrKey} placeholder="Yeni Özellik Adı" compact activeTab={activeTab} onTabChange={setDisplayLanguage}/>
                         </div>
                         <div className="flex-1 flex gap-2">
                             <div className="flex-1"><LocalizedInput value={newAttrValue} onChange={setNewAttrValue} placeholder="Değer" compact activeTab={activeTab} onTabChange={setDisplayLanguage}/></div>
                             <button onClick={handleAddAttribute} disabled={!newAttrKey.tr.trim()} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded text-xs font-bold transition-colors disabled:opacity-50 h-[34px] mt-px">
-                                <Check size={14} />
+                                <Check size={14} /> Ekle
                             </button>
                         </div>
                     </div>
@@ -1090,7 +1076,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <h3 className="text-sm font-bold text-slate-700">AI Context (Gizli Notlar)</h3>
                         <InfoTooltip title="Yapay Zeka Notları" content="Bu alan sadece AI tarafından okunur." />
                     </div>
-                    {/* Added Language Toggle to Header */}
                     <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
                  </div>
                  <div className="p-6">

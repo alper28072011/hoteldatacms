@@ -506,69 +506,6 @@ const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
   return index;
 };
 
-const translateSchemaToNaturalLanguage = (node: HotelNode): string => {
-    if (!node.schemaType || !node.data) return '';
-
-    const { schemaType, data } = node;
-    const name = getRosettaText(node.name);
-
-    // --- EVENT TRANSLATOR ---
-    if (schemaType === 'event') {
-        const d = data as EventData;
-        
-        if (d.status === 'cancelled') return `[ETKİNLİK İPTAL] Bu etkinlik iptal edildi. Neden: ${d.statusReason || 'Belirtilmedi'}.`;
-        if (d.status === 'moved') return `[ETKİNLİK TAŞINDI] Yeni yer: ${d.location}.`;
-
-        let scheduleText = "";
-        const s = d.schedule;
-        
-        if (!s) return `[AKTİVİTE: ${name}] Takvim bilgisi eksik.`;
-
-        if (s.frequency === 'daily') {
-            scheduleText = "HER GÜN.";
-        } else if (s.frequency === 'weekly') {
-            scheduleText = `HAFTALIK: ${s.activeDays?.join(', ')} günleri.`;
-        } else if (s.frequency === 'biweekly') {
-            scheduleText = `İKİ HAFTADA BİR: ${s.activeDays?.join(', ')} günleri.`;
-        } else if (s.frequency === 'once') {
-            scheduleText = `TEK SEFERLİK: Tarih ${s.validFrom}.`;
-        }
-
-        if (s.validFrom && s.validUntil) scheduleText += ` Geçerlilik: ${s.validFrom} - ${s.validUntil} arası.`;
-        
-        const time = s.startTime ? `${s.startTime}${s.endTime ? ` - ${s.endTime}` : ''}` : 'Saat değişebilir';
-        const cost = d.isPaid ? `ÜCRETLİ (${d.price || 'Fiyat sorunuz'})` : 'ÜCRETSİZ';
-        const audience = d.ageGroup === 'all' ? 'Herkes' : d.ageGroup === 'kids' ? 'SADECE ÇOCUK (4-12)' : d.ageGroup === 'adults' ? 'SADECE YETİŞKİN (18+)' : 'Genç';
-
-        return `[AKTİVİTE: ${name}] ${scheduleText} Saat: ${time}. Konum: ${d.location}. Kitle: ${audience}. ${cost}. ${d.requiresReservation ? 'Rezervasyon Gerekli.' : ''}`;
-    }
-
-    // --- DINING TRANSLATOR ---
-    if (schemaType === 'dining') {
-        const d = data as DiningData;
-        const shifts = d.shifts?.map(s => `${s.name}: ${s.start}-${s.end}`).join(', ');
-        const concept = d.concept === 'all_inclusive' ? 'Her Şey Dahil Kapsamında' : 'Ekstra Ücretli';
-        
-        const feats = [];
-        if (d.features?.hasKidsMenu) feats.push("Çocuk Menüsü");
-        if (d.features?.hasVeganOptions) feats.push("Vegan Seçenek");
-        if (d.features?.hasGlutenFreeOptions) feats.push("Glutensiz");
-        
-        return `[RESTORAN: ${name}] Tip: ${d.type}. Mutfak: ${d.cuisine}. Saatler: ${shifts}. Konsept: ${concept}. Kıyafet: ${d.dressCode}. İmkanlar: ${feats.join(', ')}. Öne Çıkanlar: ${d.menuHighlights?.join(', ')}.`;
-    }
-
-    // --- ROOM TRANSLATOR ---
-    if (schemaType === 'room') {
-        const d = data as RoomData;
-        const balc = d.hasBalcony ? 'Balkonlu' : 'Balkonsuz';
-        const occ = `Kapasite: ${d.maxOccupancy?.adults} Yetişkin + ${d.maxOccupancy?.children} Çocuk`;
-        
-        return `[ODA TİPİ: ${name}] Boyut: ${d.sizeSqM}m². ${occ}. Manzara: ${d.view}. Yatak: ${d.bedConfiguration}. ${balc}. Donanım: ${d.amenities?.join(', ')}. Minibar: ${d.minibarContent?.join(', ')}.`;
-    }
-
-    return '';
-}
-
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
@@ -624,27 +561,26 @@ export const generateAIText = async (
       }
     }
 
-    if (node.schemaType && node.data) {
-        const translatedText = translateSchemaToNaturalLanguage(node);
-        if (translatedText) {
-            line += `\n${indent}  > AI_NOTU: ${translatedText}`;
-        }
-    }
-
+    // EXPLICIT ATTRIBUTE LISTING FOR AI
+    // We now list attributes on separate lines or clearly bracketed to ensure AI sees them as properties.
     const attributesParts: string[] = [];
     if (node.price) attributesParts.push(`Fiyat: ${node.price}`);
+    
     if (node.attributes && node.attributes.length > 0) {
        node.attributes.forEach(attr => {
           // LOCALIZED ATTRIBUTES IN ROSETTA FORMAT
           const key = getRosettaText(attr.key);
           const val = getRosettaText(attr.value);
-          if (key && val) {
+          // Only include if value exists
+          if (key && val && val.trim() !== '') {
              attributesParts.push(`${key}: ${val}`);
           }
        });
     }
+    
     if (attributesParts.length > 0) {
-       line += ` [${attributesParts.join(', ')}]`;
+       // Append attributes more clearly
+       line += `\n${indent}  [ÖZELLİKLER: ${attributesParts.join(' | ')}]`;
     }
 
     if (type === 'category' && (name.toLowerCase().includes('oda') || name.toLowerCase().includes('room'))) {
