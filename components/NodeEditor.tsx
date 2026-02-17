@@ -12,7 +12,7 @@ import {
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
-  ToggleLeft, AlignLeft, Hash, CheckSquare
+  ToggleLeft, AlignLeft, Hash, CheckSquare, History
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: LANGUAGE TOGGLE ---
@@ -831,6 +831,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       );
   };
 
+  const formatLastModified = (timestamp?: number) => {
+      if (!timestamp) return 'Bilinmiyor';
+      return new Date(timestamp).toLocaleString('tr-TR', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+      });
+  };
+
   if (node.type === 'root') {
       return (
       <div className="h-full flex flex-col bg-slate-50/30">
@@ -1082,6 +1090,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         actionButton={renderActionBtn(isGeneratingContext, handleAutoGenerateContext, 'context')}
                     />
                  </div>
+            </div>
+
+            {/* LAST MODIFIED FOOTER */}
+            <div className="flex items-center justify-end px-2 pt-2 pb-6 opacity-60">
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-400 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                    <History size={12} />
+                    <span>Son Güncelleme: {formatLastModified(node.lastModified)}</span>
+                </div>
             </div>
         </div>
       </div>

@@ -134,7 +134,8 @@ export interface HotelNode {
   question?: string;
   answer?: LocalizedText | string;
   
-  lastSaved?: number; 
+  lastSaved?: number;
+  lastModified?: number; // Granular update tracking per node
   [key: string]: any;
 }
 

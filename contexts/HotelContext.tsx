@@ -112,7 +112,9 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const updateNode = useCallback((nodeId: string, updates: Partial<HotelNode>) => {
-    setHotelDataState((prev) => updateNodeInTree(prev, nodeId, updates));
+    // Automatically inject the current timestamp for granular tracking
+    const timestampedUpdates = { ...updates, lastModified: Date.now() };
+    setHotelDataState((prev) => updateNodeInTree(prev, nodeId, timestampedUpdates));
     setHasUnsavedChanges(true);
     setSaveStatus('idle');
   }, []);
@@ -129,7 +131,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // 3. Apply Update
     // We reuse updateNodeInTree which finds node by OLD ID and applies the NEW ID in updates
-    setHotelDataState((prev) => updateNodeInTree(prev, oldId, { id: newId }));
+    // Also update timestamp
+    setHotelDataState((prev) => updateNodeInTree(prev, oldId, { id: newId, lastModified: Date.now() }));
     
     setHasUnsavedChanges(true);
     setSaveStatus('idle');
@@ -152,7 +155,8 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         id: generateId(prefix),
         type: finalType,
         name: { tr: finalType === 'menu_item' ? 'Yeni Ürün' : 'Yeni Öğe', en: finalType === 'menu_item' ? 'New Item' : 'New Node' },
-        value: { tr: '', en: '' }
+        value: { tr: '', en: '' },
+        lastModified: Date.now() // Initial timestamp
       };
       
       return addChildToNode(prev, parentId, newChild);
@@ -181,6 +185,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSaveStatus('saving');
     try {
         const now = Date.now();
+        // Update root lastSaved, but don't overwrite individual node lastModified unless changed
         const dataToSave = { ...hotelData, lastSaved: now };
         await updateHotelData(hotelId, dataToSave);
         
