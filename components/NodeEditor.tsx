@@ -139,7 +139,7 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({
                         type="text" 
                         value={data[activeTab]} 
                         onChange={(e) => handleChange(e.target.value)}
-                        className={`w-full bg-white border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${hasError ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'} ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} ${actionButton ? 'pr-24' : ''} ${inputClassName || ''}`}
+                        className={`w-full bg-white border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${hasError ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'} ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} ${actionButton ? 'pr-20' : ''} ${inputClassName || ''}`}
                         placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
                     />
                 )}
@@ -166,25 +166,87 @@ const DynamicFieldInput: React.FC<{
     
     // Determine strict type from template or fallback to attribute type
     const type = fieldDef?.type || attribute.type;
-    const value = ensureLocalized(attribute.value);
     
+    // BUFFERING STATE
+    // We maintain local state to allow typing without premature updates/re-renders
+    const [localValue, setLocalValue] = useState<LocalizedText>(ensureLocalized(attribute.value));
+    const [isDirty, setIsDirty] = useState(false);
+
+    // Sync from props only when upstream value actually changes (e.g. node switch or save completed)
+    const propVal = ensureLocalized(attribute.value);
+    useEffect(() => {
+        setLocalValue(propVal);
+        setIsDirty(false);
+    }, [propVal.tr, propVal.en, attribute.id]); 
+
     // Validation Check
     const isRequired = fieldDef?.required;
-    const isEmpty = !value[activeTab] || value[activeTab].trim() === '';
+    const isEmpty = !localValue[activeTab] || localValue[activeTab].trim() === '';
     const hasError = isRequired && isEmpty;
 
-    // Common change handler for simple string inputs
-    const handleTextChange = (txt: string) => onChange({ ...value, [activeTab]: txt });
+    // --- HANDLERS ---
 
-    // For non-localized types (boolean, date, time, select), we usually sync TR and EN values 
-    // OR we just update the active tab but conceptually some are universal.
-    // For specific types like Date/Time/Boolean, we force sync.
+    const handleLocalChange = (newVal: LocalizedText) => {
+        setLocalValue(newVal);
+        const current = ensureLocalized(attribute.value);
+        // Check if actually different from saved prop
+        const changed = newVal.tr !== current.tr || newVal.en !== current.en;
+        setIsDirty(changed);
+    };
+
+    const commitChanges = () => {
+        onChange(localValue);
+        // We don't manually set isDirty false here; 
+        // the parent update will flow back via props -> useEffect -> reset isDirty
+    };
+
+    const discardChanges = () => {
+        setLocalValue(ensureLocalized(attribute.value));
+        setIsDirty(false);
+    };
+
+    const handleTextChange = (txt: string) => {
+        handleLocalChange({ ...localValue, [activeTab]: txt });
+    };
+
+    // For non-localized types (boolean, date, time, select), immediate update is usually preferred
+    // But for text/number/currency, we use the buffer.
     const handleUniversalChange = (val: string) => onChange({ tr: val, en: val });
+
+    // --- RENDER ACTION BUTTONS ---
+    const renderActionButtons = () => {
+        if (isDirty) {
+            return (
+                <div className="flex items-center gap-1 bg-white/80 backdrop-blur-[1px] p-0.5 rounded-md">
+                     <button 
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); commitChanges(); }}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white p-1.5 rounded-md shadow-sm transition-all animate-in zoom-in"
+                        title="Kaydet"
+                    >
+                        <Check size={14} />
+                    </button>
+                    <button 
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); discardChanges(); }}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-500 p-1.5 rounded-md shadow-sm transition-all animate-in zoom-in"
+                        title="İptal"
+                    >
+                        <X size={14} />
+                    </button>
+                </div>
+            )
+        }
+        return actionButton;
+    };
+
+    const inputBorderClass = isDirty 
+        ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-100' 
+        : (hasError ? 'border-red-300 bg-red-50' : 'border-slate-200');
 
     // --- RENDERERS ---
 
     if (type === 'boolean') {
-        const isTrue = value.tr === 'true' || value.tr === 'Yes' || value.tr === 'Evet';
+        // Booleans are instant, no buffer needed
+        const isTrue = propVal.tr === 'true' || propVal.tr === 'Yes' || propVal.tr === 'Evet';
         return (
             <button 
                 onClick={() => handleUniversalChange(isTrue ? 'false' : 'true')}
@@ -205,7 +267,7 @@ const DynamicFieldInput: React.FC<{
                 <Calendar size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-slate-400'}`} />
                 <input 
                     type="date" 
-                    value={value.tr} 
+                    value={propVal.tr} 
                     onChange={(e) => handleUniversalChange(e.target.value)}
                     className={`w-full bg-white border rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
                 />
@@ -219,7 +281,7 @@ const DynamicFieldInput: React.FC<{
                 <Clock size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-slate-400'}`} />
                 <input 
                     type="time" 
-                    value={value.tr} 
+                    value={propVal.tr} 
                     onChange={(e) => handleUniversalChange(e.target.value)}
                     className={`w-full bg-white border rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
                 />
@@ -232,8 +294,19 @@ const DynamicFieldInput: React.FC<{
         return (
             <div className="relative">
                 <select 
-                    value={value[activeTab] || ''}
+                    value={localValue[activeTab] || ''}
                     onChange={(e) => handleTextChange(e.target.value)}
+                    // Selects trigger save immediately on blur or change usually, but using buffer logic here for consistency with text
+                    // Actually for dropdowns, immediate change is usually better UX.
+                    // But if we use localValue, we must provide a save mechanism or auto-save.
+                    // Let's stick to immediate for selects to avoid extra clicks.
+                >
+                   {/* Trick: We hijack onChange to call parent immediately for Selects */}
+                </select>
+                {/* Reverting Select to immediate update pattern for better UX */}
+                <select 
+                    value={propVal[activeTab] || ''}
+                    onChange={(e) => onChange({ ...propVal, [activeTab]: e.target.value })}
                     className={`w-full bg-white border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer appearance-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
                 >
                     <option value="">Seçiniz...</option>
@@ -250,8 +323,7 @@ const DynamicFieldInput: React.FC<{
 
     if (type === 'multiselect') {
         const options = fieldDef?.options || attribute.options || [];
-        // Parse current value (comma separated)
-        const currentSelected = value[activeTab] ? value[activeTab].split(',').map(s => s.trim()) : [];
+        const currentSelected = propVal[activeTab] ? propVal[activeTab].split(',').map(s => s.trim()) : [];
 
         const toggleOption = (opt: string) => {
             let newSelected;
@@ -260,7 +332,8 @@ const DynamicFieldInput: React.FC<{
             } else {
                 newSelected = [...currentSelected, opt];
             }
-            handleTextChange(newSelected.join(', '));
+            // Immediate update for multiselect checkboxes
+            onChange({ ...propVal, [activeTab]: newSelected.join(', ') });
         };
 
         return (
@@ -287,17 +360,20 @@ const DynamicFieldInput: React.FC<{
         );
     }
 
+    // --- BUFFERED INPUT TYPES ---
+
     if (type === 'textarea') {
         return (
             <LocalizedInput 
-                value={value} 
-                onChange={onChange} 
+                value={localValue} 
+                onChange={handleLocalChange} 
                 activeTab={activeTab} 
                 onTabChange={onTabChange}
                 multiline={true}
                 placeholder="Detaylı açıklama..."
-                actionButton={actionButton}
+                actionButton={renderActionButtons()}
                 hasError={hasError}
+                inputClassName={inputBorderClass}
             />
         );
     }
@@ -307,13 +383,15 @@ const DynamicFieldInput: React.FC<{
             <div className="relative">
                 <DollarSign size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-emerald-600'}`} />
                 <LocalizedInput 
-                    value={value} 
-                    onChange={onChange} 
+                    value={localValue} 
+                    onChange={handleLocalChange} 
                     activeTab={activeTab} 
                     onTabChange={onTabChange}
                     className="pl-6" 
                     placeholder="0.00"
                     hasError={hasError}
+                    actionButton={renderActionButtons()}
+                    inputClassName={inputBorderClass}
                 />
             </div>
         );
@@ -321,15 +399,19 @@ const DynamicFieldInput: React.FC<{
 
     if (type === 'number') {
         return (
-             <div className="relative">
+             <div className="relative group">
                 <Hash size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-slate-400'}`} />
                  <input 
                     type="number"
-                    value={value[activeTab]} 
+                    value={localValue[activeTab]} 
                     onChange={(e) => handleTextChange(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && commitChanges()}
                     placeholder="0"
-                    className={`w-full bg-white border rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                    className={`w-full bg-white border rounded-lg pl-9 pr-20 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-colors ${inputBorderClass}`}
                 />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex items-center">
+                    {renderActionButtons()}
+                </div>
              </div>
         )
     }
@@ -337,13 +419,14 @@ const DynamicFieldInput: React.FC<{
     // Default: Text
     return (
         <LocalizedInput 
-            value={value} 
-            onChange={onChange} 
+            value={localValue} 
+            onChange={handleLocalChange} 
             activeTab={activeTab} 
             onTabChange={onTabChange}
             placeholder="Değer giriniz..."
-            actionButton={actionButton}
+            actionButton={renderActionButtons()}
             hasError={hasError}
+            inputClassName={inputBorderClass}
         />
     );
 };
