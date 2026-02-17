@@ -869,6 +869,32 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                  );
               })}
            </div>
+           
+           {/* ID DISPLAY/EDIT AREA */}
+           <div className="h-6 w-px bg-slate-200 mx-4 shrink-0"></div>
+           <div className="relative flex items-center gap-2 shrink-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ID:</span>
+                {isEditingId ? (
+                    <div className="flex items-center gap-1">
+                        <input 
+                            type="text" 
+                            value={tempId} 
+                            onChange={(e) => setTempId(e.target.value)} 
+                            className={`text-xs border rounded px-1.5 py-0.5 w-32 outline-none font-mono ${idError ? 'border-red-400 bg-red-50' : 'border-slate-300 focus:border-indigo-500'}`}
+                            autoFocus
+                        />
+                        <button onClick={handleSaveId} className="p-0.5 bg-emerald-100 text-emerald-600 rounded hover:bg-emerald-200"><Check size={12}/></button>
+                        <button onClick={handleCancelIdEdit} className="p-0.5 bg-slate-100 text-slate-500 rounded hover:bg-slate-200"><X size={12}/></button>
+                    </div>
+                ) : (
+                    <div className="group flex items-center gap-1.5 cursor-pointer" onClick={handleStartIdEdit} title="ID'yi Düzenle">
+                        <span className="text-xs font-mono text-slate-500 font-medium group-hover:text-indigo-600 transition-colors">{node.id}</span>
+                        <Edit3 size={10} className="text-slate-300 group-hover:text-indigo-400 transition-colors opacity-0 group-hover:opacity-100" />
+                    </div>
+                )}
+                {idError && <div className="absolute top-full left-0 mt-1 z-50 bg-red-50 text-red-600 text-[10px] px-2 py-1 rounded border border-red-200 shadow-sm whitespace-nowrap">{idError}</div>}
+           </div>
+
         </div>
         <div className="flex items-center gap-3">
            {renderHeaderSelectors()}
