@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType } from '../types';
+import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType, TemplateField } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes, generateSlug, getLocalizedValue, ensureLocalized } from '../utils/treeUtils';
 import { generateNodeContext, generateValueFromAttributes, translateText } from '../services/geminiService';
 import { validateNodeInput } from '../utils/validationUtils';
@@ -12,7 +12,7 @@ import {
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
-  ToggleLeft, AlignLeft, Hash
+  ToggleLeft, AlignLeft, Hash, CheckSquare
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: LANGUAGE TOGGLE ---
@@ -32,69 +32,6 @@ const LanguageToggle = ({ activeTab, onTabChange }: { activeTab: 'tr' | 'en', on
         </button>
     </div>
 );
-
-// --- HELPER COMPONENT: LOCALIZED INPUT WITH INTEGRATED ACTIONS ---
-interface LocalizedInputProps {
-    value: LocalizedText | string | undefined;
-    onChange: (val: LocalizedText) => void;
-    placeholder?: string;
-    multiline?: boolean;
-    label?: string;
-    tooltip?: string;
-    className?: string;
-    inputClassName?: string; // NEW: Allows styling the inner input/textarea directly
-    compact?: boolean;
-    activeTab: 'tr' | 'en';
-    onTabChange: (tab: 'tr' | 'en') => void;
-    actionButton?: React.ReactNode; 
-}
-
-const LocalizedInput: React.FC<LocalizedInputProps> = ({ 
-    value, onChange, placeholder, multiline = false, label, tooltip, className, inputClassName, compact = false, activeTab, onTabChange, actionButton 
-}) => {
-    const data = ensureLocalized(value);
-
-    const handleChange = (text: string) => {
-        onChange({ ...data, [activeTab]: text });
-    };
-
-    return (
-        <div className={`space-y-1 ${className}`}>
-            {label && (
-                <div className="flex items-center gap-2 mb-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
-                    {tooltip && <InfoTooltip title={label || ''} content={tooltip} placement="bottom" />}
-                </div>
-            )}
-            
-            <div className="relative group">
-                {multiline ? (
-                    <textarea 
-                        value={data[activeTab]} 
-                        onChange={(e) => handleChange(e.target.value)}
-                        className={`w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y ${inputClassName || 'min-h-[80px]'} ${actionButton ? 'pb-10' : ''}`}
-                        placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
-                    />
-                ) : (
-                    <input 
-                        type="text" 
-                        value={data[activeTab]} 
-                        onChange={(e) => handleChange(e.target.value)}
-                        className={`w-full bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} ${actionButton ? 'pr-24' : ''} ${inputClassName || ''}`}
-                        placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
-                    />
-                )}
-                
-                {/* INJECTED ACTION BUTTON (Inside the input) */}
-                {actionButton && (
-                    <div className="absolute right-2 bottom-2 z-10">
-                        {actionButton}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
 
 // --- HELPER COMPONENT: PORTAL-BASED EDUCATIONAL TOOLTIP ---
 type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
@@ -131,7 +68,7 @@ const InfoTooltip: React.FC<{ title: string; content: React.ReactNode; placement
         className="group relative inline-flex items-center ml-1.5 align-middle cursor-help"
       >
         <div className="text-slate-400 hover:text-indigo-600 transition-colors">
-          <CircleHelp size={15} />
+          <CircleHelp size={14} />
         </div>
       </div>
 
@@ -154,32 +91,110 @@ const InfoTooltip: React.FC<{ title: string; content: React.ReactNode; placement
   );
 };
 
+// --- HELPER COMPONENT: LOCALIZED INPUT WITH INTEGRATED ACTIONS ---
+interface LocalizedInputProps {
+    value: LocalizedText | string | undefined;
+    onChange: (val: LocalizedText) => void;
+    placeholder?: string;
+    multiline?: boolean;
+    label?: string;
+    tooltip?: string;
+    className?: string;
+    inputClassName?: string;
+    compact?: boolean;
+    activeTab: 'tr' | 'en';
+    onTabChange: (tab: 'tr' | 'en') => void;
+    actionButton?: React.ReactNode; 
+    hasError?: boolean;
+}
+
+const LocalizedInput: React.FC<LocalizedInputProps> = ({ 
+    value, onChange, placeholder, multiline = false, label, tooltip, className, inputClassName, compact = false, activeTab, onTabChange, actionButton, hasError
+}) => {
+    const data = ensureLocalized(value);
+
+    const handleChange = (text: string) => {
+        onChange({ ...data, [activeTab]: text });
+    };
+
+    return (
+        <div className={`space-y-1 ${className}`}>
+            {label && (
+                <div className="flex items-center gap-2 mb-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
+                    {tooltip && <InfoTooltip title={label || ''} content={tooltip} placement="bottom" />}
+                </div>
+            )}
+            
+            <div className="relative group">
+                {multiline ? (
+                    <textarea 
+                        value={data[activeTab]} 
+                        onChange={(e) => handleChange(e.target.value)}
+                        className={`w-full bg-white border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y ${hasError ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'} ${inputClassName || 'min-h-[80px]'} ${actionButton ? 'pb-10' : ''}`}
+                        placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
+                    />
+                ) : (
+                    <input 
+                        type="text" 
+                        value={data[activeTab]} 
+                        onChange={(e) => handleChange(e.target.value)}
+                        className={`w-full bg-white border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${hasError ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'} ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} ${actionButton ? 'pr-24' : ''} ${inputClassName || ''}`}
+                        placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
+                    />
+                )}
+                
+                {actionButton && (
+                    <div className="absolute right-2 bottom-2 z-10">
+                        {actionButton}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // --- DYNAMIC FIELD RENDERER ---
 const DynamicFieldInput: React.FC<{
     attribute: NodeAttribute;
+    fieldDef?: TemplateField; // Optional: If coming from a template, we have stricter rules
     onChange: (val: LocalizedText) => void;
     activeTab: 'tr' | 'en';
     onTabChange: (t: 'tr' | 'en') => void;
     actionButton?: React.ReactNode;
-}> = ({ attribute, onChange, activeTab, onTabChange, actionButton }) => {
-    const type = attribute.type;
+}> = ({ attribute, fieldDef, onChange, activeTab, onTabChange, actionButton }) => {
+    
+    // Determine strict type from template or fallback to attribute type
+    const type = fieldDef?.type || attribute.type;
     const value = ensureLocalized(attribute.value);
+    
+    // Validation Check
+    const isRequired = fieldDef?.required;
+    const isEmpty = !value[activeTab] || value[activeTab].trim() === '';
+    const hasError = isRequired && isEmpty;
 
     // Common change handler for simple string inputs
     const handleTextChange = (txt: string) => onChange({ ...value, [activeTab]: txt });
 
-    // For non-localized types (boolean, date, time), we sync TR and EN values
+    // For non-localized types (boolean, date, time, select), we usually sync TR and EN values 
+    // OR we just update the active tab but conceptually some are universal.
+    // For specific types like Date/Time/Boolean, we force sync.
     const handleUniversalChange = (val: string) => onChange({ tr: val, en: val });
+
+    // --- RENDERERS ---
 
     if (type === 'boolean') {
         const isTrue = value.tr === 'true' || value.tr === 'Yes' || value.tr === 'Evet';
         return (
             <button 
                 onClick={() => handleUniversalChange(isTrue ? 'false' : 'true')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${isTrue ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${isTrue ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
             >
-                <span className="text-sm font-bold">{isTrue ? 'EVET (Active)' : 'HAYIR (Inactive)'}</span>
-                {isTrue ? <Check size={16} /> : <X size={16} />}
+                <div className="flex items-center gap-2">
+                    {isTrue ? <ToggleLeft size={18} className="rotate-180"/> : <ToggleLeft size={18} className="text-slate-400"/>}
+                    <span className="text-sm font-bold">{isTrue ? 'EVET (Active)' : 'HAYIR (Inactive)'}</span>
+                </div>
+                {isTrue && <Check size={16} />}
             </button>
         );
     }
@@ -187,12 +202,12 @@ const DynamicFieldInput: React.FC<{
     if (type === 'date') {
         return (
             <div className="relative">
-                <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Calendar size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-slate-400'}`} />
                 <input 
                     type="date" 
                     value={value.tr} 
                     onChange={(e) => handleUniversalChange(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className={`w-full bg-white border rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
                 />
             </div>
         );
@@ -201,29 +216,74 @@ const DynamicFieldInput: React.FC<{
     if (type === 'time') {
         return (
             <div className="relative">
-                <Clock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Clock size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-slate-400'}`} />
                 <input 
                     type="time" 
                     value={value.tr} 
                     onChange={(e) => handleUniversalChange(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className={`w-full bg-white border rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
                 />
             </div>
         );
     }
 
-    if (type === 'select' && attribute.options && attribute.options.length > 0) {
+    if (type === 'select') {
+        const options = fieldDef?.options || attribute.options || [];
         return (
-            <select 
-                value={value[activeTab] || ''}
-                onChange={(e) => handleTextChange(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
-            >
-                <option value="">Seçiniz...</option>
-                {attribute.options.map((opt, i) => (
-                    <option key={i} value={opt}>{opt}</option>
-                ))}
-            </select>
+            <div className="relative">
+                <select 
+                    value={value[activeTab] || ''}
+                    onChange={(e) => handleTextChange(e.target.value)}
+                    className={`w-full bg-white border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer appearance-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                >
+                    <option value="">Seçiniz...</option>
+                    {options.map((opt, i) => (
+                        <option key={i} value={opt}>{opt}</option>
+                    ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <List size={14} />
+                </div>
+            </div>
+        );
+    }
+
+    if (type === 'multiselect') {
+        const options = fieldDef?.options || attribute.options || [];
+        // Parse current value (comma separated)
+        const currentSelected = value[activeTab] ? value[activeTab].split(',').map(s => s.trim()) : [];
+
+        const toggleOption = (opt: string) => {
+            let newSelected;
+            if (currentSelected.includes(opt)) {
+                newSelected = currentSelected.filter(s => s !== opt);
+            } else {
+                newSelected = [...currentSelected, opt];
+            }
+            handleTextChange(newSelected.join(', '));
+        };
+
+        return (
+            <div className={`w-full bg-white border rounded-lg p-3 text-sm ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}>
+                <div className="grid grid-cols-2 gap-2">
+                    {options.map((opt, i) => {
+                        const isSelected = currentSelected.includes(opt);
+                        return (
+                            <button
+                                key={i}
+                                onClick={() => toggleOption(opt)}
+                                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${isSelected ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+                            >
+                                <div className={`w-3 h-3 rounded-sm border flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-400'}`}>
+                                    {isSelected && <Check size={10} className="text-white" />}
+                                </div>
+                                {opt}
+                            </button>
+                        )
+                    })}
+                </div>
+                {options.length === 0 && <span className="text-xs text-slate-400 italic">Seçenek tanımlanmamış.</span>}
+            </div>
         );
     }
 
@@ -237,6 +297,7 @@ const DynamicFieldInput: React.FC<{
                 multiline={true}
                 placeholder="Detaylı açıklama..."
                 actionButton={actionButton}
+                hasError={hasError}
             />
         );
     }
@@ -244,17 +305,33 @@ const DynamicFieldInput: React.FC<{
     if (type === 'currency') {
         return (
             <div className="relative">
-                <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600" />
+                <DollarSign size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-emerald-600'}`} />
                 <LocalizedInput 
                     value={value} 
                     onChange={onChange} 
                     activeTab={activeTab} 
                     onTabChange={onTabChange}
-                    className="pl-6" // Add padding for icon
+                    className="pl-6" 
                     placeholder="0.00"
+                    hasError={hasError}
                 />
             </div>
         );
+    }
+
+    if (type === 'number') {
+        return (
+             <div className="relative">
+                <Hash size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-slate-400'}`} />
+                 <input 
+                    type="number"
+                    value={value[activeTab]} 
+                    onChange={(e) => handleTextChange(e.target.value)}
+                    placeholder="0"
+                    className={`w-full bg-white border rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                />
+             </div>
+        )
     }
 
     // Default: Text
@@ -266,6 +343,7 @@ const DynamicFieldInput: React.FC<{
             onTabChange={onTabChange}
             placeholder="Değer giriniz..."
             actionButton={actionButton}
+            hasError={hasError}
         />
     );
 };
@@ -283,10 +361,7 @@ export interface NodeEditorProps {
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
   const { changeNodeId, displayLanguage, setDisplayLanguage, nodeTemplates } = useHotel(); 
   
-  // Local state removed to ensure global synchronization
-  // const [activeTab, setActiveTab] = useState<'tr' | 'en'>(displayLanguage);
-  // useEffect(() => { setActiveTab(displayLanguage); }, [displayLanguage]);
-  const activeTab = displayLanguage; // Use global state directly
+  const activeTab = displayLanguage; 
   
   const stats = useMemo(() => node ? analyzeHotelStats(node) : null, [node]);
   
@@ -330,33 +405,63 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       return getAllowedTypes(String(parentNode.type));
   }, [parentNode]);
 
-  // Determine active template and attributes
+  // Determine active template
   const activeTemplate = useMemo(() => {
       return nodeTemplates.find(t => t.id === node?.appliedTemplateId) || null;
   }, [node?.appliedTemplateId, nodeTemplates]);
 
-  const { standardAttributes, customAttributes } = useMemo(() => {
-      if (!node?.attributes) return { standardAttributes: [], customAttributes: [] };
-      if (!activeTemplate) return { standardAttributes: [], customAttributes: node.attributes };
-
-      const std: NodeAttribute[] = [];
+  // Derive template fields and custom fields
+  const { templateFields, customAttributes, missingRequiredCount } = useMemo(() => {
+      if (!node) return { templateFields: [], customAttributes: [], missingRequiredCount: 0 };
+      
       const custom: NodeAttribute[] = [];
+      const templateData: { def: TemplateField, attr: NodeAttribute }[] = [];
+      let missingCount = 0;
 
-      node.attributes.forEach(attr => {
-          // Check if this attribute belongs to the template via key match
-          const isFromTemplate = activeTemplate.fields.some(f => {
-              const fKey = f.key.toLowerCase();
-              // We check against the EN key or TR label fuzzy match to link back
-              const aKeyEn = typeof attr.key === 'string' ? attr.key.toLowerCase() : attr.key.en.toLowerCase();
-              return fKey === aKeyEn; 
+      if (activeTemplate) {
+          // 1. Iterate through Template Fields (Source of Truth)
+          activeTemplate.fields.forEach(field => {
+              // Find matching attribute in node
+              let match = node.attributes?.find(a => {
+                   const aKey = getLocalizedValue(a.key, 'en').toLowerCase();
+                   return aKey === field.key.toLowerCase();
+              });
+
+              // If missing, create a temporary empty one for display (don't save yet unless edited)
+              if (!match) {
+                   match = {
+                       id: `temp_${field.id}`,
+                       key: field.label, // Use label from template
+                       value: { tr: '', en: '' },
+                       type: field.type,
+                       options: field.options
+                   };
+              }
+
+              // Check required status
+              if (field.required) {
+                  const val = match.value[activeTab];
+                  if (!val || val.trim() === '') missingCount++;
+              }
+
+              templateData.push({ def: field, attr: match });
           });
 
-          if (isFromTemplate) std.push(attr);
-          else custom.push(attr);
-      });
+          // 2. Identify Custom Attributes (orphans not in template)
+          if (node.attributes) {
+              node.attributes.forEach(attr => {
+                  const isTemplateMatch = activeTemplate.fields.some(f => f.key.toLowerCase() === getLocalizedValue(attr.key, 'en').toLowerCase());
+                  if (!isTemplateMatch) custom.push(attr);
+              });
+          }
+      } else {
+          // No template, all are custom
+          if (node.attributes) custom.push(...node.attributes);
+      }
 
-      return { standardAttributes: std, customAttributes: custom };
-  }, [node, activeTemplate]);
+      return { templateFields: templateData, customAttributes: custom, missingRequiredCount: missingCount };
+
+  }, [node, activeTemplate, activeTab]);
 
 
   if (!node) {
@@ -413,12 +518,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
     onDelete(node.id);
   };
 
-  const handleCopyId = (id: string) => {
-    navigator.clipboard.writeText(id);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1500);
-  };
-
   const handleStartIdEdit = () => { setTempId(node.id); setIsEditingId(true); setIdError(null); };
   const handleCancelIdEdit = () => { setIsEditingId(false); setTempId(node.id); setIdError(null); };
 
@@ -426,14 +525,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       if (tempId === node.id) { setIsEditingId(false); return; }
       const result = await changeNodeId(node.id, tempId);
       if (result.success) { setIsEditingId(false); } else { setIdError(result.message); }
-  };
-
-  const handleGenerateSlugId = () => {
-      const name = getLocalizedValue(node.name, 'en');
-      if (!name) return;
-      const slug = generateSlug(name);
-      const proposedId = `${slug}-${Math.random().toString(36).substr(2, 4)}`;
-      setTempId(proposedId);
   };
 
   const handleAutoGenerateContext = async () => {
@@ -513,13 +604,28 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       finally { setTranslatingFieldId(null); }
   };
 
-  const handleAddAttribute = () => {
-    if (!newAttrKey.tr.trim() && !newAttrKey.en.trim()) return;
-    const newAttr: NodeAttribute = { id: generateId('attr'), key: { ...newAttrKey }, value: { ...newAttrValue }, type: 'text' };
-    const currentAttributes = Array.isArray(node.attributes) ? [...node.attributes] : [];
-    onUpdate(node.id, { attributes: [...currentAttributes, newAttr] });
-    setNewAttrKey({ tr: '', en: '' });
-    setNewAttrValue({ tr: '', en: '' });
+  // Safe Attribute Updates that handles "Template Data" vs "Custom Data"
+  // If we update a template field, we must ensure the attribute actually exists in the node
+  const handleTemplateFieldUpdate = (fieldDef: TemplateField, value: LocalizedText) => {
+      const currentAttrs = [...(node.attributes || [])];
+      const existingIdx = currentAttrs.findIndex(a => {
+          const aKey = getLocalizedValue(a.key, 'en').toLowerCase();
+          return aKey === fieldDef.key.toLowerCase();
+      });
+
+      if (existingIdx >= 0) {
+          currentAttrs[existingIdx] = { ...currentAttrs[existingIdx], value };
+      } else {
+          // Create new
+          currentAttrs.push({
+              id: generateId('attr'),
+              key: fieldDef.label, 
+              value: value,
+              type: fieldDef.type,
+              options: fieldDef.options
+          });
+      }
+      onUpdate(node.id, { attributes: currentAttrs });
   };
 
   const handleUpdateAttribute = (attrId: string, field: 'key' | 'value', value: LocalizedText) => {
@@ -533,10 +639,13 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
       onUpdate(node.id, { attributes: currentAttributes.filter(a => a.id !== attrId) });
   };
 
-  const renderOption = (value: string, label: string) => {
-      const isAllowed = allowedTypes.length === 0 || allowedTypes.includes(value);
-      if (!isAllowed && node.type !== value) return null;
-      return <option value={value} disabled={!isAllowed}>{label}</option>;
+  const handleAddAttribute = () => {
+    if (!newAttrKey.tr.trim() && !newAttrKey.en.trim()) return;
+    const newAttr: NodeAttribute = { id: generateId('attr'), key: { ...newAttrKey }, value: { ...newAttrValue }, type: 'text' };
+    const currentAttributes = Array.isArray(node.attributes) ? [...node.attributes] : [];
+    onUpdate(node.id, { attributes: [...currentAttributes, newAttr] });
+    setNewAttrKey({ tr: '', en: '' });
+    setNewAttrValue({ tr: '', en: '' });
   };
 
   // UNIFIED HEADER SELECTORS
@@ -579,19 +688,19 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     className={selectStyle('text-blue-800')}
                   >
                       <optgroup label="Kapsayıcılar">
-                          {renderOption('category', 'Category')}
-                          {renderOption('list', 'List')}
-                          {renderOption('menu', 'Menu')}
+                          <option value="category">Category</option>
+                          <option value="list">List</option>
+                          <option value="menu">Menu</option>
                       </optgroup>
                       <optgroup label="Veri">
-                          {renderOption('item', 'Item')}
-                          {renderOption('menu_item', 'Menu Item')}
-                          {renderOption('field', 'Field')}
+                          <option value="item">Item</option>
+                          <option value="menu_item">Menu Item</option>
+                          <option value="field">Field</option>
                       </optgroup>
                       <optgroup label="Meta">
-                          {renderOption('qa_pair', 'Q&A')}
-                          {renderOption('note', 'Note')}
-                          {renderOption('policy', 'Policy')}
+                          <option value="qa_pair">Q&A</option>
+                          <option value="note">Note</option>
+                          <option value="policy">Policy</option>
                       </optgroup>
                   </select>
               </div>
@@ -679,8 +788,20 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
 
       <div className="flex-1 overflow-y-auto bg-slate-50/30">
         <div className="max-w-5xl mx-auto p-6 lg:p-8 space-y-6 pb-32">
+            
+            {/* Validation Errors */}
             {validationError && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3"><TriangleAlert size={18} className="text-amber-600 shrink-0 mt-0.5" /><div><h4 className="text-sm font-bold text-amber-800">Doğrulama Uyarısı</h4><p className="text-xs text-amber-700 mt-1">{validationError}</p></div></div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3 animate-in slide-in-from-top-2"><TriangleAlert size={18} className="text-amber-600 shrink-0 mt-0.5" /><div><h4 className="text-sm font-bold text-amber-800">Doğrulama Uyarısı</h4><p className="text-xs text-amber-700 mt-1">{validationError}</p></div></div>
+            )}
+            
+            {missingRequiredCount > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3 animate-in slide-in-from-top-2">
+                    <Shield size={18} className="text-red-600 shrink-0 mt-0.5" />
+                    <div>
+                        <h4 className="text-sm font-bold text-red-800">Eksik Zorunlu Alanlar</h4>
+                        <p className="text-xs text-red-700 mt-1">Şablonda zorunlu işaretlenmiş {missingRequiredCount} alan boş bırakılmış.</p>
+                    </div>
+                </div>
             )}
 
             {/* 1. NAME SECTION (CARD) */}
@@ -741,8 +862,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                 </div>
             </div>
 
-            {/* DYNAMIC FIELDS SECTION (Template) */}
-            {activeTemplate && standardAttributes.length > 0 && (
+            {/* DYNAMIC FIELDS SECTION (Strictly from Template) */}
+            {activeTemplate && templateFields.length > 0 && (
                 <div className="bg-white rounded-xl border border-indigo-100 shadow-sm overflow-hidden animate-in slide-in-from-bottom-2">
                     <div className="bg-indigo-50/50 px-6 py-4 border-b border-indigo-100 flex justify-between items-center">
                         <div className="flex items-center gap-2">
@@ -759,21 +880,17 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         </div>
                     </div>
                     <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {standardAttributes.map(attr => (
-                            <div key={attr.id} className={attr.type === 'textarea' ? 'md:col-span-2' : ''}>
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                                    {getLocalizedValue(attr.key, 'tr')}
-                                    {(() => {
-                                        const fieldDef = activeTemplate.fields.find(f => f.label.tr === getLocalizedValue(attr.key, 'tr')); 
-                                        if (fieldDef?.aiDescription) {
-                                            return <InfoTooltip title="AI Bilgisi" content={fieldDef.aiDescription} placement="left" />;
-                                        }
-                                        return null;
-                                    })()}
+                        {templateFields.map(({ def, attr }) => (
+                            <div key={def.id} className={def.type === 'textarea' ? 'md:col-span-2' : ''}>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                    {getLocalizedValue(def.label, 'tr')}
+                                    {def.required && <span className="text-red-500 text-lg leading-none">*</span>}
+                                    {def.aiDescription && <InfoTooltip title="AI Bilgisi" content={def.aiDescription} placement="right" />}
                                 </label>
                                 <DynamicFieldInput 
-                                    attribute={attr} 
-                                    onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)}
+                                    attribute={attr}
+                                    fieldDef={def}
+                                    onChange={(val) => handleTemplateFieldUpdate(def, val)}
                                     activeTab={activeTab}
                                     onTabChange={setDisplayLanguage}
                                     actionButton={activeTab === 'en' ? renderActionBtn(translatingFieldId === attr.id, () => handleSingleAttributeTranslate(attr.id), 'translate') : undefined}
@@ -820,10 +937,12 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 />
                             </div>
                             <div className="flex-1">
-                                <LocalizedInput 
-                                    value={attr.value} 
-                                    onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)} 
-                                    placeholder="Value" compact activeTab={activeTab} onTabChange={setDisplayLanguage}
+                                <DynamicFieldInput 
+                                    attribute={attr}
+                                    // No field definition for custom fields
+                                    onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)}
+                                    activeTab={activeTab}
+                                    onTabChange={setDisplayLanguage}
                                     actionButton={activeTab === 'en' ? (
                                         <button 
                                             onClick={() => handleSingleAttributeTranslate(attr.id)}

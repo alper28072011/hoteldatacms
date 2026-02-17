@@ -5,7 +5,7 @@ import { useHotel } from '../contexts/HotelContext';
 import { generateId } from '../utils/treeUtils';
 import { 
     X, Plus, Trash2, Save, LayoutTemplate, GripVertical, Check, Info, 
-    Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2
+    Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2, CheckSquare
 } from 'lucide-react';
 
 interface TemplateManagerProps {
@@ -27,7 +27,7 @@ const getTypeIcon = (type: FieldType) => {
         case 'number': return <Hash size={14} className="text-emerald-500"/>;
         case 'boolean': return <ToggleLeft size={14} className="text-purple-500"/>;
         case 'select': return <List size={14} className="text-orange-500"/>;
-        case 'multiselect': return <List size={14} className="text-orange-600"/>;
+        case 'multiselect': return <CheckSquare size={14} className="text-orange-600"/>;
         case 'date': return <Calendar size={14} className="text-pink-500"/>;
         case 'time': return <Clock size={14} className="text-cyan-500"/>;
         case 'currency': return <DollarSign size={14} className="text-green-600"/>;
@@ -147,10 +147,11 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
       
       setSaveStatus('saving');
 
-      // Auto-generate keys if missing
+      // Auto-generate keys if missing and trim options
       const processedFields = formData.fields.map(f => ({
           ...f,
-          key: f.key || f.label.en.toLowerCase().replace(/[^a-z0-9]/g, '_') || generateId('k')
+          key: f.key || f.label.en.toLowerCase().replace(/[^a-z0-9]/g, '_') || generateId('k'),
+          options: f.options ? f.options.map(o => o.trim()).filter(o => o !== '') : undefined
       }));
       
       const finalData = { ...formData, fields: processedFields };
@@ -401,8 +402,8 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seçenekler (Virgülle Ayırın)</label>
                                                 <input 
                                                     type="text" 
-                                                    value={Array.isArray(field.options) ? field.options.join(',') : ''}
-                                                    onChange={(e) => handleUpdateField(field.id, { options: e.target.value.split(',') })}
+                                                    value={Array.isArray(field.options) ? field.options.join(', ') : ''}
+                                                    onChange={(e) => handleUpdateField(field.id, { options: e.target.value.split(',').map(s => s) })}
                                                     placeholder="Deniz, Kara, Bahçe, Havuz"
                                                     className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300"
                                                 />
@@ -445,7 +446,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
 
                         {/* Add Field Bar */}
                         <div className="grid grid-cols-5 gap-2 p-2 bg-slate-100 rounded-xl border border-slate-200">
-                            {(['text', 'number', 'boolean', 'select', 'date', 'time', 'currency', 'textarea'] as FieldType[]).map(type => (
+                            {(['text', 'number', 'boolean', 'select', 'multiselect', 'date', 'time', 'currency', 'textarea'] as FieldType[]).map(type => (
                                 <button 
                                     key={type}
                                     onClick={() => handleAddField(type)}
