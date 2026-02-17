@@ -790,7 +790,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     
                     {/* CUSTOM FIELDS HEADER CONTROLS (Lang + Bulk) */}
                     <div className="flex items-center gap-3">
-                        <LanguageToggle activeTab={activeTab} onTabChange={setActiveTab} />
+                        {/* Changed Order: Bulk Button First */}
                         {activeTab === 'en' && customAttributes.length > 0 && (
                             <button 
                                 onClick={handleBulkTranslateAttributes} 
@@ -800,6 +800,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 {isBulkTranslating ? <Loader2 size={12} className="animate-spin"/> : <Globe size={12} />} Toplu Çevir
                             </button>
                         )}
+                        <LanguageToggle activeTab={activeTab} onTabChange={setActiveTab} />
                         <span className="text-xs text-slate-400">{customAttributes.length} özellik</span>
                     </div>
                 </div>
