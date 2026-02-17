@@ -294,20 +294,9 @@ const DynamicFieldInput: React.FC<{
         return (
             <div className="relative">
                 <select 
-                    value={localValue[activeTab] || ''}
-                    onChange={(e) => handleTextChange(e.target.value)}
-                    // Selects trigger save immediately on blur or change usually, but using buffer logic here for consistency with text
-                    // Actually for dropdowns, immediate change is usually better UX.
-                    // But if we use localValue, we must provide a save mechanism or auto-save.
-                    // Let's stick to immediate for selects to avoid extra clicks.
-                >
-                   {/* Trick: We hijack onChange to call parent immediately for Selects */}
-                </select>
-                {/* Reverting Select to immediate update pattern for better UX */}
-                <select 
                     value={propVal[activeTab] || ''}
                     onChange={(e) => onChange({ ...propVal, [activeTab]: e.target.value })}
-                    className={`w-full bg-white border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer appearance-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                    className={`w-full bg-white border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer appearance-none text-slate-700 ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
                 >
                     <option value="">Seçiniz...</option>
                     {options.map((opt, i) => (
