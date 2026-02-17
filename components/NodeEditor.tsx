@@ -655,14 +655,19 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   return (
     <div className="h-full flex flex-col bg-white">
       <div className="h-20 border-b border-slate-200 px-6 flex items-center justify-between bg-white shrink-0 z-10">
-        <div className="flex-1 min-w-0 mr-4">
-           <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 mb-1 font-medium">
-              {breadcrumbs.map((crumb, i) => (
-                 <React.Fragment key={crumb.id}>{i > 0 && <ChevronRight size={10} className="text-slate-300" />}<span className={i === breadcrumbs.length - 1 ? "text-slate-800 font-bold" : "text-slate-500"}>{getLocalizedValue(crumb.name, displayLanguage) || 'Untitled'}</span></React.Fragment>
-              ))}
-           </div>
-           <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-800 truncate leading-none pb-0.5">{displayName || 'Untitled Node'}</h2>
+        <div className="flex-1 min-w-0 mr-4 flex items-center">
+           <div className="flex flex-wrap items-center gap-2">
+              {breadcrumbs.map((crumb, i) => {
+                 const isLast = i === breadcrumbs.length - 1;
+                 return (
+                    <React.Fragment key={crumb.id}>
+                        {i > 0 && <ChevronRight size={16} className="text-slate-300" />}
+                        <span className={isLast ? "text-lg font-bold text-slate-800" : "text-sm font-medium text-slate-500"}>
+                            {getLocalizedValue(crumb.name, displayLanguage) || 'Untitled'}
+                        </span>
+                    </React.Fragment>
+                 );
+              })}
            </div>
         </div>
         <div className="flex items-center gap-3">
