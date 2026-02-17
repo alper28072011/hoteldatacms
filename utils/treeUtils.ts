@@ -42,12 +42,19 @@ export const ensureLocalized = (val: LocalizedText | string | undefined): Locali
 
 /**
  * Formats text for AI Context as "Turkish (English)" if both exist.
+ * This helps the AI understand the field regardless of the question language.
  */
 const getRosettaText = (val: LocalizedText | string | undefined): string => {
   if (!val) return '';
   if (typeof val === 'string') return val;
-  if (val.tr && val.en) return `${val.tr} (${val.en})`;
-  return val.tr || val.en || '';
+  
+  const tr = val.tr?.trim();
+  const en = val.en?.trim();
+
+  if (tr && en && tr !== en) return `${tr} (${en})`;
+  if (tr) return tr;
+  if (en) return en;
+  return '';
 };
 
 // Recursively checks if an ID exists in the tree
@@ -97,7 +104,7 @@ export const getAllowedTypes = (parentType?: string): string[] => {
         case 'list':
             return ['item'];
         case 'menu':
-            return ['menu_item']; // Menus should strictly contain menu items (or subsections if really needed, but sticking to strict for now)
+            return ['menu_item']; 
         default:
             return []; // Leaf nodes shouldn't have children types
     }
@@ -134,10 +141,6 @@ export const findPathToNode = (root: HotelNode, targetId: string): HotelNode[] |
 };
 
 export const updateNodeInTree = (root: HotelNode, targetId: string, updates: Partial<HotelNode>): HotelNode => {
-  // If we are updating the ID itself, we need to be careful.
-  // The 'updates' object might contain { id: 'new-id' }.
-  // If matches targetId, we apply updates.
-  
   if (String(root.id) === String(targetId)) {
     return { ...root, ...updates };
   }
@@ -257,8 +260,6 @@ export const moveNode = (root: HotelNode, sourceId: string, targetId: string, po
     return root;
   }
 
-  // VALIDATE PARENT CONSTRAINT FOR MOVE
-  // If moving 'inside', target is the parent. If 'before/after', target's parent is the parent.
   let newParent: HotelNode | null = null;
   if (position === 'inside') {
       newParent = findNodeById(root, targetId);
@@ -269,12 +270,9 @@ export const moveNode = (root: HotelNode, sourceId: string, targetId: string, po
       }
   }
 
-  // STRICT TYPE CHECK ON MOVE
   if (newParent) {
       const allowedTypes = getAllowedTypes(String(newParent.type));
       if (!allowedTypes.includes(String(sourceNode.type)) && allowedTypes.length > 0) {
-          // If the type is not allowed, we block the move logic by returning original root.
-          // In a real app, we might want to throw an error or return a status.
           console.warn(`Move blocked: ${sourceNode.type} cannot be inside ${newParent.type}`);
           return root;
       }
@@ -329,7 +327,7 @@ export const cleanTreeValues = (node: HotelNode): HotelNode => {
   delete newNode.value;
   delete newNode.price;
   delete newNode.answer;
-  delete newNode.data; // Clean structured data too
+  delete newNode.data;
   delete newNode.description;
   if (newNode.attributes) {
       newNode.attributes = newNode.attributes.map(attr => ({ ...attr, value: { tr: '', en: '' } }));
@@ -402,36 +400,29 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
 
   const lowerQuery = query.toLowerCase();
   
-  // Helper for safe text extraction that prevents "Cannot read properties of null"
-  // and concatenates TR/EN for comprehensive search.
   const getSearchable = (val: any): string => {
     if (val === null || val === undefined) return '';
     if (typeof val === 'string') return val.toLowerCase();
-    // Safety check for object properties (handle null explicitly since typeof null is 'object')
     if (typeof val === 'object') {
          return `${val.tr || ''} ${val.en || ''}`.toLowerCase();
     }
     return '';
   };
   
-  // 1. Core Fields (Name, Value, Answer, Description)
   const matchesName = getSearchable(node.name).includes(lowerQuery);
   const matchesValue = getSearchable(node.value).includes(lowerQuery);
   const matchesAnswer = getSearchable(node.answer).includes(lowerQuery);
-  const matchesDesc = getSearchable(node.description).includes(lowerQuery); // Include hidden AI context in search
-  const matchesQuestion = (node.question || '').toLowerCase().includes(lowerQuery); // QA Questions
+  const matchesDesc = getSearchable(node.description).includes(lowerQuery);
+  const matchesQuestion = (node.question || '').toLowerCase().includes(lowerQuery);
 
-  // 2. Metadata (Intent, Tags)
   const matchesIntent = (node.intent || '').toLowerCase().includes(lowerQuery);
   const matchesTags = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
   
-  // 3. Attributes (Safe traversal of localized keys and values)
   const matchesAttributes = node.attributes?.some(attr => 
     getSearchable(attr.key).includes(lowerQuery) ||
     getSearchable(attr.value).includes(lowerQuery)
   );
   
-  // 4. Schema Data (Deep search in structured data like cuisine, location, bed config)
   let matchesData = false;
   if (node.data) {
       try {
@@ -460,58 +451,12 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   return null;
 };
 
-// --- DATA PROCESSING HELPERS FOR GENERATE AI TEXT ---
-
-interface GlobalIndex {
-  definitions: Map<string, string>; 
-  globalRules: string[];
-}
-
-const buildGlobalIndex = (root: HotelNode): GlobalIndex => {
-  const index: GlobalIndex = {
-    definitions: new Map(),
-    globalRules: []
-  };
-
-  const traverse = (node: HotelNode) => {
-    // Index definable items
-    if (['list', 'menu', 'policy', 'category'].includes(String(node.type))) {
-      const name = getLocalizedValue(node.name, 'tr').trim();
-      if (name && name.length > 3) {
-        const childrenSummary = node.children
-          ?.map(c => getLocalizedValue(c.name, 'tr') + (getLocalizedValue(c.value, 'tr') ? `: ${getLocalizedValue(c.value, 'tr')}` : ''))
-          .slice(0, 5) 
-          .join(', ');
-        
-        if (childrenSummary) {
-          index.definitions.set(name, childrenSummary);
-        }
-      }
-    }
-
-    const nameStr = getLocalizedValue(node.name, 'tr').toLowerCase();
-    if (nameStr.includes('general rule') || node.tags?.includes('global')) {
-       if (node.children) {
-          node.children.forEach(c => {
-             const val = getLocalizedValue(c.value, 'tr');
-             if (val) index.globalRules.push(`${getLocalizedValue(c.name, 'tr')}: ${val}`);
-          });
-       }
-    }
-
-    if (node.children) node.children.forEach(traverse);
-  };
-
-  traverse(root);
-  return index;
-};
+// --- AI TEXT GENERATION (CRITICAL FOR CHATBOT) ---
 
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
 ): Promise<string> => {
-  
-  const globalIndex = buildGlobalIndex(root);
   
   const flattenTree = (node: HotelNode, depth: number): { node: HotelNode, depth: number }[] => {
     const result: { node: HotelNode, depth: number }[] = [{ node, depth }];
@@ -528,77 +473,67 @@ export const generateAIText = async (
 
   for (let i = 0; i < totalNodes; i++) {
     const { node, depth } = flatNodes[i];
-    const type = String(node.type);
     
-    // ROSETTA STONE FORMAT: Turkish (English)
+    // ROSETTA STONE FORMAT: Ensures AI sees both languages
     const name = getRosettaText(node.name);
     const value = getRosettaText(node.value || node.answer);
     
-    // INTENT-AWARE TEXT GENERATION
-    const intentTag = node.intent ? ` [INTENT: ${node.intent.toUpperCase()}]` : '';
+    const intentTag = node.intent ? `[INTENT: ${node.intent.toUpperCase()}]` : '';
+    const indent = " ".repeat(depth * 2); // 2 spaces per level indentation
     
-    const indent = "  ".repeat(depth);
-    let line = "";
+    // 1. HEADER LINE
+    let headerLine = `${indent}- **${name}** ${intentTag}`;
+    
+    // If it's a category/root, make it look like a section
+    if (['root', 'category', 'list', 'menu'].includes(String(node.type))) {
+        headerLine = `${indent}# [${String(node.type).toUpperCase()}] ${name} ${intentTag}`;
+    }
+    lines.push(headerLine);
 
-    const isContainer = ['root', 'category', 'list', 'menu'].includes(type);
-    
-    if (isContainer) {
-       if (depth < 3) {
-         line = `\n${"#".repeat(depth + 1)} ${name}${intentTag}`;
-       } else {
-         line = `${indent}- **[${type.toUpperCase()}] ${name}**${intentTag}`;
+    // 2. MAIN VALUE / SUMMARY
+    if (value && value.trim()) {
+        lines.push(`${indent}  • Summary: ${value}`);
+    }
+
+    // 3. AI CONTEXT (Priority Information)
+    if (node.description) {
+       const desc = getRosettaText(node.description);
+       if (desc.trim()) {
+           lines.push(`${indent}  • [AI_NOTE]: ${desc}`);
        }
-    } else {
-       line = `${indent}- ${name}${intentTag}`;
     }
 
-    if (value) {
-      line += `: ${value}`;
-      
-      const definition = globalIndex.definitions.get(getLocalizedValue(node.name, 'tr').trim());
-      if (definition && type !== 'list' && type !== 'menu') {
-        line += ` _(Sistem Tanımı: ${definition}...)_`;
-      }
+    // 4. ATTRIBUTES (The Data Payload) - KEY SECTION FOR TEMPLATES
+    if (node.price) {
+        lines.push(`${indent}  • Price: ${node.price}`);
     }
-
-    // EXPLICIT ATTRIBUTE LISTING FOR AI
-    // We now list attributes on separate lines or clearly bracketed to ensure AI sees them as properties.
-    const attributesParts: string[] = [];
-    if (node.price) attributesParts.push(`Fiyat: ${node.price}`);
     
     if (node.attributes && node.attributes.length > 0) {
+       // Ensure attributes are listed explicitly, line by line
        node.attributes.forEach(attr => {
-          // LOCALIZED ATTRIBUTES IN ROSETTA FORMAT
           const key = getRosettaText(attr.key);
           const val = getRosettaText(attr.value);
-          // Only include if value exists
+          
           if (key && val && val.trim() !== '') {
-             attributesParts.push(`${key}: ${val}`);
+             // Example: "  • Bed Type (Yatak Tipi): King Size (Büyük Boy)"
+             lines.push(`${indent}  • ${key}: ${val}`);
           }
        });
     }
-    
-    if (attributesParts.length > 0) {
-       // Append attributes more clearly
-       line += `\n${indent}  [ÖZELLİKLER: ${attributesParts.join(' | ')}]`;
-    }
 
-    if (type === 'category' && (name.toLowerCase().includes('oda') || name.toLowerCase().includes('room'))) {
-       if (globalIndex.globalRules.length > 0) {
-         line += `\n${indent}  > *Global Kurallar Uygulandı: ${globalIndex.globalRules.length} madde.*`;
-       }
-    }
-
-    lines.push(line);
-
-    if (node.description) {
-       const desc = getRosettaText(node.description);
-       lines.push(`${indent}  > Not: ${desc}`);
+    // 5. STRUCTURED DATA (Legacy)
+    if (node.data) {
+        try {
+            const jsonStr = JSON.stringify(node.data);
+            if (jsonStr.length > 2) {
+                lines.push(`${indent}  • SchemaData: ${jsonStr}`);
+            }
+        } catch(e) {}
     }
 
     if (i % CHUNK_SIZE === 0) {
       onProgress(Math.round((i / totalNodes) * 100));
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise(resolve => setTimeout(resolve, 2)); // Tiny yield
     }
   }
 
@@ -628,7 +563,7 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   if (node.id) semanticData.id = node.id;
   if (node.type) semanticData.type = node.type;
   if (node.intent) semanticData.intent = node.intent; 
-  if (node.name) semanticData.name = node.name; // Keep Localized Object
+  if (node.name) semanticData.name = node.name; 
   if (node.value) semanticData.value = node.value;
   if (node.description) semanticData.description = node.description; 
   if (node.tags) semanticData.tags = node.tags;
@@ -638,8 +573,8 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
 
   if (node.attributes && Array.isArray(node.attributes)) {
       semanticData.attributes = node.attributes.map(a => ({
-          key: a.key, // Now localized
-          value: a.value // Now localized
+          key: a.key, 
+          value: a.value 
       }));
   }
 
@@ -681,7 +616,6 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
      const nameObj = ensureLocalized(node.name);
      const valueObj = ensureLocalized(node.value || node.answer);
 
-     // Simplify attributes for CSV: Just dump JSON string of localized objects
      const attributesStr = JSON.stringify(node.attributes || []);
 
      rows.push([

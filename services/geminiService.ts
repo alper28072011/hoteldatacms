@@ -109,31 +109,26 @@ export const chatWithData = async (
     ${toneBlock}
     ${rulesBlock}
 
-    **GÖREV AKIŞI (INTENT-DRIVEN LOGIC):**
+    **VERİ OKUMA KILAVUZU (ÖNEMLİ):**
+    Aşağıdaki otel veritabanı "Hiyerarşik Liste" formatındadır.
+    1. **Ana Başlıklar (#)**: Kategori veya alanları gösterir.
+    2. **Öğeler (-)**: Spesifik hizmetleri veya odaları gösterir.
+    3. **Detaylar (•)**: Bu işaretin olduğu satırlar teknik özellikleri (Attributes) ve detayları içerir.
+       - "Summary": Genel açıklama.
+       - "AI_NOTE": Sadece senin görmen gereken özel notlar/kurallar.
+       - "Key (TR) (Key EN): Value (TR) (Value EN)": Özellikler.
     
-    ADIM 1: KULLANICI NİYETİNİ (INTENT) ANALİZ ET
-    Kullanıcının mesajını şu kategorilerden birine koy:
-    - **Informational**: Bilgi istiyor (Saat kaçta açılıyor? Havuz nerede?)
-    - **Request**: Bir hizmet istiyor (Odaya havlu, taksi çağırma)
-    - **Policy**: Kural soruyor (Sigara içiliyor mu? Evcil hayvan yasak mı?)
-    - **Complaint**: Şikayet ediyor (Klima bozuk, yemek soğuk)
-    - **Safety**: Acil durum veya güvenlik (Doktor var mı? Yangın merdiveni nerede?)
+    **GÖREV AKIŞI:**
     
-    ADIM 2: VERİ FİLTRELEME VE ODAKLANMA
-    Veritabanında cevap ararken, tespit ettiğin NİYET'e uygun etiketlere (Tags) ve [INTENT: ...] işaretlerine öncelik ver.
-    - **Eğer COMPLAINT ise**: Prosedürlere, misafir ilişkileri numaralarına ve çözüm protokollerine bak. "Özür dile ve çözüm sun".
-    - **Eğer SAFETY ise**: En kısa, en net ve hayati bilgiyi ver.
-    - **Eğer REQUEST ise**: O hizmetin "Ücretli mi?" ve "Nasıl talep edilir?" bilgisini kontrol et.
+    ADIM 1: ARA VE BUL
+    Kullanıcının sorusundaki anahtar kelimeleri (Örn: "Yatak", "Bed", "Manzara") veritabanında ara.
+    - Eğer bir oda soruluyorsa, o odanın altındaki (•) ile başlayan tüm özelliklere bak.
+    - Eğer "AI_NOTE" varsa, o bilgiyi öncelikli kural olarak kabul et.
     
-    ADIM 3: CEVAP OLUŞTURMA
-    - Cevabın başına (kendi iç monoloğun olarak, kullanıcıya göstermeden) şunu düşün: "Tespit Edilen Niyet: [INTENT]".
-    - Sonra kullanıcıya cevabı ver.
+    ADIM 2: CEVAPLA
+    Bulduğun bilgiyi kullanarak doğal bir dille cevap ver. Asla "Veritabanında şöyle yazıyor" deme, doğrudan bilgi ver.
     
-    KURALLAR:
-    1. Sadece aşağıda verilen OTEL VERİTABANI bilgilerini kullanarak cevap ver. Bilgi uydurma.
-    2. **TÜRKÇE**: Cevapların tamamı akıcı ve doğal Türkçe olmalı.
-    
-    OTEL VERİTABANI (Intent Etiketli - Rosetta Format: TR (EN)):
+    OTEL VERİTABANI (LIVE DATA):
     ${textContext}
     `;
 
