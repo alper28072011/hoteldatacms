@@ -66,7 +66,7 @@ const LocalizedInput: React.FC<{
                     value={value.tr}
                     onChange={(e) => onChange({ ...value, tr: e.target.value })}
                     placeholder={placeholder}
-                    className="w-full border border-slate-200 bg-white rounded pl-8 pr-2 py-1.5 text-xs focus:border-indigo-500 outline-none transition-colors"
+                    className="w-full border border-slate-200 bg-white rounded pl-8 pr-2 py-1.5 text-xs focus:border-indigo-500 outline-none transition-colors text-slate-700"
                 />
             </div>
             <div className="relative flex-1">
@@ -76,10 +76,40 @@ const LocalizedInput: React.FC<{
                     value={value.en}
                     onChange={(e) => onChange({ ...value, en: e.target.value })}
                     placeholder={placeholder}
-                    className="w-full border border-slate-200 bg-slate-50/50 rounded pl-8 pr-2 py-1.5 text-xs focus:border-indigo-500 outline-none transition-colors"
+                    className="w-full border border-slate-200 bg-slate-50/50 rounded pl-8 pr-2 py-1.5 text-xs focus:border-indigo-500 outline-none transition-colors text-slate-700"
                 />
             </div>
         </div>
+    );
+};
+
+// Buffered Input for Options (Comma Separated)
+const OptionsInput: React.FC<{
+    value: string[] | undefined;
+    onChange: (val: string[]) => void;
+}> = ({ value, onChange }) => {
+    const [text, setText] = useState(Array.isArray(value) ? value.join(', ') : '');
+
+    // Sync with prop changes only when not focused or significantly different
+    // Here we trust the array join to be canonical.
+    useEffect(() => {
+        setText(Array.isArray(value) ? value.join(', ') : '');
+    }, [value]);
+
+    const handleBlur = () => {
+        const options = text.split(',').map(s => s.trim()).filter(s => s !== '');
+        onChange(options);
+    };
+
+    return (
+        <input 
+            type="text" 
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={handleBlur}
+            placeholder="Deniz, Kara, Bahçe, Havuz"
+            className="w-full border border-slate-200 bg-white rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-slate-700 placeholder:text-slate-400"
+        />
     );
 };
 
@@ -400,12 +430,9 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                         {(field.type === 'select' || field.type === 'multiselect') && (
                                             <div className="flex-1">
                                                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seçenekler (Virgülle Ayırın)</label>
-                                                <input 
-                                                    type="text" 
-                                                    value={Array.isArray(field.options) ? field.options.join(', ') : ''}
-                                                    onChange={(e) => handleUpdateField(field.id, { options: e.target.value.split(',').map(s => s) })}
-                                                    placeholder="Deniz, Kara, Bahçe, Havuz"
-                                                    className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300"
+                                                <OptionsInput 
+                                                    value={field.options} 
+                                                    onChange={(opts) => handleUpdateField(field.id, { options: opts })} 
                                                 />
                                             </div>
                                         )}
