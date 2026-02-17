@@ -281,13 +281,12 @@ export interface NodeEditorProps {
 }
 
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
-  const { changeNodeId, displayLanguage, nodeTemplates } = useHotel(); 
+  const { changeNodeId, displayLanguage, setDisplayLanguage, nodeTemplates } = useHotel(); 
   
-  const [activeTab, setActiveTab] = useState<'tr' | 'en'>(displayLanguage);
-
-  useEffect(() => {
-    setActiveTab(displayLanguage);
-  }, [displayLanguage]);
+  // Local state removed to ensure global synchronization
+  // const [activeTab, setActiveTab] = useState<'tr' | 'en'>(displayLanguage);
+  // useEffect(() => { setActiveTab(displayLanguage); }, [displayLanguage]);
+  const activeTab = displayLanguage; // Use global state directly
   
   const stats = useMemo(() => node ? analyzeHotelStats(node) : null, [node]);
   
@@ -687,7 +686,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <h3 className="text-sm font-bold text-slate-700">Başlık / İsim</h3>
                     </div>
                     {/* Added Language Toggle to Header */}
-                    <LanguageToggle activeTab={activeTab} onTabChange={setActiveTab} />
+                    <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
                 </div>
                 <div className="p-6">
                     <LocalizedInput 
@@ -695,7 +694,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         onChange={(val) => handleChange('name', val)}
                         placeholder="Öğe Başlığı..."
                         activeTab={activeTab}
-                        onTabChange={setActiveTab}
+                        onTabChange={setDisplayLanguage}
                         actionButton={activeTab === 'en' ? renderActionBtn(false, () => {}, 'translate') : undefined} 
                     />
                 </div>
@@ -712,7 +711,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <InfoTooltip title="Ana İçerik" content="Misafire gösterilecek ana metin. Şablon kullanıyorsanız burası 'Özet' olarak kalabilir." />
                     </div>
                     {/* Added Language Toggle to Header */}
-                    <LanguageToggle activeTab={activeTab} onTabChange={setActiveTab} />
+                    <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
                 </div>
                 
                 <div className="p-6">
@@ -722,7 +721,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         placeholder="İçerik metni..."
                         multiline={true}
                         activeTab={activeTab}
-                        onTabChange={setActiveTab}
+                        onTabChange={setDisplayLanguage}
                         actionButton={renderActionBtn(isGeneratingValue, handleAutoGenerateValue, 'generate')}
                     />
 
@@ -746,7 +745,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                             <h3 className="text-sm font-bold text-indigo-900">{activeTemplate.name} Verileri</h3>
                         </div>
                         <div className="flex items-center gap-2">
-                            <LanguageToggle activeTab={activeTab} onTabChange={setActiveTab} />
+                            <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
                             {activeTab === 'en' && (
                                 <button onClick={handleBulkTranslateAttributes} disabled={isBulkTranslating} className="flex items-center gap-1.5 px-2 py-1 bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 rounded text-[10px] font-bold transition-colors shadow-sm">
                                     {isBulkTranslating ? <Loader2 size={12} className="animate-spin"/> : <Globe size={12} />} Çevir
@@ -771,7 +770,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                     attribute={attr} 
                                     onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)}
                                     activeTab={activeTab}
-                                    onTabChange={setActiveTab}
+                                    onTabChange={setDisplayLanguage}
                                     actionButton={activeTab === 'en' ? renderActionBtn(translatingFieldId === attr.id, () => handleSingleAttributeTranslate(attr.id), 'translate') : undefined}
                                 />
                             </div>
@@ -800,7 +799,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 {isBulkTranslating ? <Loader2 size={12} className="animate-spin"/> : <Globe size={12} />} Toplu Çevir
                             </button>
                         )}
-                        <LanguageToggle activeTab={activeTab} onTabChange={setActiveTab} />
+                        <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
                         <span className="text-xs text-slate-400">{customAttributes.length} özellik</span>
                     </div>
                 </div>
@@ -812,14 +811,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                                 <LocalizedInput 
                                     value={attr.key} 
                                     onChange={(val) => handleUpdateAttribute(attr.id, 'key', val)} 
-                                    placeholder="Key" compact activeTab={activeTab} onTabChange={setActiveTab}
+                                    placeholder="Key" compact activeTab={activeTab} onTabChange={setDisplayLanguage}
                                 />
                             </div>
                             <div className="flex-1">
                                 <LocalizedInput 
                                     value={attr.value} 
                                     onChange={(val) => handleUpdateAttribute(attr.id, 'value', val)} 
-                                    placeholder="Value" compact activeTab={activeTab} onTabChange={setActiveTab}
+                                    placeholder="Value" compact activeTab={activeTab} onTabChange={setDisplayLanguage}
                                     actionButton={activeTab === 'en' ? (
                                         <button 
                                             onClick={() => handleSingleAttributeTranslate(attr.id)}
@@ -841,10 +840,10 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                     {/* Add New Attribute Row */}
                     <div className="flex items-start gap-3 pt-4 border-t border-slate-100 mt-2">
                         <div className="w-1/3 min-w-[120px]">
-                            <LocalizedInput value={newAttrKey} onChange={setNewAttrKey} placeholder="Yeni Özellik Adı" compact activeTab={activeTab} onTabChange={setActiveTab}/>
+                            <LocalizedInput value={newAttrKey} onChange={setNewAttrKey} placeholder="Yeni Özellik Adı" compact activeTab={activeTab} onTabChange={setDisplayLanguage}/>
                         </div>
                         <div className="flex-1 flex gap-2">
-                            <div className="flex-1"><LocalizedInput value={newAttrValue} onChange={setNewAttrValue} placeholder="Değer" compact activeTab={activeTab} onTabChange={setActiveTab}/></div>
+                            <div className="flex-1"><LocalizedInput value={newAttrValue} onChange={setNewAttrValue} placeholder="Değer" compact activeTab={activeTab} onTabChange={setDisplayLanguage}/></div>
                             <button onClick={handleAddAttribute} disabled={!newAttrKey.tr.trim()} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded text-xs font-bold transition-colors disabled:opacity-50 h-[34px] mt-px">
                                 <Check size={14} />
                             </button>
@@ -862,7 +861,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         <InfoTooltip title="Yapay Zeka Notları" content="Bu alan sadece AI tarafından okunur." />
                     </div>
                     {/* Added Language Toggle to Header */}
-                    <LanguageToggle activeTab={activeTab} onTabChange={setActiveTab} />
+                    <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
                  </div>
                  <div className="p-6">
                     <LocalizedInput 
@@ -871,7 +870,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                         placeholder="AI Bağlam Notu..." 
                         multiline={true} 
                         activeTab={activeTab} 
-                        onTabChange={setActiveTab}
+                        onTabChange={setDisplayLanguage}
                         inputClassName="min-h-[110px]" 
                         actionButton={renderActionBtn(isGeneratingContext, handleAutoGenerateContext, 'context')}
                     />
