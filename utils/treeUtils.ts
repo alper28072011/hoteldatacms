@@ -44,18 +44,27 @@ export const ensureLocalized = (val: LocalizedText | string | undefined): Locali
 /**
  * Formats text for AI Context as "Turkish (English)" if both exist.
  * This helps the AI understand the field regardless of the question language.
+ * PREVENTS [object Object] errors by strictly checking types.
  */
 const getRosettaText = (val: LocalizedText | string | undefined): string => {
-  if (!val) return '';
-  if (typeof val === 'string') return val;
+  if (val === undefined || val === null) return '';
   
-  const tr = val.tr?.trim();
-  const en = val.en?.trim();
+  // If it's already a string, clean it
+  if (typeof val === 'string') return val.trim();
+  
+  // If it's a LocalizedText object
+  if (typeof val === 'object') {
+      const tr = val.tr?.trim() || '';
+      const en = val.en?.trim() || '';
 
-  if (tr && en && tr !== en) return `${tr} (${en})`;
-  if (tr) return tr;
-  if (en) return en;
-  return '';
+      if (tr && en && tr !== en) return `${tr} (${en})`;
+      if (tr) return tr;
+      if (en) return en;
+      // Fallback if specific keys are missing but object exists
+      return JSON.stringify(val);
+  }
+  
+  return String(val);
 };
 
 // Recursively checks if an ID exists in the tree
@@ -499,12 +508,15 @@ export const generateAIText = async (
   // 2. Recursive Traversal Function
   const processNode = async (node: HotelNode, depth: number, parentPath: string) => {
       processedCount++;
+      // Yield every 50 items to keep UI responsive without freezing, but NO LIMIT on total count.
       if (processedCount % 50 === 0) {
           onProgress(Math.round((processedCount / totalNodes) * 100));
-          await new Promise(resolve => setTimeout(resolve, 1)); // Yield for UI updates
+          await new Promise(resolve => setTimeout(resolve, 1)); 
       }
 
       const indent = "  ".repeat(depth);
+      
+      // Use getRosettaText to safely handle LocalizedText objects
       const name = getRosettaText(node.name);
       
       // Update Path: Root > Category > Item

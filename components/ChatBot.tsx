@@ -1,50 +1,106 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
-import { HotelNode, ChatMessage } from '../types';
+import { HotelNode, ChatMessage, SimulationResponse } from '../types';
 import { chatWithData } from '../services/geminiService';
 import { useHotel } from '../contexts/HotelContext';
-import { Send, Bot, User, Sparkles, Settings2, UserCog, ChevronDown } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Settings2, UserCog, ChevronDown, Activity, AlertTriangle, Eye, EyeOff, Brain } from 'lucide-react';
 
 interface ChatBotProps {
   data: HotelNode;
   onOpenPersonaModal?: () => void; // Callback to open modal
 }
 
-// Custom Renderer to handle Basic Markdown (Bold and Lists)
-const MessageRenderer = ({ text }: { text: string }) => {
-  const parseBold = (str: string) => {
-    const parts = str.split(/(\*\*.*?\*\*)/g);
-    return parts.map((part, index) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
-      }
-      return part;
-    });
-  };
+// --- NEW COMPONENT: AI Analysis Card ---
+const AIAnalysisCard: React.FC<{ analysis: SimulationResponse }> = ({ analysis }) => {
+    const [expanded, setExpanded] = useState(false);
 
-  const lines = text.split('\n');
+    const getHealthColor = (h: string) => {
+        if (h === 'good') return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+        if (h === 'missing_info') return 'text-amber-600 bg-amber-50 border-amber-200';
+        return 'text-red-600 bg-red-50 border-red-200';
+    };
 
-  return (
-    <div className="space-y-1.5 leading-relaxed">
-      {lines.map((line, i) => {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-          const content = trimmed.substring(2);
-          return (
-            <div key={i} className="flex items-start ml-2">
-              <span className="mr-2 mt-2 w-1.5 h-1.5 bg-current rounded-full shrink-0 opacity-60"></span>
-              <span>{parseBold(content)}</span>
+    const getHealthLabel = (h: string) => {
+        if (h === 'good') return 'Veri Sağlıklı';
+        if (h === 'missing_info') return 'Eksik Bilgi';
+        if (h === 'ambiguous') return 'Muğlak Veri';
+        return 'Riskli / Uydurma';
+    }
+
+    return (
+        <div className="space-y-3">
+            {/* Main Chat Answer */}
+            <div className="text-slate-800 leading-relaxed font-medium">
+                {analysis.answer}
             </div>
-          );
-        }
-        if (!trimmed) {
-          return <div key={i} className="h-2" />;
-        }
-        return <div key={i}>{parseBold(line)}</div>;
-      })}
-    </div>
-  );
-};
+
+            {/* Collapsible Insight Box */}
+            <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-50/50">
+                <button 
+                    onClick={() => setExpanded(!expanded)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-slate-100 hover:bg-slate-200 transition-colors text-xs font-bold text-slate-500 uppercase tracking-wider"
+                >
+                    <div className="flex items-center gap-2">
+                        <Brain size={12} className="text-indigo-500"/>
+                        Simülasyon Analizi
+                    </div>
+                    {expanded ? <ChevronDown size={14} className="rotate-180"/> : <ChevronDown size={14}/>}
+                </button>
+                
+                {expanded && (
+                    <div className="p-3 space-y-3 text-xs">
+                        
+                        {/* Row 1: Intent & Health */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-white border border-slate-200 rounded p-2">
+                                <div className="text-[9px] text-slate-400 font-bold mb-1">ALGILANAN NİYET</div>
+                                <div className="font-semibold text-slate-700">{analysis.intent}</div>
+                            </div>
+                            <div className={`border rounded p-2 ${getHealthColor(analysis.dataHealth)}`}>
+                                <div className="text-[9px] font-bold mb-1 opacity-70">VERİ SAĞLIĞI</div>
+                                <div className="font-semibold flex items-center gap-1">
+                                    <Activity size={10} />
+                                    {getHealthLabel(analysis.dataHealth)}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 2: Logic Path */}
+                        <div className="bg-white border border-slate-200 rounded p-2">
+                            <div className="text-[9px] text-slate-400 font-bold mb-1">TARAMA YOLU</div>
+                            <div className="font-mono text-[10px] text-slate-600 break-words leading-tight">
+                                {analysis.analysis}
+                            </div>
+                        </div>
+
+                        {/* Row 3: Blindness Check */}
+                        {analysis.blindness && analysis.blindness !== 'None' && (
+                            <div className="bg-red-50 border border-red-100 rounded p-2 flex gap-2">
+                                <EyeOff size={14} className="text-red-500 shrink-0 mt-0.5" />
+                                <div>
+                                    <div className="text-[9px] text-red-400 font-bold mb-0.5">VERİ KÖRLÜĞÜ RİSKİ</div>
+                                    <div className="text-red-700 leading-tight">{analysis.blindness}</div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Row 4: Suggestions */}
+                        {analysis.suggestion && (
+                            <div className="bg-indigo-50 border border-indigo-100 rounded p-2 flex gap-2">
+                                <Sparkles size={14} className="text-indigo-500 shrink-0 mt-0.5" />
+                                <div>
+                                    <div className="text-[9px] text-indigo-400 font-bold mb-0.5">MODELLEME ÖNERİSİ</div>
+                                    <div className="text-indigo-700 leading-tight">{analysis.suggestion}</div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
 
 const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
   const { personas, activePersonaId, setActivePersonaId } = useHotel();
@@ -55,7 +111,14 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
     {
       id: 'welcome',
       sender: 'ai',
-      text: "Hello! I'm your hotel data simulator. Ask me anything about the hotel to test if your data structure is working.",
+      text: "Merhaba! Ben Otel Veri Simülatörü. Veri ağacınızın tutarlılığını test etmek için hazırım. Bana otel hakkında sorular sorabilirsiniz.",
+      analysis: {
+          answer: "Merhaba! Ben Otel Veri Simülatörü. Veri ağacınızın tutarlılığını test etmek için hazırım. Bana otel hakkında sorular sorabilirsiniz.",
+          intent: "Karşılama",
+          dataHealth: "good",
+          analysis: "System Init",
+          blindness: "None"
+      },
       timestamp: new Date()
     }
   ]);
@@ -72,7 +135,16 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
              text: activePersona 
                 ? `System: Persona switched to "${activePersona.name}" (${activePersona.role}).` 
                 : "System: Switched to Default Assistant.",
-             timestamp: new Date()
+             timestamp: new Date(),
+             analysis: {
+                 answer: activePersona 
+                    ? `Mod Değiştirildi: ${activePersona.name} olarak simülasyon yapıyorum.` 
+                    : "Varsayılan simülatör moduna dönüldü.",
+                 intent: "System",
+                 dataHealth: "good",
+                 analysis: "Persona Switch",
+                 blindness: "None"
+             }
          }]);
      }
   }, [activePersonaId]);
@@ -105,13 +177,14 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
         parts: [m.text]
     }));
 
-    // Pass activePersona to service
-    const aiResponseText = await chatWithData(data, userMsg.text, history, activePersona);
+    // Pass activePersona to service which now returns structured JSON
+    const aiResponse = await chatWithData(data, userMsg.text, history, activePersona);
 
     const aiMsg: ChatMessage = {
       id: (Date.now() + 1).toString(),
       sender: 'ai',
-      text: aiResponseText,
+      text: aiResponse.answer, // Fallback text for simple displays
+      analysis: aiResponse,    // Full structured data
       timestamp: new Date()
     };
 
@@ -125,7 +198,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
       <div className="h-20 px-4 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
          <div className="flex flex-col">
              <h3 className="font-semibold text-slate-700 text-sm flex items-center gap-2">
-                <Bot size={16} className="text-indigo-500" /> Simulator
+                <Bot size={16} className="text-indigo-500" /> Simülatör
              </h3>
              <div className="flex items-center gap-2 mt-1">
                  {/* Persona Selector */}
@@ -135,7 +208,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
                         onChange={(e) => setActivePersonaId(e.target.value)}
                         className="appearance-none bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold py-1 pl-2 pr-6 rounded cursor-pointer hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                      >
-                         <option value="default">Default Assistant</option>
+                         <option value="default">Varsayılan Asistan</option>
                          {personas.map(p => (
                              <option key={p.id} value={p.id}>{p.name}</option>
                          ))}
@@ -143,7 +216,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
                      <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                  </div>
                  
-                 {/* Edit Button - Fixed Clickability with z-index and explicit stopPropagation */}
+                 {/* Edit Button */}
                  <button 
                     type="button"
                     onClick={(e) => { 
@@ -152,7 +225,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
                         if (onOpenPersonaModal) onOpenPersonaModal();
                     }}
                     className="p-2 ml-1 text-slate-500 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded-lg shadow-sm transition-all z-10" 
-                    title="Manage Personas"
+                    title="Persona Yönet"
                  >
                     <Settings2 size={15} />
                  </button>
@@ -164,22 +237,26 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 min-h-0">
         {messages.map((msg) => (
           <div 
             key={msg.id} 
             className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div 
-              className={`max-w-[90%] rounded-2xl px-5 py-3 text-sm shadow-sm ${
+              className={`max-w-[95%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                 msg.sender === 'user' 
                 ? 'bg-blue-600 text-white rounded-br-none' 
-                : 'bg-white text-slate-700 border border-slate-200 rounded-bl-none'
+                : 'bg-white text-slate-700 border border-slate-200 rounded-bl-none w-full'
               }`}
             >
-              <MessageRenderer text={msg.text} />
+              {msg.sender === 'ai' && msg.analysis ? (
+                  <AIAnalysisCard analysis={msg.analysis} />
+              ) : (
+                  <div>{msg.text}</div>
+              )}
               
-              <div className={`text-[9px] mt-2 opacity-60 text-right font-medium ${msg.sender === 'user' ? 'text-blue-100' : 'text-slate-400'}`}>
+              <div className={`text-[9px] mt-1 opacity-60 text-right font-medium ${msg.sender === 'user' ? 'text-blue-100' : 'text-slate-400'}`}>
                 {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
             </div>
@@ -206,7 +283,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
                 type="text" 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={`Ask as ${activePersona ? activePersona.role : 'Guest'}...`}
+                placeholder={`${activePersona ? activePersona.role : 'Misafir'} olarak bir soru sorun...`}
                 className="flex-1 bg-white text-slate-700 placeholder:text-slate-400 border border-slate-300 rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-shadow"
             />
             <button 
@@ -217,7 +294,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
                 <Send size={18} />
             </button>
         </div>
-        <p className="text-[10px] text-center text-slate-400 mt-2">AI generates answers from your current JSON data.</p>
+        <p className="text-[10px] text-center text-slate-400 mt-2">Cevaplar ve analizler, mevcut veri setinizin AI tarafından nasıl okunduğunu simüle eder.</p>
       </form>
     </div>
   );

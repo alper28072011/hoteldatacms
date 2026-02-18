@@ -1,4 +1,5 @@
 
+
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType, TemplateField } from '../types';
@@ -420,9 +421,10 @@ export interface NodeEditorProps {
   root: HotelNode;
   onUpdate: (nodeId: string, updates: Partial<HotelNode>) => void;
   onDelete: (nodeId: string) => void;
+  onIdChanged?: (newId: string) => void; // New prop for syncing parent state
 }
 
-const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete }) => {
+const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete, onIdChanged }) => {
   const { changeNodeId, displayLanguage, setDisplayLanguage, nodeTemplates } = useHotel(); 
   
   const activeTab = displayLanguage; 
@@ -580,7 +582,13 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
   const handleSaveId = async () => {
       if (tempId === node.id) { setIsEditingId(false); return; }
       const result = await changeNodeId(node.id, tempId);
-      if (result.success) { setIsEditingId(false); } else { setIdError(result.message); }
+      if (result.success) { 
+          setIsEditingId(false); 
+          // Immediately update parent selection state to prevent flicker or view loss
+          if (onIdChanged) onIdChanged(tempId);
+      } else { 
+          setIdError(result.message); 
+      }
   };
 
   const handleAutoGenerateContext = async () => {
@@ -863,7 +871,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete 
                             type="text" 
                             value={tempId} 
                             onChange={(e) => setTempId(e.target.value)} 
-                            className={`text-xs border rounded px-1.5 py-0.5 w-32 outline-none font-mono ${idError ? 'border-red-400 bg-red-50' : 'border-slate-300 focus:border-indigo-500'}`}
+                            className={`text-xs border rounded px-1.5 py-0.5 w-32 outline-none font-mono bg-white text-slate-700 ${idError ? 'border-red-400 bg-red-50' : 'border-slate-300 focus:border-indigo-500'}`}
                             autoFocus
                         />
                         <button onClick={handleSaveId} className="p-0.5 bg-emerald-100 text-emerald-600 rounded hover:bg-emerald-200"><Check size={12}/></button>

@@ -173,10 +173,20 @@ export interface AIResponse {
   content?: string;
 }
 
+export interface SimulationResponse {
+  answer: string; // The chat response
+  intent: string; // "Inquiry", "Complaint", etc.
+  dataHealth: 'good' | 'missing_info' | 'ambiguous' | 'hallucination_risk';
+  analysis: string; // "I found this data at Path > Node..."
+  blindness: string; // "Attribute 'Area' has no unit."
+  suggestion?: string; // "Add 'Unit' to attribute."
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'ai';
   text: string;
+  analysis?: SimulationResponse; // Optional structured data for AI messages
   timestamp: Date;
   isThinking?: boolean;
 }

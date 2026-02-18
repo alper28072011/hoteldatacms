@@ -526,6 +526,7 @@ const App: React.FC = () => {
                 root={hotelData}
                 onUpdate={updateNode} 
                 onDelete={handleDeleteNodeWrapper}
+                onIdChanged={(newId) => setSelectedNodeId(newId)}
              />
         </div>
 

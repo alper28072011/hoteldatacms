@@ -1,7 +1,7 @@
 
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute } from "../types";
+import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 
 const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
@@ -10,8 +10,6 @@ const ai = new GoogleGenAI({ apiKey });
 const modelConfig = {
   model: 'gemini-3-flash-preview', 
 };
-
-const MAX_CONTEXT_LENGTH = 50000; 
 
 // --- TYPES FOR AUTO-FIX ---
 export interface AutoFixAction {
@@ -45,10 +43,8 @@ export const translateText = async (text: string, targetLang: string): Promise<s
 
 export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
   try {
-    let textContext = await generateAIText(data, () => {});
-    if (textContext.length > MAX_CONTEXT_LENGTH) {
-        textContext = textContext.substring(0, MAX_CONTEXT_LENGTH);
-    }
+    // LIMITS REMOVED: Sending full context
+    const textContext = await generateAIText(data, () => {});
     
     const prompt = `Sen uzman bir Otel Veri Analistisin. Aşağıdaki yapılandırılmış otel verilerini incele ve otelin sunduğu hizmetlerin bir özetini çıkar. Eksik kategorileri veya güçlü yanları belirle.
     
@@ -75,67 +71,54 @@ export const chatWithData = async (
   userMessage: string, 
   history: {role: string, parts: string[]}[],
   activePersona?: AIPersona | null
-): Promise<string> => {
+): Promise<SimulationResponse> => {
   try {
-    let textContext = await generateAIText(data, () => {}); 
-    
-    if (textContext.length > MAX_CONTEXT_LENGTH) {
-        textContext = textContext.substring(0, MAX_CONTEXT_LENGTH) + "\n...[Data Truncated]...";
-    }
+    // LIMITS REMOVED: Full data access enabled for maximum accuracy on large datasets (e.g. 500+ rooms)
+    const textContext = await generateAIText(data, () => {}); 
     
     const now = new Date();
-    const dayName = now.toLocaleDateString('tr-TR', { weekday: 'long' }); 
-    const timeStr = now.toLocaleTimeString('tr-TR', { hour12: false, hour: '2-digit', minute: '2-digit' }); 
     
-    let identityBlock = "KİMLİK: Sen Gelişmiş bir Otel Asistanısın (Yapay Zeka). Kibar, yardımsever ve profesyonelsin.";
-    let toneBlock = "TON: Profesyonel, Yardımcı, Net.";
-    let rulesBlock = "";
+    let personaInstruction = "KİMLİK: Sen 'Veri Simülatörü'sün. Görevin, aşağıdaki veri setini KESİN BİR ŞEKİLDE tarayarak kullanıcı sorularını sadece bu verilere dayanarak cevaplamaktır.";
     
     if (activePersona) {
-        identityBlock = `KİMLİK: Sen ${activePersona.name}, bu oteldeki rolün: ${activePersona.role}.`;
-        toneBlock = `TON: ${activePersona.tone}. DİL STİLİ: ${activePersona.languageStyle}.`;
-        
-        if (activePersona.instructions && activePersona.instructions.length > 0) {
-            rulesBlock = `KRİTİK DAVRANIŞ KURALLARI:\n${activePersona.instructions.map(i => `- ${i}`).join('\n')}`;
-        }
+        personaInstruction = `KİMLİK: Sen ${activePersona.name} (${activePersona.role}). TON: ${activePersona.tone}. STİL: ${activePersona.languageStyle}.`;
     }
 
     const systemInstruction = `
-    ${identityBlock}
+    ${personaInstruction}
     
-    GÜNCEL BAĞLAM:
-    - Gün/Tarih: ${dayName}, ${now.toLocaleDateString('tr-TR')}
-    - Saat: ${timeStr}
+    GÖREVİN:
+    1. Kullanıcının sorusunu analiz et (Niyet Tespiti).
+    2. Aşağıdaki OTEL VERİTABANI'nı satır satır tara.
+    3. Soruya en uygun cevabı bul.
+    4. Cevabı verirken VERİ KÖRLÜĞÜ (Data Blindness) kontrolü yap.
     
-    ${toneBlock}
-    ${rulesBlock}
-
-    **VERİ OKUMA KILAVUZU (ÖNEMLİ):**
-    Aşağıdaki otel veritabanı "Hiyerarşik Liste" formatındadır.
-    1. **Ana Başlıklar (#)**: Kategori veya alanları gösterir.
-    2. **Öğeler (-)**: Spesifik hizmetleri veya odaları gösterir.
-    3. **Detaylar (Feature)**: Bu işaretin olduğu satırlar teknik özellikleri (Attributes) ve detayları içerir.
-       - "Feature Key: Value": Bu formatı görürsen, bu özellik doğrudan üstteki öğeye aittir. Örn: "Oda Alanı: 58m2".
+    KURALLAR:
+    - ASLA veri tabanında olmayan bir bilgiyi uydurma. Veri yoksa "Veritabanında bu bilgi mevcut değil" de.
+    - Eğer bir veri bulduysan ama birim (m2, kg, $) eksikse, bunu "Veri Körlüğü" olarak raporla.
+    - Cevabını sadece sorulan soruyla sınırla.
     
-    **GÖREV AKIŞI:**
-    
-    ADIM 1: ARA VE BUL
-    Kullanıcının sorusundaki anahtar kelimeleri (Örn: "Yatak", "Bed", "Manzara") veritabanında ara.
-    - Eğer bir oda soruluyorsa, o odanın altındaki (+ [Feature]) ile başlayan tüm özelliklere bak.
-    - Eğer "AI_NOTE" varsa, o bilgiyi öncelikli kural olarak kabul et.
-    
-    ADIM 2: CEVAPLA
-    Bulduğun bilgiyi kullanarak doğal bir dille cevap ver. Asla "Veritabanında şöyle yazıyor" deme, doğrudan bilgi ver.
-    
-    OTEL VERİTABANI (LIVE DATA):
+    OTEL VERİTABANI (Canlı Yapı - Tam Erişim):
     ${textContext}
+    
+    ÇIKTI FORMATI (JSON):
+    Cevabını ve analizini aşağıdaki JSON formatında döndür:
+    {
+      "answer": "Kullanıcıya vereceğin doğal dil cevabı. (Burada Persona özelliklerini kullan)",
+      "intent": "Kullanıcının niyeti (Örn: Fiyat Sorgusu, Özellik Kontrolü, Şikayet)",
+      "analysis": "Veriyi ağacın neresinde buldun? (Path > Item > Feature formatında teknik bilgi)",
+      "dataHealth": "good" | "missing_info" | "ambiguous" | "hallucination_risk",
+      "blindness": "Eğer veri körlüğü (birim eksikliği, bağlam kopukluğu) varsa buraya yaz, yoksa 'None' yaz.",
+      "suggestion": "Veri modelini iyileştirmek için kısa bir öneri (Opsiyonel)."
+    }
     `;
 
     const chat = ai.chats.create({
       model: modelConfig.model,
       config: { 
           systemInstruction,
-          temperature: activePersona ? activePersona.creativity : 0.5 
+          temperature: activePersona ? activePersona.creativity : 0.3, // Lower temperature for accuracy
+          responseMimeType: 'application/json'
       },
       history: history.map(h => ({
         role: h.role,
@@ -144,17 +127,37 @@ export const chatWithData = async (
     });
 
     const result = await chat.sendMessage({ message: userMessage });
-    return result.text || "Buna nasıl cevap vereceğimi bilemiyorum.";
+    
+    try {
+        return JSON.parse(result.text || "{}") as SimulationResponse;
+    } catch (e) {
+        // Fallback for parsing errors
+        return {
+            answer: result.text || "Bir hata oluştu.",
+            intent: "Unknown",
+            dataHealth: "ambiguous",
+            analysis: "Raw text returned",
+            blindness: "Parsing Error"
+        };
+    }
+
   } catch (error) {
     console.error(error);
-    return "Otel veritabanına erişirken bir sorun yaşadım (Bağlantı Hatası).";
+    return {
+        answer: "Otel veritabanına erişirken bir sorun yaşadım. (Bağlantı Hatası)",
+        intent: "Error",
+        dataHealth: "missing_info",
+        analysis: "Connection Failed",
+        blindness: "System Error"
+    };
   }
 };
 
 // --- ARCHITECT COMMAND PROCESSOR (Enhanced with Intent & Routing) ---
 export const processArchitectCommand = async (data: HotelNode, userCommand: string): Promise<ArchitectResponse> => {
   try {
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
+    // LIMITS REMOVED
+    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2);
     
     const prompt = `Sen bir Otel CMS (İçerik Yönetim Sistemi) için "Akıllı Veri Mimarı ve Sınıflandırma Uzmanı"sın.
     
@@ -235,7 +238,8 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
 
 export const processArchitectFile = async (data: HotelNode, fileBase64: string, mimeType: string): Promise<ArchitectResponse> => {
   try {
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
+    // LIMITS REMOVED
+    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2);
     
     const prompt = `Bu yüklenen dosyayı (Resim/PDF) analiz et ve otel verilerini çıkararak mevcut yapıya entegre et.
     Verileri çıkarırken her biri için doğru 'intent' (informational, policy, request, safety, complaint) değerini ata.
@@ -277,10 +281,8 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
 
 export const generateHealthReport = async (data: HotelNode): Promise<HealthReport> => {
   try {
-    let textContext = await generateAIText(data, () => {});
-    if (textContext.length > MAX_CONTEXT_LENGTH) {
-        textContext = textContext.substring(0, MAX_CONTEXT_LENGTH);
-    }
+    // LIMITS REMOVED
+    const textContext = await generateAIText(data, () => {});
     
     const prompt = `
     Sen bir Otel Veritabanı için "Semantik Tutarlılık ve Veri Körlüğü Denetçisi"sin (Data Blindness Auditor).
@@ -411,7 +413,8 @@ export const generateValueFromAttributes = async (nodeName: string, attributes: 
 
 // --- DEEP ANALYSIS & AUTO FIX ---
 export const autoFixDatabase = async (rootNode: HotelNode): Promise<AutoFixAction[]> => {
-    const cleanJson = JSON.stringify(generateCleanAIJSON(rootNode), null, 2).substring(0, MAX_CONTEXT_LENGTH);
+    // LIMITS REMOVED
+    const cleanJson = JSON.stringify(generateCleanAIJSON(rootNode), null, 2);
     
     const prompt = `
     Sen bir "Derin Veri Yapısı ve Anlamsal Bütünlük Denetçisi"sin (AI Architect).
@@ -463,7 +466,8 @@ export const autoFixDatabase = async (rootNode: HotelNode): Promise<AutoFixActio
 
 export const runDataCheck = async (data: HotelNode, inputType: 'url' | 'text' | 'file', inputValue: string, mimeType?: string): Promise<DataComparisonReport> => {
   try {
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2).substring(0, MAX_CONTEXT_LENGTH);
+    // LIMITS REMOVED
+    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2);
     
     const basePrompt = `Otel Veritabanı JSON'ını sağlanan Kaynak Materyal ile karşılaştır.
     Uyuşmazlıkları (Fiyat farkları, eksik öğeler, yanlış saatler) tespit et.
