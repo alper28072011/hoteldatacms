@@ -92,6 +92,8 @@ export interface NodeAttribute {
   value: LocalizedText | string; 
   type: FieldType;
   options?: string[]; 
+  // Nested attributes for conditional logic (e.g. Jacuzzi: Yes -> Type: Outdoor)
+  subAttributes?: NodeAttribute[]; 
 }
 
 export interface TemplateField {
@@ -102,6 +104,12 @@ export interface TemplateField {
   options?: string[]; // For select/multiselect
   required: boolean;
   aiDescription?: string; // Hint for AI: "This field represents the start time of the event"
+  
+  // Conditional Logic
+  condition?: {
+      triggerValue: string; // e.g. "true" (When parent is true...)
+      fields: TemplateField[]; // ...show these fields
+  };
 }
 
 export interface NodeTemplate {

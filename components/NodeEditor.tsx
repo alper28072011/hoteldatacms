@@ -13,7 +13,7 @@ import {
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
-  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus
+  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: LANGUAGE TOGGLE ---
@@ -467,7 +467,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
   // --- SEPARATION LOGIC ---
   // We strictly separate "Template Bound Fields" from "Custom User Fields"
-  // to avoid duplication in the UI.
   const { templateRenderList, customRenderList, missingRequiredCount } = useMemo(() => {
       if (!node) return { templateRenderList: [], customRenderList: [], missingRequiredCount: 0 };
       
@@ -701,6 +700,43 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           }
       }
       
+      onUpdate(node.id, { attributes: currentAttrs });
+  };
+
+  // HANDLER FOR NESTED ATTRIBUTES (Conditional Logic)
+  // This updates the subAttributes array within a parent attribute
+  const handleSubAttributeUpdate = (parentAttrId: string, fieldDef: TemplateField, value: LocalizedText) => {
+      const currentAttrs = [...(node.attributes || [])];
+      const parentIdx = currentAttrs.findIndex(a => a.id === parentAttrId);
+      
+      if (parentIdx === -1) {
+          // Parent attribute doesn't exist yet (virtual). Create it first with default 'true'.
+          // This edge case is handled by parent update usually, but for safety:
+          return; 
+      }
+
+      const parentAttr = { ...currentAttrs[parentIdx] };
+      const currentSubs = [...(parentAttr.subAttributes || [])];
+
+      const subIdx = currentSubs.findIndex(sa => {
+          const saKey = getLocalizedValue(sa.key, 'en').toLowerCase();
+          return saKey === getLocalizedValue(fieldDef.label, 'en').toLowerCase();
+      });
+
+      if (subIdx >= 0) {
+          currentSubs[subIdx] = { ...currentSubs[subIdx], value };
+      } else {
+          currentSubs.push({
+              id: generateId('subattr'),
+              key: fieldDef.label,
+              value: value,
+              type: fieldDef.type,
+              options: fieldDef.options
+          });
+      }
+
+      parentAttr.subAttributes = currentSubs;
+      currentAttrs[parentIdx] = parentAttr;
       onUpdate(node.id, { attributes: currentAttrs });
   };
 
@@ -998,37 +1034,86 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                     {/* A. TEMPLATE FIELDS (FIXED) */}
                     {activeTemplate && templateRenderList.length > 0 && (
                         <div className="space-y-4">
-                            {templateRenderList.map(({ attr, def }) => (
-                                <div key={attr.id} className="flex items-start gap-3 group pb-4 border-b border-slate-50 last:border-0 last:pb-0">
-                                    <div className="w-1/3 min-w-[120px] pt-2">
-                                        <div className="flex items-center gap-1.5">
-                                            <div className="w-1 h-3 bg-indigo-400 rounded-full"></div>
-                                            <span className="text-xs font-bold text-slate-700">{getLocalizedValue(def.label, activeTab)}</span>
-                                            {def.required && <span className="text-red-500">*</span>}
+                            {templateRenderList.map(({ attr, def }) => {
+                                // CONDITION CHECK: Should we show sub-fields?
+                                const showSubFields = def.condition && 
+                                    getLocalizedValue(attr.value, 'tr').toLowerCase() === def.condition.triggerValue.toLowerCase();
+
+                                return (
+                                    <React.Fragment key={attr.id}>
+                                        <div className="flex items-start gap-3 group pb-4 border-b border-slate-50 last:border-0 last:pb-0">
+                                            <div className="w-1/3 min-w-[120px] pt-2">
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-1 h-3 bg-indigo-400 rounded-full"></div>
+                                                    <span className="text-xs font-bold text-slate-700">{getLocalizedValue(def.label, activeTab)}</span>
+                                                    {def.required && <span className="text-red-500">*</span>}
+                                                </div>
+                                                {def.aiDescription && <div className="text-[10px] text-slate-400 mt-0.5 ml-2.5 leading-tight">{def.aiDescription}</div>}
+                                            </div>
+                                            <div className="flex-1 relative">
+                                                <DynamicFieldInput 
+                                                    attribute={attr}
+                                                    fieldDef={def}
+                                                    onChange={(val) => handleAttributeUpdate(attr.id, def, val)}
+                                                    activeTab={activeTab}
+                                                    onTabChange={setDisplayLanguage}
+                                                    actionButton={activeTab === 'en' ? (
+                                                        <button 
+                                                            onClick={() => handleSingleAttributeTranslate(attr.id)}
+                                                            disabled={translatingFieldId === attr.id}
+                                                            className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                            title="Translate this field"
+                                                        >
+                                                            {translatingFieldId === attr.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                                        </button>
+                                                    ) : undefined}
+                                                />
+                                            </div>
                                         </div>
-                                        {def.aiDescription && <div className="text-[10px] text-slate-400 mt-0.5 ml-2.5 leading-tight">{def.aiDescription}</div>}
-                                    </div>
-                                    <div className="flex-1 relative">
-                                        <DynamicFieldInput 
-                                            attribute={attr}
-                                            fieldDef={def}
-                                            onChange={(val) => handleAttributeUpdate(attr.id, def, val)}
-                                            activeTab={activeTab}
-                                            onTabChange={setDisplayLanguage}
-                                            actionButton={activeTab === 'en' ? (
-                                                <button 
-                                                    onClick={() => handleSingleAttributeTranslate(attr.id)}
-                                                    disabled={translatingFieldId === attr.id}
-                                                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
-                                                    title="Translate this field"
-                                                >
-                                                    {translatingFieldId === attr.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
-                                                </button>
-                                            ) : undefined}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
+
+                                        {/* NESTED SUB FIELDS RENDER */}
+                                        {showSubFields && def.condition && (
+                                            <div className="pl-8 ml-4 border-l-2 border-indigo-100 pb-4 -mt-2 space-y-3 animate-in slide-in-from-left-2 fade-in">
+                                                {def.condition.fields.map(subDef => {
+                                                    // Find existing sub-attribute data or create virtual
+                                                    let subMatch = attr.subAttributes?.find(sa => {
+                                                        const saKey = getLocalizedValue(sa.key, 'en').toLowerCase();
+                                                        return saKey === getLocalizedValue(subDef.label, 'en').toLowerCase();
+                                                    });
+
+                                                    if (!subMatch) {
+                                                        subMatch = {
+                                                            id: `temp_sub_${subDef.id}`,
+                                                            key: subDef.label,
+                                                            value: { tr: '', en: '' },
+                                                            type: subDef.type,
+                                                            options: subDef.options
+                                                        };
+                                                    }
+
+                                                    return (
+                                                        <div key={subDef.id} className="flex items-start gap-3">
+                                                            <div className="w-1/3 min-w-[100px] pt-2 flex items-center gap-1.5">
+                                                                <CornerDownRight size={12} className="text-indigo-300" />
+                                                                <span className="text-xs font-semibold text-slate-600">{getLocalizedValue(subDef.label, activeTab)}</span>
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <DynamicFieldInput 
+                                                                    attribute={subMatch}
+                                                                    fieldDef={subDef}
+                                                                    onChange={(val) => handleSubAttributeUpdate(attr.id, subDef, val)}
+                                                                    activeTab={activeTab}
+                                                                    onTabChange={setDisplayLanguage}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
                         </div>
                     )}
 

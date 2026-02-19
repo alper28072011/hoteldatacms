@@ -1,11 +1,12 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { NodeTemplate, TemplateField, LocalizedText, FieldType } from '../types';
 import { useHotel } from '../contexts/HotelContext';
 import { generateId } from '../utils/treeUtils';
 import { 
     X, Plus, Trash2, Save, LayoutTemplate, GripVertical, Check, Info, 
-    Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2, CheckSquare
+    Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2, CheckSquare, GitMerge
 } from 'lucide-react';
 
 interface TemplateManagerProps {
@@ -117,7 +118,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
   const { nodeTemplates, addNodeTemplate, updateNodeTemplate, deleteNodeTemplate } = useHotel();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [formData, setFormData] = useState<NodeTemplate>(emptyTemplate);
-  const [showTypeSelector, setShowTypeSelector] = useState<number | null>(null); // Index of field showing selector
+  const [showTypeSelector, setShowTypeSelector] = useState<{index: number, subIndex?: number} | null>(null); // Extended for nested
   
   // Feedback States
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
@@ -172,18 +173,100 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
       }));
   };
 
+  // --- SUB FIELD HANDLERS ---
+  const handleToggleCondition = (parentId: string, enable: boolean) => {
+      setFormData(prev => ({
+          ...prev,
+          fields: prev.fields.map(f => {
+              if (f.id !== parentId) return f;
+              if (!enable) return { ...f, condition: undefined };
+              return { 
+                  ...f, 
+                  condition: { 
+                      triggerValue: 'true', 
+                      fields: [] // Start empty
+                  } 
+              };
+          })
+      }));
+  };
+
+  const handleAddSubField = (parentId: string, type: FieldType = 'text') => {
+      setFormData(prev => ({
+          ...prev,
+          fields: prev.fields.map(f => {
+              if (f.id !== parentId || !f.condition) return f;
+              
+              const newSub: TemplateField = {
+                  id: generateId('sub'),
+                  key: '',
+                  label: { tr: '', en: '' },
+                  type: type,
+                  required: false,
+                  aiDescription: ''
+              };
+              
+              return { 
+                  ...f, 
+                  condition: { 
+                      ...f.condition, 
+                      fields: [...f.condition.fields, newSub] 
+                  } 
+              };
+          })
+      }));
+      setShowTypeSelector(null);
+  };
+
+  const handleUpdateSubField = (parentId: string, subId: string, updates: Partial<TemplateField>) => {
+      setFormData(prev => ({
+          ...prev,
+          fields: prev.fields.map(f => {
+              if (f.id !== parentId || !f.condition) return f;
+              return {
+                  ...f,
+                  condition: {
+                      ...f.condition,
+                      fields: f.condition.fields.map(s => s.id === subId ? { ...s, ...updates } : s)
+                  }
+              };
+          })
+      }));
+  };
+
+  const handleDeleteSubField = (parentId: string, subId: string) => {
+      setFormData(prev => ({
+          ...prev,
+          fields: prev.fields.map(f => {
+              if (f.id !== parentId || !f.condition) return f;
+              return {
+                  ...f,
+                  condition: {
+                      ...f.condition,
+                      fields: f.condition.fields.filter(s => s.id !== subId)
+                  }
+              };
+          })
+      }));
+  };
+
   const handleSave = async () => {
       if (!formData.name.trim()) return;
       
       setSaveStatus('saving');
 
-      // Auto-generate keys if missing and trim options
-      const processedFields = formData.fields.map(f => ({
+      // Helper to process fields recursively
+      const processField = (f: TemplateField): TemplateField => ({
           ...f,
           key: f.key || f.label.en.toLowerCase().replace(/[^a-z0-9]/g, '_') || generateId('k'),
-          options: f.options ? f.options.map(o => o.trim()).filter(o => o !== '') : undefined
-      }));
-      
+          options: f.options ? f.options.map(o => o.trim()).filter(o => o !== '') : undefined,
+          condition: f.condition ? {
+              triggerValue: f.condition.triggerValue,
+              fields: f.condition.fields.map(sf => processField(sf)) // Recurse
+          } : undefined
+      });
+
+      const processedFields = formData.fields.map(processField);
       const finalData = { ...formData, fields: processedFields };
 
       try {
@@ -194,8 +277,6 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
         }
         setSelectedTemplateId(finalData.id);
         setSaveStatus('success');
-        
-        // Reset success message after 2 seconds
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch (e) {
         console.error(e);
@@ -213,21 +294,16 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
   const handleDragStart = (e: React.DragEvent, index: number) => {
       setDraggedItemIndex(index);
       e.dataTransfer.effectAllowed = 'move';
-      // Firefox requires dataTransfer data to be set
       e.dataTransfer.setData('text/plain', index.toString());
   };
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
       e.preventDefault();
-      // Only reorder if dragging over a different item
       if (draggedItemIndex === null || draggedItemIndex === index) return;
 
       const newFields = [...formData.fields];
       const draggedItem = newFields[draggedItemIndex];
-      
-      // Remove from old pos
       newFields.splice(draggedItemIndex, 1);
-      // Insert at new pos
       newFields.splice(index, 0, draggedItem);
       
       setFormData(prev => ({ ...prev, fields: newFields }));
@@ -370,7 +446,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                         <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tip</label>
                                         <div className="relative">
                                             <button 
-                                                onClick={() => setShowTypeSelector(showTypeSelector === index ? null : index)}
+                                                onClick={() => setShowTypeSelector(showTypeSelector?.index === index ? null : { index })}
                                                 className="w-full flex items-center gap-2 border border-slate-200 rounded px-2 py-1.5 text-xs font-bold text-slate-700 bg-slate-50 hover:bg-white hover:border-indigo-300 transition-all"
                                             >
                                                 {getTypeIcon(field.type)}
@@ -378,7 +454,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                             </button>
                                             
                                             {/* Type Dropdown */}
-                                            {showTypeSelector === index && (
+                                            {showTypeSelector?.index === index && showTypeSelector?.subIndex === undefined && (
                                                 <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-lg z-20 py-1 grid grid-cols-1 max-h-60 overflow-y-auto">
                                                     {(['text', 'textarea', 'number', 'boolean', 'select', 'multiselect', 'date', 'time', 'currency'] as FieldType[]).map(t => (
                                                         <button 
@@ -391,7 +467,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                     ))}
                                                 </div>
                                             )}
-                                            {showTypeSelector === index && <div className="fixed inset-0 z-10" onClick={() => setShowTypeSelector(null)} />}
+                                            {showTypeSelector?.index === index && <div className="fixed inset-0 z-10" onClick={() => setShowTypeSelector(null)} />}
                                         </div>
                                     </div>
 
@@ -424,48 +500,140 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                     </div>
 
                                     {/* Row 2: Advanced Options */}
-                                    <div className="col-span-12 flex items-start gap-4 pt-2 border-t border-slate-50 mt-2">
+                                    <div className="col-span-12 flex flex-col gap-4 pt-2 border-t border-slate-50 mt-2">
                                         
-                                        {/* Select Options */}
-                                        {(field.type === 'select' || field.type === 'multiselect') && (
-                                            <div className="flex-1">
-                                                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seçenekler (Virgülle Ayırın)</label>
-                                                <OptionsInput 
-                                                    value={field.options} 
-                                                    onChange={(opts) => handleUpdateField(field.id, { options: opts })} 
-                                                />
-                                            </div>
-                                        )}
-
-                                        {/* AI Description */}
-                                        <div className="flex-1">
-                                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                                <BrainCircuit size={10} className="text-violet-500"/> AI Açıklaması (İpucu)
-                                            </label>
-                                            <input 
-                                                type="text" 
-                                                value={field.aiDescription || ''}
-                                                onChange={(e) => handleUpdateField(field.id, { aiDescription: e.target.value })}
-                                                placeholder="Örn: Odanın maksimum yetişkin kapasitesi"
-                                                className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-violet-300 bg-violet-50/30 text-violet-800 placeholder:text-violet-300"
-                                            />
-                                        </div>
-
-                                        {/* Required Toggle */}
-                                        <div className="pt-6">
-                                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                                <div className={`w-8 h-4 rounded-full relative transition-colors ${field.required ? 'bg-indigo-500' : 'bg-slate-200'}`}>
-                                                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${field.required ? 'left-4.5 translate-x-0.5' : 'left-0.5'}`} />
-                                                    <input 
-                                                        type="checkbox" 
-                                                        className="hidden" 
-                                                        checked={field.required}
-                                                        onChange={(e) => handleUpdateField(field.id, { required: e.target.checked })}
+                                        <div className="flex items-start gap-4">
+                                            {/* Select Options */}
+                                            {(field.type === 'select' || field.type === 'multiselect') && (
+                                                <div className="flex-1">
+                                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seçenekler (Virgülle Ayırın)</label>
+                                                    <OptionsInput 
+                                                        value={field.options} 
+                                                        onChange={(opts) => handleUpdateField(field.id, { options: opts })} 
                                                     />
                                                 </div>
-                                                <span className="text-xs font-bold text-slate-500">Zorunlu</span>
-                                            </label>
+                                            )}
+
+                                            {/* AI Description */}
+                                            <div className="flex-1">
+                                                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                                    <BrainCircuit size={10} className="text-violet-500"/> AI Açıklaması (İpucu)
+                                                </label>
+                                                <input 
+                                                    type="text" 
+                                                    value={field.aiDescription || ''}
+                                                    onChange={(e) => handleUpdateField(field.id, { aiDescription: e.target.value })}
+                                                    placeholder="Örn: Odanın maksimum yetişkin kapasitesi"
+                                                    className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-violet-300 bg-violet-50/30 text-violet-800 placeholder:text-violet-300"
+                                                />
+                                            </div>
+
+                                            {/* Required Toggle */}
+                                            <div className="pt-6">
+                                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={field.required}
+                                                        onChange={(e) => handleUpdateField(field.id, { required: e.target.checked })}
+                                                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                    <span className="text-xs font-bold text-slate-500">Zorunlu</span>
+                                                </label>
+                                            </div>
                                         </div>
+
+                                        {/* CONDITIONAL SUB FIELDS (Only for boolean) */}
+                                        {field.type === 'boolean' && (
+                                            <div className="mt-2 bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                                                {!field.condition ? (
+                                                    <button 
+                                                        onClick={() => handleToggleCondition(field.id, true)}
+                                                        className="w-full py-2 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                                                    >
+                                                        <GitMerge size={14} /> Alt Soru Ekle (Koşullu Alanlar)
+                                                    </button>
+                                                ) : (
+                                                    <div className="p-3">
+                                                        <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <GitMerge size={14} className="text-purple-500" />
+                                                                <span className="text-xs font-bold text-slate-700">Alt Sorular</span>
+                                                                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">Tetikleyici: EVET (True)</span>
+                                                            </div>
+                                                            <button onClick={() => handleToggleCondition(field.id, false)} className="text-slate-400 hover:text-red-500 p-1">
+                                                                <Trash2 size={12} />
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Sub Fields List */}
+                                                        <div className="space-y-3 pl-2 border-l-2 border-purple-100 ml-1">
+                                                            {field.condition.fields.map((sub, subIdx) => (
+                                                                <div key={sub.id} className="bg-white p-3 rounded border border-slate-200 flex gap-3 items-start">
+                                                                    <div className="pt-2 text-slate-300"><div className="w-2 h-2 rounded-full bg-purple-300"></div></div>
+                                                                    
+                                                                    <div className="flex-1 grid grid-cols-2 gap-3">
+                                                                        {/* Sub Label */}
+                                                                        <div>
+                                                                            <label className="block text-[9px] text-slate-400 font-bold mb-1">Soru</label>
+                                                                            <LocalizedInput 
+                                                                                value={sub.label} 
+                                                                                onChange={(val) => handleUpdateSubField(field.id, sub.id, { label: val })} 
+                                                                                placeholder="Örn: Tipi Nedir?"
+                                                                            />
+                                                                        </div>
+                                                                        {/* Sub Type & Key */}
+                                                                        <div className="flex gap-2">
+                                                                            <div className="flex-1">
+                                                                                <label className="block text-[9px] text-slate-400 font-bold mb-1">Tip</label>
+                                                                                <div className="relative">
+                                                                                    <button 
+                                                                                        onClick={() => setShowTypeSelector(showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx ? null : { index, subIndex: subIdx })}
+                                                                                        className="w-full flex items-center gap-1 border border-slate-200 rounded px-2 py-1.5 text-xs font-bold text-slate-600 bg-slate-50"
+                                                                                    >
+                                                                                        {getTypeIcon(sub.type)}
+                                                                                        <span className="truncate">{getTypeLabel(sub.type)}</span>
+                                                                                    </button>
+                                                                                    {showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && (
+                                                                                        <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 shadow-xl rounded-lg z-30 py-1 grid grid-cols-1 max-h-48 overflow-y-auto">
+                                                                                            {(['text', 'select', 'multiselect', 'number'] as FieldType[]).map(t => (
+                                                                                                <button 
+                                                                                                    key={t} 
+                                                                                                    onClick={() => { handleUpdateSubField(field.id, sub.id, { type: t }); setShowTypeSelector(null); }}
+                                                                                                    className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left text-slate-700"
+                                                                                                >
+                                                                                                    {getTypeIcon(t)} {getTypeLabel(t)}
+                                                                                                </button>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && <div className="fixed inset-0 z-20" onClick={() => setShowTypeSelector(null)} />}
+                                                                                </div>
+                                                                            </div>
+                                                                            <button onClick={() => handleDeleteSubField(field.id, sub.id)} className="mt-5 text-slate-300 hover:text-red-500"><X size={14}/></button>
+                                                                        </div>
+                                                                        
+                                                                        {/* Sub Options (if select) */}
+                                                                        {(sub.type === 'select' || sub.type === 'multiselect') && (
+                                                                            <div className="col-span-2">
+                                                                                <label className="block text-[9px] text-slate-400 font-bold mb-1">Seçenekler</label>
+                                                                                <OptionsInput value={sub.options} onChange={(opts) => handleUpdateSubField(field.id, sub.id, { options: opts })} />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                            
+                                                            <button 
+                                                                onClick={() => handleAddSubField(field.id)}
+                                                                className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-bold px-2 py-1 rounded hover:bg-purple-50 transition-colors"
+                                                            >
+                                                                <Plus size={12} /> Alt Alan Ekle
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

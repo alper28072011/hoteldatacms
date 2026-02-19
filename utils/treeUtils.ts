@@ -1,6 +1,6 @@
 
 
-import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText } from "../types";
+import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute } from "../types";
 
 // Generate a simple unique ID with high collision resistance
 // Updated to accept a custom prefix derived from content
@@ -340,7 +340,12 @@ export const cleanTreeValues = (node: HotelNode): HotelNode => {
   delete newNode.data;
   delete newNode.description;
   if (newNode.attributes) {
-      newNode.attributes = newNode.attributes.map(attr => ({ ...attr, value: { tr: '', en: '' } }));
+      // Clean sub-attributes too if they exist
+      newNode.attributes = newNode.attributes.map(attr => ({
+          ...attr,
+          value: { tr: '', en: '' },
+          subAttributes: attr.subAttributes ? attr.subAttributes.map(sa => ({ ...sa, value: { tr: '', en: '' } })) : undefined
+      }));
   }
 
   if (node.children) {
@@ -487,6 +492,51 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
 // --- AI TEXT GENERATION (UPDATED FOR DATA BLINDNESS PREVENTION) ---
 // This function structures the text so the LLM can associate attributes strictly with their parent.
 
+const processAttributes = (attributes: NodeAttribute[], lines: string[], indent: string) => {
+    if (!attributes || attributes.length === 0) return;
+
+    attributes.forEach(attr => {
+        const k = getRosettaText(attr.key);
+        let v = getRosettaText(attr.value);
+
+        // FIX: Boolean types visually appear as "No" when empty in UI, 
+        // so we must explicitly tell AI it is "No" (False) if empty or false-like.
+        if (attr.type === 'boolean') {
+            const valLower = v.toLowerCase().trim();
+            // Check for truthy values. Anything else (including empty string) is False.
+            const isTrue = valLower === 'true' || valLower === 'yes' || valLower === 'evet' || valLower === '1';
+            v = isTrue ? 'True' : 'False';
+        }
+
+        if (k && v) {
+            // Using '+' bullet to distinguish attributes from general content
+            lines.push(`${indent}  + [Feature] ${k}: ${v}`);
+            
+            // RECURSIVE: Check for sub-attributes (Nested features)
+            if (attr.subAttributes && attr.subAttributes.length > 0) {
+                // If value is truthy, we process subs. If false, logically subs don't exist but we print them anyway for context if filled.
+                // Actually, if it's "False", the sub-attributes (e.g. Jacuzzi Type) are irrelevant.
+                // But let's check if they have content.
+                const hasSubContent = attr.subAttributes.some(sa => {
+                    const saVal = getRosettaText(sa.value);
+                    return saVal && saVal !== 'False' && saVal !== '';
+                });
+
+                if (hasSubContent || v === 'True') {
+                    attr.subAttributes.forEach(subAttr => {
+                        const sk = getRosettaText(subAttr.key);
+                        const sv = getRosettaText(subAttr.value);
+                        if (sk && sv) {
+                            // Indented deeper to show relationship
+                            lines.push(`${indent}    > [Detail] ${sk}: ${sv}`);
+                        }
+                    });
+                }
+            }
+        }
+    });
+};
+
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void
@@ -556,27 +606,9 @@ export const generateAIText = async (
           lines.push(`${indent}  * Price: ${node.price}`);
       }
 
-      // LINE 5: Attributes (UPDATED FOR DATA BLINDNESS PREVENTION)
-      // We format attributes with a specific 'Feature' tag so the AI treats them as first-class citizens of the object.
+      // LINE 5: Attributes (UPDATED FOR DATA BLINDNESS PREVENTION + NESTED SUPPORT)
       if (node.attributes && node.attributes.length > 0) {
-          node.attributes.forEach(attr => {
-              const k = getRosettaText(attr.key);
-              let v = getRosettaText(attr.value);
-
-              // FIX: Boolean types visually appear as "No" when empty in UI, 
-              // so we must explicitly tell AI it is "No" (False) if empty or false-like.
-              if (attr.type === 'boolean') {
-                  const valLower = v.toLowerCase().trim();
-                  // Check for truthy values. Anything else (including empty string) is False.
-                  const isTrue = valLower === 'true' || valLower === 'yes' || valLower === 'evet' || valLower === '1';
-                  v = isTrue ? 'True' : 'False';
-              }
-
-              if (k && v) {
-                  // Using '+' bullet to distinguish attributes from general content
-                  lines.push(`${indent}  + [Feature] ${k}: ${v}`);
-              }
-          });
+          processAttributes(node.attributes, lines, indent);
       }
 
       // LINE 6: AI Hidden Note
@@ -645,10 +677,13 @@ export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): a
   if (node.data) semanticData.data = safeCopy(node.data, 0);
 
   if (node.attributes && Array.isArray(node.attributes)) {
-      semanticData.attributes = node.attributes.map(a => ({
-          key: a.key, 
-          value: a.value 
-      }));
+      semanticData.attributes = node.attributes.map(a => {
+          const base: any = { key: a.key, value: a.value };
+          if (a.subAttributes && a.subAttributes.length > 0) {
+              base.details = a.subAttributes.map(sa => ({ key: sa.key, value: sa.value }));
+          }
+          return base;
+      });
   }
 
   const currentPath = parentPath ? `${parentPath} > ${getLocalizedValue(node.name, 'en') || 'Untitled'}` : (getLocalizedValue(node.name, 'en') || 'Untitled');
