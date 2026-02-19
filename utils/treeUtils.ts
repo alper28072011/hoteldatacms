@@ -561,7 +561,17 @@ export const generateAIText = async (
       if (node.attributes && node.attributes.length > 0) {
           node.attributes.forEach(attr => {
               const k = getRosettaText(attr.key);
-              const v = getRosettaText(attr.value);
+              let v = getRosettaText(attr.value);
+
+              // FIX: Boolean types visually appear as "No" when empty in UI, 
+              // so we must explicitly tell AI it is "No" (False) if empty or false-like.
+              if (attr.type === 'boolean') {
+                  const valLower = v.toLowerCase().trim();
+                  // Check for truthy values. Anything else (including empty string) is False.
+                  const isTrue = valLower === 'true' || valLower === 'yes' || valLower === 'evet' || valLower === '1';
+                  v = isTrue ? 'True' : 'False';
+              }
+
               if (k && v) {
                   // Using '+' bullet to distinguish attributes from general content
                   lines.push(`${indent}  + [Feature] ${k}: ${v}`);
