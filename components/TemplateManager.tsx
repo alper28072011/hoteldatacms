@@ -666,11 +666,11 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
 
                                         {/* CONDITIONAL SUB FIELDS (Only for boolean) */}
                                         {field.type === 'boolean' && (
-                                            <div className="mt-2 bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                                            <div className="mt-2 bg-slate-50 rounded-lg border border-slate-200">
                                                 {!field.condition ? (
                                                     <button 
                                                         onClick={() => handleToggleCondition(field.id, true)}
-                                                        className="w-full py-2 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                                                        className="w-full py-2 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors rounded-lg"
                                                     >
                                                         <GitMerge size={14} /> Alt Soru Ekle (Koşullu Alanlar)
                                                     </button>
