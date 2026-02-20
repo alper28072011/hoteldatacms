@@ -502,6 +502,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       // 1. Process Template Fields
       if (activeTemplate) {
           activeTemplate.fields.forEach(field => {
+              // SPECIAL CASE: SEPARATOR (Does not exist in node attributes, purely visual)
+              if (field.type === 'separator') {
+                  templateList.push({ 
+                      // Create a dummy attribute for rendering, it won't be saved
+                      attr: { id: field.id, key: field.label, value: { tr: '', en: '' }, type: 'separator' }, 
+                      def: field 
+                  });
+                  return;
+              }
+
               // Find matching attribute in node by English Key (Source of Truth)
               let match = currentAttributes.find(a => {
                    const aKey = getLocalizedValue(a.key, 'en').toLowerCase();
@@ -573,6 +583,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       const currentAttrs = [...(node.attributes || [])];
       
       template.fields.forEach(field => {
+          if (field.type === 'separator') return; // Separators aren't saved in attributes
+
           const exists = currentAttrs.some(attr => {
               const aKey = getLocalizedValue(attr.key, 'en').toLowerCase();
               return aKey === getLocalizedValue(field.label, 'en').toLowerCase();
@@ -1111,6 +1123,22 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                     {activeTemplate && templateRenderList.length > 0 && (
                         <div className="space-y-4">
                             {templateRenderList.map(({ attr, def }) => {
+                                // SEPARATOR RENDER LOGIC
+                                if (def.type === 'separator') {
+                                    return (
+                                        <div key={attr.id} className="relative py-6">
+                                            <div className="absolute inset-0 flex items-center">
+                                                <div className="w-full border-t border-slate-200"></div>
+                                            </div>
+                                            <div className="relative flex justify-center">
+                                                <span className="bg-white px-3 text-sm font-bold text-indigo-600 uppercase tracking-wider">
+                                                    {getLocalizedValue(def.label, activeTab) || 'Bölüm'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
                                 // CONDITION CHECK: Should we show sub-fields?
                                 const showSubFields = def.condition && 
                                     getLocalizedValue(attr.value, 'tr').toLowerCase() === def.condition.triggerValue.toLowerCase();

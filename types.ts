@@ -1,5 +1,4 @@
 
-
 export type NodeType = 'root' | 'category' | 'item' | 'field' | 'list' | 'menu' | 'menu_item' | 'event' | 'qa_pair' | 'policy' | 'note';
 
 // Legacy SchemaType kept for backward compatibility but deprecated in UI
@@ -84,7 +83,8 @@ export type FieldType =
   | 'multiselect' // Multiple tags
   | 'date'        // Calendar date
   | 'time'        // Clock time
-  | 'currency';   // Price field
+  | 'currency'    // Price field
+  | 'separator';  // Visual divider / Section Header
 
 export interface NodeAttribute {
   id: string;
