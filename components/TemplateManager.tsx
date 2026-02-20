@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { NodeTemplate, TemplateField, LocalizedText, FieldType, LocalizedOptions } from '../types';
 import { useHotel } from '../contexts/HotelContext';
 import { generateId, ensureLocalized } from '../utils/treeUtils';
-import { translateText } from '../services/geminiService';
+import { translateText, optimizeAIDescription } from '../services/geminiService';
 import { 
     X, Plus, Trash2, Save, LayoutTemplate, GripVertical, Check, Info, 
     Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2, CheckSquare, GitMerge, Globe, Sparkles
@@ -51,16 +51,18 @@ const getTypeLabel = (type: FieldType) => {
     }
 }
 
-// --- NEW LOCALIZED INPUT WITH AI TRANSLATION ---
+// --- NEW LOCALIZED INPUT WITH AI TRANSLATION & ENHANCEMENT ---
 const LocalizedTextInput: React.FC<{
     value: LocalizedText;
     onChange: (val: LocalizedText) => void;
     activeTab: 'tr' | 'en';
     placeholder?: string;
     className?: string;
-}> = ({ value, onChange, activeTab, placeholder, className }) => {
+    allowEnhance?: boolean; // New prop for AI Optimization
+}> = ({ value, onChange, activeTab, placeholder, className, allowEnhance }) => {
     const safeValue = ensureLocalized(value);
     const [isTranslating, setIsTranslating] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
 
     const handleTranslate = async () => {
         if (!safeValue.tr || safeValue.tr.trim() === '') return;
@@ -74,6 +76,20 @@ const LocalizedTextInput: React.FC<{
             setIsTranslating(false);
         }
     };
+
+    const handleEnhance = async () => {
+        const currentText = safeValue[activeTab];
+        if (!currentText || currentText.trim() === '') return;
+        setIsEnhancing(true);
+        try {
+            const optimized = await optimizeAIDescription(currentText, activeTab);
+            onChange({ ...safeValue, [activeTab]: optimized });
+        } catch (error) {
+            console.error("Optimization error", error);
+        } finally {
+            setIsEnhancing(false);
+        }
+    };
     
     return (
         <div className={`relative group ${className}`}>
@@ -82,10 +98,25 @@ const LocalizedTextInput: React.FC<{
                 value={safeValue[activeTab]}
                 onChange={(e) => onChange({ ...safeValue, [activeTab]: e.target.value })}
                 placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
-                className="w-full border border-slate-200 bg-white rounded px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none transition-colors text-slate-700 pr-16"
+                className="w-full border border-slate-200 bg-white rounded px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none transition-colors text-slate-700 pr-24"
             />
             
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                
+                {/* AI Enhance Button (Only if enabled and text exists) */}
+                {allowEnhance && safeValue[activeTab] && (
+                    <button 
+                        onClick={handleEnhance}
+                        disabled={isEnhancing}
+                        className={`p-1 rounded transition-colors ${
+                            isEnhancing ? 'text-violet-400' : 'text-violet-400 hover:text-violet-600 hover:bg-violet-50'
+                        }`}
+                        title="AI ile İyileştir (Daha teknik ve açıklayıcı yap)"
+                    >
+                        {isEnhancing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    </button>
+                )}
+
                 {/* Translate Button - Only visible in EN mode when empty or explicitly requested */}
                 {activeTab === 'en' && (
                     <button 
@@ -99,7 +130,7 @@ const LocalizedTextInput: React.FC<{
                         {isTranslating ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
                     </button>
                 )}
-                <span className="text-[9px] font-bold text-slate-300 uppercase pointer-events-none select-none">{activeTab}</span>
+                <span className="text-[9px] font-bold text-slate-300 uppercase pointer-events-none select-none ml-1">{activeTab}</span>
             </div>
         </div>
     );
@@ -603,7 +634,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                 </div>
                                             )}
 
-                                            {/* AI Description - LOCALIZED */}
+                                            {/* AI Description - LOCALIZED WITH AI ENHANCE */}
                                             <div className="flex-1">
                                                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
                                                     <BrainCircuit size={10} className="text-violet-500"/> AI Açıklaması (İpucu)
@@ -613,8 +644,9 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                     value={ensureLocalized(field.aiDescription)} 
                                                     onChange={(val) => handleUpdateField(field.id, { aiDescription: val })} 
                                                     activeTab={activeTab}
-                                                    placeholder="AI için ipucu..."
+                                                    placeholder="AI için ipucu (Örn: Bu alan odanın manzarasını belirtir)..."
                                                     className="w-full"
+                                                    allowEnhance={true} // ENABLE AI MAGIC BUTTON
                                                 />
                                             </div>
 

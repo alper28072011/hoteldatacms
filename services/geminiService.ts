@@ -1,5 +1,4 @@
 
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
@@ -40,6 +39,39 @@ export const translateText = async (text: string, targetLang: string): Promise<s
         return text; // Fallback to original
     }
 }
+
+export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Promise<string> => {
+    if (!text || !text.trim()) return '';
+    try {
+        const langName = lang === 'tr' ? 'Turkish' : 'English';
+        const prompt = `
+        Sen uzman bir "Veri Mimarı" ve "Prompt Mühendisi"sin.
+        
+        GÖREV:
+        Aşağıda bir otel veri yönetim sistemi (CMS) için kullanıcı tarafından girilmiş ham bir alan açıklaması var.
+        Bu açıklamayı, bir Yapay Zeka (LLM) botunun bu alanın ne işe yaradığını ve misafir sorularına nasıl yanıt vermesi gerektiğini en iyi anlayacağı şekilde yeniden yaz ve optimize et.
+        
+        KURALLAR:
+        1. Çıktı dili KESİNLİKLE ${langName} olmalıdır.
+        2. Açıklama net, emir kipi içeren ve bağlam sağlayan bir formatta olmalı.
+        3. Gereksiz kelimeleri at, teknik ve açıklayıcı ol.
+        4. Sadece optimize edilmiş metni döndür, başka bir şey yazma.
+        
+        KULLANICI GİRDİSİ: "${text}"
+        
+        ÖRNEK ÇIKTI (TR): "Bu alan odanın deniz, kara veya havuz manzaralı olup olmadığını belirtir. Misafir manzara sorduğunda bu veriyi kullan."
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt
+        });
+        return response.text?.trim() || text;
+    } catch (e) {
+        console.error("Optimization failed", e);
+        return text;
+    }
+};
 
 export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
   try {
