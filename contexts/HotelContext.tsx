@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { HotelNode, AIPersona, NodeTemplate } from '../types';
-import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree, findNodeById, getSmartDefaultChildType, checkIdExists } from '../utils/treeUtils';
+import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree, findNodeById, getSmartDefaultChildType, checkIdExists, duplicateNodeInTree } from '../utils/treeUtils';
 import { 
   updateHotelData, 
   getPersonas, 
@@ -37,6 +37,7 @@ interface HotelContextType {
   changeNodeId: (oldId: string, newId: string) => Promise<{ success: boolean; message: string }>;
   addChild: (parentId: string, type?: string) => void;
   deleteNode: (nodeId: string) => void;
+  duplicateNode: (nodeId: string) => void; // NEW
   moveNode: (sourceId: string, targetId: string, position: 'inside' | 'before' | 'after') => void;
   forceSave: () => Promise<void>;
   
@@ -172,6 +173,14 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSaveStatus('idle');
   }, []);
 
+  // NEW: Duplicate Node
+  const duplicateNode = useCallback((nodeId: string) => {
+    if (nodeId === 'root') return;
+    setHotelDataState(prev => duplicateNodeInTree(prev, nodeId));
+    setHasUnsavedChanges(true);
+    setSaveStatus('idle');
+  }, []);
+
   const moveNode = useCallback((sourceId: string, targetId: string, position: 'inside' | 'before' | 'after') => {
     setHotelDataState((prev) => moveNodeInTree(prev, sourceId, targetId, position));
     setHasUnsavedChanges(true);
@@ -249,6 +258,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       changeNodeId,
       addChild,
       deleteNode,
+      duplicateNode,
       moveNode,
       saveStatus,
       lastSavedAt,

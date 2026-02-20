@@ -12,7 +12,7 @@ import {
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
-  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight
+  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy
 } from 'lucide-react';
 
 // --- HELPER COMPONENT: LANGUAGE TOGGLE ---
@@ -448,7 +448,7 @@ export interface NodeEditorProps {
 }
 
 const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete, onIdChanged }) => {
-  const { changeNodeId, displayLanguage, setDisplayLanguage, nodeTemplates } = useHotel(); 
+  const { changeNodeId, displayLanguage, setDisplayLanguage, nodeTemplates, duplicateNode } = useHotel(); 
   
   const activeTab = displayLanguage; 
   
@@ -608,6 +608,12 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
     e.preventDefault();
     e.stopPropagation();
     onDelete(node.id);
+  };
+
+  const handleDuplicateClick = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      duplicateNode(node.id);
   };
 
   const handleStartIdEdit = () => { setTempId(node.id); setIsEditingId(true); setIdError(null); };
@@ -1014,6 +1020,18 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
         <div className="flex items-center gap-3">
            {renderHeaderSelectors()}
            <div className="h-8 w-px bg-slate-200 mx-1"></div>
+           
+           {/* COPY BUTTON */}
+           {['item', 'menu_item', 'field'].includes(node.type) && (
+               <button 
+                    onClick={handleDuplicateClick} 
+                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" 
+                    title="Kopyala / Çoğalt"
+               >
+                   <Copy size={18} />
+               </button>
+           )}
+
            <button onClick={handleDeleteClick} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Sil"><Trash2 size={18} /></button>
         </div>
       </div>

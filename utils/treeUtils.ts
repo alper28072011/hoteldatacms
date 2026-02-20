@@ -1,5 +1,4 @@
 
-
 import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute } from "../types";
 
 // Generate a simple unique ID with high collision resistance
@@ -227,6 +226,66 @@ export const deleteNodeFromTree = (root: HotelNode, nodeIdToDelete: string): Hot
   });
 
   return hasChanges ? { ...root, children: newChildren } : root;
+};
+
+// --- DUPLICATE NODE LOGIC ---
+export const duplicateNodeInTree = (root: HotelNode, nodeIdToCopy: string): HotelNode => {
+  // Check if direct child matches
+  if (root.children) {
+    const index = root.children.findIndex(c => String(c.id) === String(nodeIdToCopy));
+    
+    if (index !== -1) {
+      const original = root.children[index];
+      // Create Deep Copy
+      const clone = deepClone(original);
+      
+      // Update Metadata
+      clone.id = `${original.id}-copy`;
+      
+      // Ensure ID Uniqueness in immediate siblings
+      let counter = 1;
+      while (root.children.some(c => c.id === clone.id)) {
+          clone.id = `${original.id}-copy-${counter}`;
+          counter++;
+      }
+
+      // Update Name
+      if (typeof clone.name === 'object') {
+          clone.name = {
+              tr: `${clone.name.tr} - Kopya`,
+              en: `${clone.name.en} - Copy`,
+              ...clone.name // preserve other langs if any, but overwrite tr/en
+          };
+      } else {
+          clone.name = `${clone.name} - Kopya`;
+      }
+
+      // Update Timestamps & Clean AI Score
+      clone.lastModified = Date.now();
+      delete clone.aiConfidence;
+      
+      // Insert at the END of the list (En alta)
+      const newChildren = [...root.children, clone];
+      return { ...root, children: newChildren };
+    }
+
+    // Recursive Search
+    let hasChanges = false;
+    const newChildren = root.children.map(child => {
+        const updatedChild = duplicateNodeInTree(child, nodeIdToCopy);
+        if (updatedChild !== child) {
+            hasChanges = true;
+            return updatedChild;
+        }
+        return child;
+    });
+
+    if (hasChanges) {
+        return { ...root, children: newChildren };
+    }
+  }
+
+  return root;
 };
 
 const insertNodeSibling = (root: HotelNode, targetId: string, newNode: HotelNode, position: 'before' | 'after'): HotelNode => {
