@@ -1115,16 +1115,23 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                 const showSubFields = def.condition && 
                                     getLocalizedValue(attr.value, 'tr').toLowerCase() === def.condition.triggerValue.toLowerCase();
 
+                                // LAYOUT LOGIC:
+                                // Multiline fields (textarea/multiselect) align to top (items-start).
+                                // Single line fields align to center (items-center) for better visual balance.
+                                const isTall = def.type === 'textarea' || def.type === 'multiselect';
+                                const alignClass = isTall ? 'items-start' : 'items-center';
+                                const labelPadding = isTall ? 'pt-3' : ''; // Push label down slightly for tall inputs
+
                                 return (
                                     <React.Fragment key={attr.id}>
-                                        <div className="flex items-start gap-3 group pb-4 border-b border-slate-50 last:border-0 last:pb-0">
-                                            <div className="w-1/3 min-w-[120px] pt-2">
+                                        <div className={`flex ${alignClass} gap-6 group pb-4 border-b border-slate-50 last:border-0 last:pb-0`}>
+                                            <div className={`w-1/3 min-w-[140px] ${labelPadding}`}>
                                                 <div className="flex items-center gap-1.5">
-                                                    <div className="w-1 h-3 bg-indigo-400 rounded-full"></div>
-                                                    <span className="text-xs font-bold text-slate-700">{getLocalizedValue(def.label, activeTab)}</span>
+                                                    <div className="w-1 h-3 bg-indigo-400 rounded-full shrink-0"></div>
+                                                    <span className="text-xs font-bold text-slate-700 leading-tight">{getLocalizedValue(def.label, activeTab)}</span>
                                                     {def.required && <span className="text-red-500">*</span>}
                                                 </div>
-                                                {def.aiDescription && <div className="text-[10px] text-slate-400 mt-0.5 ml-2.5 leading-tight">{getLocalizedValue(def.aiDescription, activeTab)}</div>}
+                                                {def.aiDescription && <div className="text-[10px] text-slate-400 mt-1 ml-2.5 leading-tight">{getLocalizedValue(def.aiDescription, activeTab)}</div>}
                                             </div>
                                             <div className="flex-1 relative">
                                                 <DynamicFieldInput 
@@ -1166,11 +1173,13 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                             options: subDef.options
                                                         };
                                                     }
+                                                    
+                                                    const isSubTall = subDef.type === 'textarea' || subDef.type === 'multiselect';
 
                                                     return (
-                                                        <div key={subDef.id} className="flex items-start gap-3">
-                                                            <div className="w-1/3 min-w-[100px] pt-2 flex items-center gap-1.5">
-                                                                <CornerDownRight size={12} className="text-indigo-300" />
+                                                        <div key={subDef.id} className={`flex ${isSubTall ? 'items-start' : 'items-center'} gap-4`}>
+                                                            <div className={`w-1/3 min-w-[120px] flex items-center gap-1.5 ${isSubTall ? 'pt-2' : ''}`}>
+                                                                <CornerDownRight size={12} className="text-indigo-300 shrink-0" />
                                                                 <span className="text-xs font-semibold text-slate-600">{getLocalizedValue(subDef.label, activeTab)}</span>
                                                             </div>
                                                             <div className="flex-1">
@@ -1195,61 +1204,84 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
                     {/* SEPARATOR IF BOTH EXIST */}
                     {activeTemplate && customRenderList.length > 0 && (
-                        <div className="relative py-2">
+                        <div className="relative py-4">
                             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
                             <div className="relative flex justify-center">
-                                <span className="bg-white px-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Diğer Özellikler / Ekstralar</span>
+                                <span className="bg-white px-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Diğer Özellikler / Ekstralar</span>
                             </div>
                         </div>
                     )}
 
                     {/* B. CUSTOM FIELDS (EDITABLE) */}
                     <div className="space-y-3">
-                        {customRenderList.map(attr => (
-                            <div key={attr.id} className="flex items-start gap-3 group">
-                                <div className="w-1/3 min-w-[120px]">
-                                    <LocalizedInput 
-                                        value={attr.key} 
-                                        onChange={(val) => handleAttributeUpdate(attr.id, undefined, attr.value as LocalizedText, val)} 
-                                        placeholder="Özellik Adı" 
-                                        compact 
-                                        activeTab={activeTab} 
-                                        onTabChange={setDisplayLanguage}
-                                    />
+                        {customRenderList.map(attr => {
+                            const isTall = attr.type === 'textarea' || attr.type === 'multiselect';
+                            return (
+                                <div key={attr.id} className={`flex ${isTall ? 'items-start' : 'items-center'} gap-4 group`}>
+                                    <div className="w-1/3 min-w-[140px]">
+                                        <LocalizedInput 
+                                            value={attr.key} 
+                                            onChange={(val) => handleAttributeUpdate(attr.id, undefined, attr.value as LocalizedText, val)} 
+                                            placeholder="Özellik Adı" 
+                                            activeTab={activeTab} 
+                                            onTabChange={setDisplayLanguage}
+                                        />
+                                    </div>
+                                    <div className="flex-1 relative">
+                                        <DynamicFieldInput 
+                                            attribute={attr}
+                                            onChange={(val) => handleAttributeUpdate(attr.id, undefined, val)}
+                                            activeTab={activeTab}
+                                            onTabChange={setDisplayLanguage}
+                                            actionButton={activeTab === 'en' ? (
+                                                <button 
+                                                    onClick={() => handleSingleAttributeTranslate(attr.id)}
+                                                    disabled={translatingFieldId === attr.id}
+                                                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                >
+                                                    {translatingFieldId === attr.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                                </button>
+                                            ) : undefined}
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={() => handleDeleteAttribute(attr.id)} 
+                                        className={`p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all ${isTall ? 'mt-1' : ''}`}
+                                    >
+                                        <X size={16} />
+                                    </button>
                                 </div>
-                                <div className="flex-1 relative">
-                                    <DynamicFieldInput 
-                                        attribute={attr}
-                                        onChange={(val) => handleAttributeUpdate(attr.id, undefined, val)}
-                                        activeTab={activeTab}
-                                        onTabChange={setDisplayLanguage}
-                                        actionButton={activeTab === 'en' ? (
-                                            <button 
-                                                onClick={() => handleSingleAttributeTranslate(attr.id)}
-                                                disabled={translatingFieldId === attr.id}
-                                                className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
-                                            >
-                                                {translatingFieldId === attr.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
-                                            </button>
-                                        ) : undefined}
-                                    />
-                                </div>
-                                <button onClick={() => handleDeleteAttribute(attr.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all mt-1">
-                                    <X size={14} />
-                                </button>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                     
                     {/* Add New Attribute Row */}
-                    <div className="flex items-start gap-3 pt-4 border-t border-slate-100 mt-2 bg-slate-50/50 p-3 rounded-lg border-dashed">
-                        <div className="w-1/3 min-w-[120px]">
-                            <LocalizedInput value={newAttrKey} onChange={setNewAttrKey} placeholder="Yeni Özellik Adı" compact activeTab={activeTab} onTabChange={setDisplayLanguage}/>
+                    <div className="flex items-center gap-4 pt-6 border-t border-slate-100 mt-2 bg-slate-50/30 p-4 rounded-lg border-dashed border border-slate-200">
+                        <div className="w-1/3 min-w-[140px]">
+                            <LocalizedInput 
+                                value={newAttrKey} 
+                                onChange={setNewAttrKey} 
+                                placeholder="Yeni Özellik Adı" 
+                                activeTab={activeTab} 
+                                onTabChange={setDisplayLanguage}
+                            />
                         </div>
-                        <div className="flex-1 flex gap-2">
-                            <div className="flex-1"><LocalizedInput value={newAttrValue} onChange={setNewAttrValue} placeholder="Değer" compact activeTab={activeTab} onTabChange={setDisplayLanguage}/></div>
-                            <button onClick={handleAddAttribute} disabled={!newAttrKey.tr.trim()} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded text-xs font-bold transition-colors disabled:opacity-50 h-[34px] mt-px flex items-center gap-1">
-                                <Plus size={14} /> Ekle
+                        <div className="flex-1 flex gap-3 items-center">
+                            <div className="flex-1">
+                                <LocalizedInput 
+                                    value={newAttrValue} 
+                                    onChange={setNewAttrValue} 
+                                    placeholder="Değer" 
+                                    activeTab={activeTab} 
+                                    onTabChange={setDisplayLanguage}
+                                />
+                            </div>
+                            <button 
+                                onClick={handleAddAttribute} 
+                                disabled={!newAttrKey.tr.trim()} 
+                                className="px-4 h-[38px] bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                            >
+                                <Plus size={16} /> Ekle
                             </button>
                         </div>
                     </div>
