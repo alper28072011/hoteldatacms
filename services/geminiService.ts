@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
@@ -105,6 +104,52 @@ export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Pr
         return text;
     }
 };
+
+export const evaluateNodeHealth = async (node: HotelNode, parentPath: string): Promise<HotelNode['aiAnalysis']> => {
+    try {
+        const cleanNode = generateCleanAIJSON(node);
+        const prompt = `
+        Sen bir Otel CMS veri kalite denetçisisin. Aşağıdaki veriyi analiz et.
+        
+        BAĞLAM YOLU: ${parentPath}
+        VERİ: ${JSON.stringify(cleanNode, null, 2)}
+        
+        GÖREVLER:
+        1. **Mantıksal Tutarlılık**: Bu veri bu kategoride (path) mantıklı mı? Fiyat, süre, yaş sınırı gibi değerler gerçekçi mi?
+        2. **Dil ve Çeviri**: Türkçe (TR) ve İngilizce (EN) alanları uyumlu mu? Eksik çeviri veya anlamsız çeviri var mı?
+        3. **AI Okunabilirliği**: Bir yapay zeka bu veriyi okuduğunda (örneğin "Değer: 50" ama birim yok) körlük yaşar mı?
+        
+        ÇIKTI FORMATI (JSON):
+        {
+            "summary": "Tek cümlelik Türkçe özet durum.",
+            "score": 0-100 arası puan,
+            "issues": [
+                {
+                    "type": "logic" | "translation" | "context" | "missing",
+                    "message": "Sorunun kısa açıklaması (Türkçe)",
+                    "severity": "info" | "warning" | "critical"
+                }
+            ],
+            "suggestion": "Nasıl düzeltileceğine dair kısa bir öneri."
+        }
+        
+        Eğer her şey mükemmelse issues boş dizi olsun ve score 100 olsun.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+
+        const result = JSON.parse(response.text || "{}");
+        return result;
+
+    } catch (e) {
+        console.error("Node analysis failed", e);
+        return undefined;
+    }
+}
 
 export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
   try {
@@ -303,7 +348,6 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
 
 export const processArchitectFile = async (data: HotelNode, fileBase64: string, mimeType: string): Promise<ArchitectResponse> => {
   try {
-    // LIMITS REMOVED
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2);
     
     const prompt = `Bu yüklenen dosyayı (Resim/PDF) analiz et ve otel verilerini çıkararak mevcut yapıya entegre et.
@@ -321,250 +365,218 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
 
     const response = await ai.models.generateContent({
       model: modelConfig.model,
-      contents: [
-        { text: prompt },
-        { inlineData: { mimeType, data: fileBase64 } }
-      ],
+      contents: {
+        parts: [
+            { text: prompt },
+            {
+                inlineData: {
+                    mimeType: mimeType,
+                    data: fileBase64
+                }
+            }
+        ]
+      },
       config: { responseMimeType: 'application/json' }
     });
 
     const rawText = response.text || "{}";
-    let parsed: any = {};
-    
     try {
-        parsed = JSON.parse(rawText);
+        const parsed = JSON.parse(rawText);
+        if (!parsed.actions || !Array.isArray(parsed.actions)) {
+            parsed.actions = [];
+        }
+        return parsed as ArchitectResponse;
     } catch (e) {
-        return { summary: "Dosya işleme hatası.", actions: [] };
+        return { summary: "Dosya işlenirken hata oluştu.", actions: [] };
     }
-
-    return parsed as ArchitectResponse;
   } catch (error) {
     console.error(error);
     throw new Error("Dosya işleme hatası.");
   }
 };
 
+export const generateNodeContext = async (node: HotelNode, pathString: string, lang: 'tr' | 'en'): Promise<{ tags: string[], description: string }> => {
+    try {
+        const nodeData = JSON.stringify(generateCleanAIJSON(node), null, 2);
+        const prompt = `
+        Analyze this hotel data node.
+        Path: ${pathString}
+        Data: ${nodeData}
+        
+        Task:
+        1. Generate 5-10 SEO/Search tags relevant to this item (${lang}).
+        2. Write a short, hidden AI context note (${lang}) that explains what this node is for an LLM (e.g. "This node contains the opening hours for the main pool").
+        
+        Output JSON: { "tags": string[], "description": string }
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        
+        return JSON.parse(response.text || '{"tags":[], "description":""}');
+    } catch(e) {
+        return { tags: [], description: "" };
+    }
+}
+
+export const generateValueFromAttributes = async (name: string, attributes: NodeAttribute[], lang: 'tr' | 'en'): Promise<string> => {
+    try {
+        const attrs = attributes.map(a => `${getLocalizedValue(a.key, lang)}: ${getLocalizedValue(a.value, lang)}`).join(', ');
+        const prompt = `
+        Create a natural language summary sentence (${lang}) for an item named "${name}" with these attributes: ${attrs}.
+        Keep it concise.
+        `;
+        const response = await ai.models.generateContent({
+             model: modelConfig.model,
+             contents: prompt
+        });
+        return response.text?.trim() || "";
+    } catch(e) { return ""; }
+}
+
 export const generateHealthReport = async (data: HotelNode): Promise<HealthReport> => {
-  try {
-    // LIMITS REMOVED
-    const textContext = await generateAIText(data, () => {});
-    
-    const prompt = `
-    Sen bir Otel Veritabanı için "Semantik Tutarlılık ve Veri Körlüğü Denetçisi"sin (Data Blindness Auditor).
-    
-    GÖREV:
-    Aşağıdaki otel verilerini (Markdown formatında, [ID: xxx] etiketleri ile) analiz et. Bir yapay zeka botunun bu veriyi okurken zorlanacağı noktaları (Veri Körlüğü) tespit et.
-    
-    ODAKLANMAN GEREKEN VERİ KÖRLÜĞÜ SEBEPLERİ:
-    1. **Kopuk Nitelikler (Attribute Blindness):** Örn: "Oda Alanı: 58" yazılmış ama birim (m2) yok veya anahtar kelime çok belirsiz ("Değer: 58").
-    2. **Eksik Bağlam (Missing Context):** Bir özellik tanımlanmış ama hangi odaya veya hizmete ait olduğu ağaç yapısında çok derin veya belirsiz.
-    3. **Dil Eksikliği:** Kritik bir özellik sadece Türkçe girilmiş, İngilizce yok. Bu, uluslararası botlar için veri körlüğüdür.
-    4. **Niyet (Intent) Uyuşmazlığı**: Bir kategori "Bilgi" ise, altında sert bir "Yasak/Policy" niyeti taşıyan öğe varsa uyar.
-    
-    PUANLAMA SİSTEMİ (0-100):
-    Her analiz edilen düğüm (Node) için bir "AI Okunabilirlik Puanı" ver.
-    - 0-40 (Kırmızı): Kritik eksik (İsim yok, değer yok, tamamen yanlış yerde).
-    - 41-79 (Turuncu): Ortalama (Bağlam var ama birim eksik, sadece tek dil).
-    - 80-100 (Yeşil): Mükemmel (Çift dilli, net anahtarlar, doğru hiyerarşi).
-
-    GİRDİ VERİSİ:
-    ${textContext}
-    
-    ÇIKTI ŞEMASI (JSON) - TÜM METİNLER TÜRKÇE OLMALI:
-    {
-      "score": number (Genel ortalama puan),
-      "summary": "Genel analiz özeti (Türkçe).",
-      "nodeScores": {
-          "node_id_1": 85,
-          "node_id_2": 40
-      },
-      "issues": [
+    try {
+        const textContext = await generateAIText(data, () => {});
+        
+        const prompt = `
+        You are a Data Quality Auditor for a Hotel CMS.
+        Analyze the following hotel data structure for:
+        1. Completeness (Missing descriptions, prices, schedules).
+        2. Consistency (Language mix, logical hierarchy errors).
+        3. Semantic Sense (e.g. "Pool" inside "Room Service").
+        
+        Data (Markdown):
+        ${textContext}
+        
+        Output JSON (HealthReport):
         {
-          "id": "ai_issue_x",
-          "nodeId": "Sorunlu Node ID'si (textContext içindeki [ID: xxx] tag'inden al)",
-          "nodeName": "Öğe ismi",
-          "severity": "critical" | "warning" | "optimization",
-          "message": "Sorunun Türkçe açıklaması (Örn: 'Oda Alanı' özelliği için birim (m2) eksik, AI bunu anlayamayabilir.)",
-          "fix": { // OPSİYONEL
-             "targetId": "ilgili ID",
-             "action": "update",
-             "data": { "intent": "policy" }, 
-             "description": "Öneri (Türkçe)"
-          }
+            "score": number (0-100),
+            "summary": "Short Turkish summary of health.",
+            "issues": [
+                {
+                    "id": "unique_id",
+                    "nodeId": "extracted_id_from_data", // Important: Extract [ID: ...] from text
+                    "nodeName": "Name of node",
+                    "severity": "critical" | "warning" | "optimization",
+                    "message": "Issue description in Turkish",
+                    "fix": { "targetId": "same_node_id", "action": "update", "data": {}, "description": "Fix desc" } (Optional)
+                }
+            ],
+            "nodeScores": { "node_id": number (0-100) } // Score for specific nodes found in text
         }
-      ]
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        
+        return JSON.parse(response.text || '{"score": 0, "summary": "Error", "issues": []}');
+    } catch(e) {
+        console.error(e);
+        return { score: 0, summary: "Analysis failed", issues: [] };
     }
-    `;
+}
 
-    const response = await ai.models.generateContent({
-      model: modelConfig.model,
-      contents: prompt,
-      config: { responseMimeType: 'application/json' }
-    });
-
-    return JSON.parse(response.text || "{}") as HealthReport;
-  } catch (error) {
-    console.error("Health Audit Error:", error);
-    throw new Error("Sağlık raporu oluşturulamadı.");
-  }
-};
-
-export const generateNodeContext = async (node: HotelNode, contextPath: string = '', language: 'tr' | 'en' = 'tr'): Promise<{ tags: string[], description: string }> => {
-    const cleanNode = generateCleanAIJSON(node);
-    
-    const langName = language === 'en' ? 'English' : 'Turkish';
-    
-    const prompt = `
-    You are an AI Data Enricher for a Hotel CMS.
-    
-    CONTEXT:
-    Path: ${contextPath}
-    Node Data: ${JSON.stringify(cleanNode, null, 2)}
-    
-    TASK:
-    1. Generate 5-8 relevant "Search Tags" (Synonyms) in ${langName}.
-    2. Write a "Hidden Description" (max 2 sentences) in ${langName} explaining the context or rules for an AI chatbot.
-    
-    SADECE JSON DÖNDÜR.
-    `;
-    
-    const response = await ai.models.generateContent({
-      model: modelConfig.model,
-      contents: prompt,
-      config: { 
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            tags: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            },
-            description: {
-              type: Type.STRING
+export const autoFixDatabase = async (data: HotelNode): Promise<AutoFixAction[]> => {
+    try {
+         const textContext = await generateAIText(data, () => {});
+         
+         const prompt = `
+         Analyze this hotel data structure and suggest structural fixes (Move, Update Type, Rename).
+         Focus on Logical Hierarchy (e.g. 'Gym' shouldn't be under 'Restaurants').
+         
+         Data:
+         ${textContext}
+         
+         Output JSON:
+         [
+            {
+                "id": "fix_1",
+                "type": "move" | "update" | "changeType",
+                "targetId": "node_id",
+                "destinationId": "parent_id_if_move",
+                "payload": {}, 
+                "reasoning": "Turkish explanation",
+                "severity": "critical" | "structural" | "content"
             }
-          },
-          required: ["tags", "description"]
+         ]
+         `;
+         
+         const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        
+        return JSON.parse(response.text || '[]');
+    } catch(e) { return []; }
+}
+
+export const runDataCheck = async (data: HotelNode, sourceType: 'url' | 'text' | 'file', inputValue: string, mimeType?: string): Promise<DataComparisonReport> => {
+     try {
+        const textContext = await generateAIText(data, () => {});
+        
+        let contents: any[] = [];
+        let prompt = `
+        Compare the Internal Hotel Data below with the provided External Source.
+        Find discrepancies (mismatched prices, hours, missing amenities).
+        
+        Internal Data:
+        ${textContext}
+        `;
+
+        if (sourceType === 'url') {
+            prompt += `\nExternal Source URL: ${inputValue}\n(Use your knowledge or search tools to verify if possible, otherwise infer from URL context)`;
+            contents = [{ text: prompt }];
+        } else if (sourceType === 'text') {
+            prompt += `\nExternal Source Text:\n"${inputValue}"`;
+            contents = [{ text: prompt }];
+        } else if (sourceType === 'file') {
+            prompt += `\nExternal Source File: (See attachment)`;
+            contents = [
+                { text: prompt },
+                { inlineData: { mimeType: mimeType || 'application/pdf', data: inputValue } }
+            ];
         }
-      }
-    });
-    
-    return JSON.parse(response.text || "{}");
-};
 
-export const generateValueFromAttributes = async (nodeName: string, attributes: NodeAttribute[], language: 'tr' | 'en' = 'tr'): Promise<string> => {
-    const langName = language === 'en' ? 'English' : 'Turkish';
-    // Use getLocalizedValue to get keys/values in the requested language
-    const attrsStr = attributes.map(a => `${getLocalizedValue(a.key, language)}: ${getLocalizedValue(a.value, language)}`).join(', ');
-    
-    const prompt = `
-    Based on the attributes of the hotel item "${nodeName}", write a short, attractive "Main Value" sentence in ${langName}.
-    
-    Attributes: ${attrsStr}
-    
-    Example Input: Name: Airport Transfer, Attrs: Distance: 15km, Time: 20min
-    Example Output (${language==='tr'?'TR':'EN'}): ${language==='tr' ? 'Havalimanına 15km uzaklıkta olup araçla yaklaşık 20 dakika sürmektedir.' : 'Located 15km from the airport, taking approximately 20 minutes by car.'}
-    
-    Sadece cümleyi döndür.
-    `;
-    
-    const response = await ai.models.generateContent({
-        model: modelConfig.model,
-        contents: prompt
-    });
-    
-    return response.text?.trim() || "";
+        const systemInstruction = `
+        Output JSON (DataComparisonReport):
+        {
+            "summary": "Turkish summary of comparison.",
+            "sourceUrl": "${sourceType === 'url' ? inputValue : ''}",
+            "items": [
+                {
+                    "id": "comp_1",
+                    "category": "match" | "conflict" | "missing_internal" | "missing_external",
+                    "field": "Field Name (e.g. Pool Hours)",
+                    "internalValue": "Value in DB",
+                    "externalValue": "Value in Source",
+                    "description": "Explanation in Turkish",
+                    "suggestedAction": { "type": "update" | "add", "targetId": "relevant_node_id", "data": {} } (Optional)
+                }
+            ]
+        }
+        `;
+
+        const response = await ai.models.generateContent({
+             model: modelConfig.model,
+             contents: contents,
+             config: { 
+                 responseMimeType: 'application/json',
+                 systemInstruction: systemInstruction,
+                 tools: sourceType === 'url' ? [{ googleSearch: {} }] : undefined
+             }
+        });
+        
+        return JSON.parse(response.text || '{"summary": "Error", "items": []}');
+
+     } catch(e) {
+         console.error(e);
+         return { summary: "Comparison failed.", items: [] };
+     }
 }
-
-// --- DEEP ANALYSIS & AUTO FIX ---
-export const autoFixDatabase = async (rootNode: HotelNode): Promise<AutoFixAction[]> => {
-    // LIMITS REMOVED
-    const cleanJson = JSON.stringify(generateCleanAIJSON(rootNode), null, 2);
-    
-    const prompt = `
-    Sen bir "Derin Veri Yapısı ve Anlamsal Bütünlük Denetçisi"sin (AI Architect).
-    Göresin, aşağıdaki Otel CMS verisini (JSON) tarayarak bir AI Dil Modelinin (LLM) bu veriyi anlamasını zorlaştıracak hataları bulmak ve düzeltme önerileri sunmaktır.
-    
-    GÖREVLER:
-    1. **YAPISAL DENETİM**:
-       - Eğer bir 'item', 'field' veya 'menu_item' tipindeki öğenin altında çocuklar (children) varsa, bu bir hatadır. Tip 'category' veya 'list' olmalıdır.
-       -> AKSİYON: type: 'changeType', payload: { type: 'category' }
-    
-    2. **ANLAMSAL (SEMANTİK) TUTARSIZLIK**:
-       - Öğelerin Intent (Niyet) değerlerini kontrol et. Eğer bir öğe 'policy' niyetine sahipse ama 'General Info' altında duruyorsa, onu 'Rules' kategorisine taşı.
-       -> AKSİYON: type: 'move', destinationId: 'İlgili en uygun Kategori ID'si (yoksa root ID)'
-    
-    3. **EKSİK NİYET**:
-       - Eğer bir öğenin intent değeri yoksa veya yanlışsa (Örn: "Yüzmek Yasaktır" -> intent: informational), bunu düzelt.
-       -> AKSİYON: type: 'update', payload: { intent: 'safety' }
-    
-    GİRDİ VERİSİ:
-    \`\`\`json
-    ${cleanJson}
-    \`\`\`
-    
-    ÇIKTI FORMATI:
-    Aşağıdaki JSON şemasına uygun bir dizi (Array) döndür. Sadece JSON döndür.
-    
-    [
-      {
-        "id": "benzersiz_bir_id",
-        "type": "move" | "update" | "changeType",
-        "targetId": "Sorunlu Öğenin ID'si (Input JSON'dan al)",
-        "destinationId": "Sadece 'move' işlemi için hedef ID",
-        "payload": { "key": "value" }, // 'update' veya 'changeType' için değişecek alanlar
-        "reasoning": "Neden bu düzeltmeyi öneriyorsun? (Türkçe)",
-        "severity": "critical" | "structural" | "content"
-      }
-    ]
-    `;
-    
-    const response = await ai.models.generateContent({
-        model: modelConfig.model,
-        contents: prompt,
-        config: { responseMimeType: 'application/json' }
-    });
-    
-    const result = JSON.parse(response.text || "[]");
-    return Array.isArray(result) ? result : [];
-}
-
-export const runDataCheck = async (data: HotelNode, inputType: 'url' | 'text' | 'file', inputValue: string, mimeType?: string): Promise<DataComparisonReport> => {
-  try {
-    // LIMITS REMOVED
-    const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2);
-    
-    const basePrompt = `Otel Veritabanı JSON'ını sağlanan Kaynak Materyal ile karşılaştır.
-    Uyuşmazlıkları (Fiyat farkları, eksik öğeler, yanlış saatler) tespit et.
-    Çıktı TÜRKÇE olmalı.
-    
-    Veritabanı:
-    \`\`\`json
-    ${jsonContext}
-    \`\`\`
-    `;
-    
-    let contents = [];
-    if (inputType === 'url') {
-        contents = [{ text: `${basePrompt}\n\nKaynak URL: ${inputValue} (Lütfen bu URL içeriğini tara)` }];
-    } else if (inputType === 'file') {
-        contents = [
-            { text: basePrompt }, 
-            { inlineData: { mimeType: mimeType || 'application/pdf', data: inputValue } }
-        ];
-    } else {
-        contents = [{ text: `${basePrompt}\n\nKaynak Metin: "${inputValue}"` }];
-    }
-    
-    const response = await ai.models.generateContent({
-      model: modelConfig.model,
-      contents: contents,
-      config: { responseMimeType: 'application/json' }
-    });
-    
-    return JSON.parse(response.text || "{}") as DataComparisonReport;
-  } catch (error) {
-    console.error(error);
-    throw new Error("Veri kontrolü hatası.");
-  }
-};

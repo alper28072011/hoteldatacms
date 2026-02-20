@@ -153,7 +153,19 @@ export interface HotelNode {
   
   // New Fields for AI Data Blindness Prevention
   aiConfidence?: number; // 0-100 score of how well AI understands this node
-  aiIssues?: string[]; // Reasons for low confidence (e.g. "Missing Unit", "Ambiguous Key")
+  aiIssues?: string[]; // Legacy issue strings
+  
+  // NEW: Rich Semantic Analysis for specific node feedback
+  aiAnalysis?: {
+      summary: string; // Short localized summary "This node is well structured..."
+      score: number; // 0-100
+      issues: {
+          type: 'logic' | 'translation' | 'context' | 'missing';
+          message: string;
+          severity: 'info' | 'warning' | 'critical';
+      }[];
+      suggestion?: string;
+  };
 
   lastSaved?: number;
   lastModified?: number; // Granular update tracking per node
