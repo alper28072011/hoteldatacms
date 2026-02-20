@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { NodeTemplate, TemplateField, LocalizedText, FieldType, LocalizedOptions } from '../types';
 import { useHotel } from '../contexts/HotelContext';
 import { generateId, ensureLocalized } from '../utils/treeUtils';
-import { translateText, optimizeAIDescription } from '../services/geminiService';
+import { translateText, optimizeAIDescription, optimizeAILabel } from '../services/geminiService';
 import { 
     X, Plus, Trash2, Save, LayoutTemplate, GripVertical, Check, Info, 
     Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2, CheckSquare, GitMerge, Globe, Sparkles
@@ -59,7 +59,8 @@ const LocalizedTextInput: React.FC<{
     placeholder?: string;
     className?: string;
     allowEnhance?: boolean; // New prop for AI Optimization
-}> = ({ value, onChange, activeTab, placeholder, className, allowEnhance }) => {
+    enhanceType?: 'label' | 'description'; // Determine which AI function to use
+}> = ({ value, onChange, activeTab, placeholder, className, allowEnhance, enhanceType = 'description' }) => {
     const safeValue = ensureLocalized(value);
     const [isTranslating, setIsTranslating] = useState(false);
     const [isEnhancing, setIsEnhancing] = useState(false);
@@ -82,7 +83,12 @@ const LocalizedTextInput: React.FC<{
         if (!currentText || currentText.trim() === '') return;
         setIsEnhancing(true);
         try {
-            const optimized = await optimizeAIDescription(currentText, activeTab);
+            let optimized = '';
+            if (enhanceType === 'label') {
+                optimized = await optimizeAILabel(currentText, activeTab);
+            } else {
+                optimized = await optimizeAIDescription(currentText, activeTab);
+            }
             onChange({ ...safeValue, [activeTab]: optimized });
         } catch (error) {
             console.error("Optimization error", error);
@@ -596,6 +602,8 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                             onChange={(val) => handleUpdateField(field.id, { label: val })} 
                                             activeTab={activeTab}
                                             placeholder="Örn: Yatak Tipi"
+                                            allowEnhance={true}
+                                            enhanceType="label"
                                         />
                                     </div>
 
@@ -647,6 +655,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                     placeholder="AI için ipucu (Örn: Bu alan odanın manzarasını belirtir)..."
                                                     className="w-full"
                                                     allowEnhance={true} // ENABLE AI MAGIC BUTTON
+                                                    enhanceType="description"
                                                 />
                                             </div>
 
@@ -702,6 +711,8 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                                                 onChange={(val) => handleUpdateSubField(field.id, sub.id, { label: val })} 
                                                                                 activeTab={activeTab}
                                                                                 placeholder="Örn: Tipi Nedir?"
+                                                                                allowEnhance={true}
+                                                                                enhanceType="label"
                                                                             />
                                                                         </div>
                                                                         {/* Sub Type & Key */}

@@ -40,6 +40,39 @@ export const translateText = async (text: string, targetLang: string): Promise<s
     }
 }
 
+export const optimizeAILabel = async (text: string, lang: 'tr' | 'en'): Promise<string> => {
+    if (!text || !text.trim()) return '';
+    try {
+        const langName = lang === 'tr' ? 'Turkish' : 'English';
+        const prompt = `
+        Sen uzman bir "Veri Mimarı" ve "UX Yazarı"sın.
+        
+        GÖREV:
+        Kullanıcının doğal dille girdiği ham ifadeyi, bir Otel Yönetim Sistemi (CMS) şablonu için en uygun, kısa, profesyonel ve AI modellerinin kolayca anlayabileceği bir "Alan Etiketi"ne (Field Label) dönüştür.
+        
+        KURALLAR:
+        1. Çıktı dili KESİNLİKLE ${langName} olmalıdır.
+        2. Çıktı çok kısa ve net olmalı (Genellikle 1-4 kelime).
+        3. Başlık Düzeni (Title Case) kullan.
+        4. Soru cümlelerini isim tamlamasına çevir (Örn: "Oda ne kadar büyük?" -> "Oda Büyüklüğü").
+        5. "Buraya ... yazın" gibi ifadeleri temizle, sadece özü al.
+        
+        KULLANICI GİRDİSİ: "${text}"
+        
+        Sadece optimize edilmiş etiketi döndür.
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt
+        });
+        return response.text?.trim() || text;
+    } catch (e) {
+        console.error("Label optimization failed", e);
+        return text;
+    }
+};
+
 export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Promise<string> => {
     if (!text || !text.trim()) return '';
     try {
