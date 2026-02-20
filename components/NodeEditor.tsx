@@ -1,5 +1,4 @@
 
-
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType, TemplateField } from '../types';
@@ -284,7 +283,20 @@ const DynamicFieldInput: React.FC<{
     }
 
     if (type === 'select') {
-        const options = fieldDef?.options || attribute.options || [];
+        // Resolve options (localized or string array)
+        let options: string[] = [];
+        if (fieldDef && fieldDef.options) {
+            // If options are localized (object), pick active lang
+            if (!Array.isArray(fieldDef.options) && typeof fieldDef.options === 'object') {
+                options = fieldDef.options[activeTab];
+            } else if (Array.isArray(fieldDef.options)) {
+                // Legacy support
+                options = fieldDef.options as string[];
+            }
+        } else if (attribute.options) {
+            options = attribute.options;
+        }
+
         return (
             <div className="relative">
                 <select 
@@ -305,7 +317,18 @@ const DynamicFieldInput: React.FC<{
     }
 
     if (type === 'multiselect') {
-        const options = fieldDef?.options || attribute.options || [];
+        // Resolve options (localized or string array)
+        let options: string[] = [];
+        if (fieldDef && fieldDef.options) {
+            if (!Array.isArray(fieldDef.options) && typeof fieldDef.options === 'object') {
+                options = fieldDef.options[activeTab];
+            } else if (Array.isArray(fieldDef.options)) {
+                options = fieldDef.options as string[];
+            }
+        } else if (attribute.options) {
+            options = attribute.options;
+        }
+
         const currentSelected = propVal[activeTab] ? propVal[activeTab].split(',').map(s => s.trim()) : [];
 
         const toggleOption = (opt: string) => {
@@ -679,14 +702,41 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
               return aKey === getLocalizedValue(fieldDef.label, 'en').toLowerCase();
           });
 
+          // SMART OPTION SYNC: If Select/Multiselect, try to sync other language automatically
+          let syncedValue = { ...value };
+          if ((fieldDef.type === 'select' || fieldDef.type === 'multiselect') && 
+              fieldDef.options && !Array.isArray(fieldDef.options) && typeof fieldDef.options === 'object') {
+              
+              const options = fieldDef.options as { tr: string[], en: string[] };
+              const currentLang = activeTab;
+              const otherLang = activeTab === 'tr' ? 'en' : 'tr';
+              
+              // Only auto-sync if we are updating the current active language value
+              if (value[currentLang]) {
+                  const currentVals = value[currentLang].split(',').map(s => s.trim());
+                  const otherVals: string[] = [];
+                  
+                  currentVals.forEach(val => {
+                      const idx = options[currentLang].indexOf(val);
+                      if (idx !== -1 && options[otherLang][idx]) {
+                          otherVals.push(options[otherLang][idx]);
+                      }
+                  });
+                  
+                  if (otherVals.length > 0) {
+                      syncedValue[otherLang] = otherVals.join(', ');
+                  }
+              }
+          }
+
           if (existingIdx >= 0) {
-              currentAttrs[existingIdx] = { ...currentAttrs[existingIdx], value };
+              currentAttrs[existingIdx] = { ...currentAttrs[existingIdx], value: syncedValue };
           } else {
               // Create new REAL attribute from the virtual one
               currentAttrs.push({
                   id: generateId('attr'),
                   key: fieldDef.label, 
-                  value: value,
+                  value: syncedValue,
                   type: fieldDef.type,
                   options: fieldDef.options
               });
@@ -723,13 +773,39 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           return saKey === getLocalizedValue(fieldDef.label, 'en').toLowerCase();
       });
 
+      // SMART OPTION SYNC for Sub-attributes
+      let syncedValue = { ...value };
+      if ((fieldDef.type === 'select' || fieldDef.type === 'multiselect') && 
+          fieldDef.options && !Array.isArray(fieldDef.options) && typeof fieldDef.options === 'object') {
+          
+          const options = fieldDef.options as { tr: string[], en: string[] };
+          const currentLang = activeTab;
+          const otherLang = activeTab === 'tr' ? 'en' : 'tr';
+          
+          if (value[currentLang]) {
+              const currentVals = value[currentLang].split(',').map(s => s.trim());
+              const otherVals: string[] = [];
+              
+              currentVals.forEach(val => {
+                  const idx = options[currentLang].indexOf(val);
+                  if (idx !== -1 && options[otherLang][idx]) {
+                      otherVals.push(options[otherLang][idx]);
+                  }
+              });
+              
+              if (otherVals.length > 0) {
+                  syncedValue[otherLang] = otherVals.join(', ');
+              }
+          }
+      }
+
       if (subIdx >= 0) {
-          currentSubs[subIdx] = { ...currentSubs[subIdx], value };
+          currentSubs[subIdx] = { ...currentSubs[subIdx], value: syncedValue };
       } else {
           currentSubs.push({
               id: generateId('subattr'),
               key: fieldDef.label,
-              value: value,
+              value: syncedValue,
               type: fieldDef.type,
               options: fieldDef.options
           });
@@ -1048,7 +1124,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                     <span className="text-xs font-bold text-slate-700">{getLocalizedValue(def.label, activeTab)}</span>
                                                     {def.required && <span className="text-red-500">*</span>}
                                                 </div>
-                                                {def.aiDescription && <div className="text-[10px] text-slate-400 mt-0.5 ml-2.5 leading-tight">{def.aiDescription}</div>}
+                                                {def.aiDescription && <div className="text-[10px] text-slate-400 mt-0.5 ml-2.5 leading-tight">{getLocalizedValue(def.aiDescription, activeTab)}</div>}
                                             </div>
                                             <div className="flex-1 relative">
                                                 <DynamicFieldInput 

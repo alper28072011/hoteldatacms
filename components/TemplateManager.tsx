@@ -1,12 +1,12 @@
 
-
 import React, { useState, useEffect } from 'react';
-import { NodeTemplate, TemplateField, LocalizedText, FieldType } from '../types';
+import { NodeTemplate, TemplateField, LocalizedText, FieldType, LocalizedOptions } from '../types';
 import { useHotel } from '../contexts/HotelContext';
-import { generateId } from '../utils/treeUtils';
+import { generateId, ensureLocalized } from '../utils/treeUtils';
+import { translateText } from '../services/geminiService';
 import { 
     X, Plus, Trash2, Save, LayoutTemplate, GripVertical, Check, Info, 
-    Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2, CheckSquare, GitMerge
+    Type, Hash, Calendar, Clock, ToggleLeft, List, AlignLeft, DollarSign, BrainCircuit, Loader2, CheckSquare, GitMerge, Globe, Sparkles
 } from 'lucide-react';
 
 interface TemplateManagerProps {
@@ -51,66 +51,137 @@ const getTypeLabel = (type: FieldType) => {
     }
 }
 
-// Localized Input Component
-const LocalizedInput: React.FC<{
+// --- NEW LOCALIZED INPUT WITH AI TRANSLATION ---
+const LocalizedTextInput: React.FC<{
     value: LocalizedText;
     onChange: (val: LocalizedText) => void;
+    activeTab: 'tr' | 'en';
     placeholder?: string;
     className?: string;
-}> = ({ value, onChange, placeholder, className }) => {
+}> = ({ value, onChange, activeTab, placeholder, className }) => {
+    const safeValue = ensureLocalized(value);
+    const [isTranslating, setIsTranslating] = useState(false);
+
+    const handleTranslate = async () => {
+        if (!safeValue.tr || safeValue.tr.trim() === '') return;
+        setIsTranslating(true);
+        try {
+            const translated = await translateText(safeValue.tr, 'en');
+            onChange({ ...safeValue, en: translated });
+        } catch (error) {
+            console.error("Translation error", error);
+        } finally {
+            setIsTranslating(false);
+        }
+    };
+    
     return (
-        <div className={`flex gap-2 ${className}`}>
-            <div className="relative flex-1">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">TR</span>
-                <input 
-                    type="text" 
-                    value={value.tr}
-                    onChange={(e) => onChange({ ...value, tr: e.target.value })}
-                    placeholder={placeholder}
-                    className="w-full border border-slate-200 bg-white rounded pl-8 pr-2 py-1.5 text-xs focus:border-indigo-500 outline-none transition-colors text-slate-700"
-                />
-            </div>
-            <div className="relative flex-1">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">EN</span>
-                <input 
-                    type="text" 
-                    value={value.en}
-                    onChange={(e) => onChange({ ...value, en: e.target.value })}
-                    placeholder={placeholder}
-                    className="w-full border border-slate-200 bg-slate-50/50 rounded pl-8 pr-2 py-1.5 text-xs focus:border-indigo-500 outline-none transition-colors text-slate-700"
-                />
+        <div className={`relative group ${className}`}>
+            <input 
+                type="text" 
+                value={safeValue[activeTab]}
+                onChange={(e) => onChange({ ...safeValue, [activeTab]: e.target.value })}
+                placeholder={`${placeholder} (${activeTab.toUpperCase()})`}
+                className="w-full border border-slate-200 bg-white rounded px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none transition-colors text-slate-700 pr-16"
+            />
+            
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {/* Translate Button - Only visible in EN mode when empty or explicitly requested */}
+                {activeTab === 'en' && (
+                    <button 
+                        onClick={handleTranslate}
+                        disabled={isTranslating || !safeValue.tr}
+                        className={`p-1 rounded transition-colors ${
+                            !safeValue.en ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-slate-300 hover:text-indigo-600'
+                        }`}
+                        title="Türkçe'den Çevir"
+                    >
+                        {isTranslating ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                    </button>
+                )}
+                <span className="text-[9px] font-bold text-slate-300 uppercase pointer-events-none select-none">{activeTab}</span>
             </div>
         </div>
     );
 };
 
-// Buffered Input for Options (Comma Separated)
-const OptionsInput: React.FC<{
-    value: string[] | undefined;
-    onChange: (val: string[]) => void;
-}> = ({ value, onChange }) => {
-    const [text, setText] = useState(Array.isArray(value) ? value.join(', ') : '');
+// --- NEW LOCALIZED OPTIONS INPUT WITH AI TRANSLATION ---
+const LocalizedOptionsInput: React.FC<{
+    value: LocalizedOptions | string[] | undefined;
+    onChange: (val: LocalizedOptions) => void;
+    activeTab: 'tr' | 'en';
+}> = ({ value, onChange, activeTab }) => {
+    // Normalize value to LocalizedOptions structure
+    const normalizedValue: LocalizedOptions = Array.isArray(value) 
+        ? { tr: value, en: value } // Fallback for legacy
+        : (value || { tr: [], en: [] });
 
-    // Sync with prop changes only when not focused or significantly different
-    // Here we trust the array join to be canonical.
+    const [text, setText] = useState(normalizedValue[activeTab].join(', '));
+    const [isTranslating, setIsTranslating] = useState(false);
+
     useEffect(() => {
-        setText(Array.isArray(value) ? value.join(', ') : '');
-    }, [value]);
+        setText(normalizedValue[activeTab].join(', '));
+    }, [value, activeTab]);
 
     const handleBlur = () => {
-        const options = text.split(',').map(s => s.trim()).filter(s => s !== '');
-        onChange(options);
+        const newOptions = text.split(',').map(s => s.trim()).filter(s => s !== '');
+        onChange({
+            ...normalizedValue,
+            [activeTab]: newOptions
+        });
+    };
+
+    const handleTranslate = async () => {
+        if (normalizedValue.tr.length === 0) return;
+        setIsTranslating(true);
+        try {
+            // Translate the joined string directly to preserve context, or translate array items
+            // Translating comma separated list is usually faster and cheaper for AI
+            const sourceStr = normalizedValue.tr.join(', ');
+            const translatedStr = await translateText(sourceStr, 'en');
+            const newEnOptions = translatedStr.split(',').map(s => s.trim());
+            
+            onChange({
+                ...normalizedValue,
+                en: newEnOptions
+            });
+            // Update local text if we are in EN tab
+            if (activeTab === 'en') {
+                setText(translatedStr);
+            }
+        } catch (error) {
+            console.error("Translation error", error);
+        } finally {
+            setIsTranslating(false);
+        }
     };
 
     return (
-        <input 
-            type="text" 
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onBlur={handleBlur}
-            placeholder="Deniz, Kara, Bahçe, Havuz"
-            className="w-full border border-slate-200 bg-white rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-slate-700 placeholder:text-slate-400"
-        />
+        <div className="relative">
+            <input 
+                type="text" 
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onBlur={handleBlur}
+                placeholder={`Seçenekler (${activeTab.toUpperCase()}) - Virgülle ayırın`}
+                className="w-full border border-slate-200 bg-white rounded px-3 py-2 text-xs focus:ring-2 focus:ring-orange-500 outline-none transition-colors text-slate-700 placeholder:text-slate-400 pr-16"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {activeTab === 'en' && (
+                    <button 
+                        onClick={handleTranslate}
+                        disabled={isTranslating || normalizedValue.tr.length === 0}
+                        className={`p-1 rounded transition-colors ${
+                            normalizedValue.en.length === 0 ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-slate-300 hover:text-indigo-600'
+                        }`}
+                        title="Seçenekleri Çevir"
+                    >
+                        {isTranslating ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                    </button>
+                )}
+                <span className="text-[9px] font-bold text-slate-300 uppercase pointer-events-none select-none">{activeTab}</span>
+            </div>
+        </div>
     );
 };
 
@@ -118,12 +189,11 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
   const { nodeTemplates, addNodeTemplate, updateNodeTemplate, deleteNodeTemplate } = useHotel();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [formData, setFormData] = useState<NodeTemplate>(emptyTemplate);
-  const [showTypeSelector, setShowTypeSelector] = useState<{index: number, subIndex?: number} | null>(null); // Extended for nested
+  const [showTypeSelector, setShowTypeSelector] = useState<{index: number, subIndex?: number} | null>(null);
   
-  // Feedback States
+  // UI State
+  const [activeTab, setActiveTab] = useState<'tr' | 'en'>('tr');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
-
-  // Drag & Drop State
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
 
   // Initialize create mode
@@ -153,7 +223,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
           label: { tr: '', en: '' },
           type: type,
           required: false,
-          aiDescription: ''
+          aiDescription: { tr: '', en: '' } // Localized
       };
       setFormData(prev => ({ ...prev, fields: [...prev.fields, newField] }));
       setShowTypeSelector(null);
@@ -184,7 +254,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                   ...f, 
                   condition: { 
                       triggerValue: 'true', 
-                      fields: [] // Start empty
+                      fields: [] 
                   } 
               };
           })
@@ -203,7 +273,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                   label: { tr: '', en: '' },
                   type: type,
                   required: false,
-                  aiDescription: ''
+                  aiDescription: { tr: '', en: '' }
               };
               
               return { 
@@ -259,7 +329,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
       const processField = (f: TemplateField): TemplateField => ({
           ...f,
           key: f.key || f.label.en.toLowerCase().replace(/[^a-z0-9]/g, '_') || generateId('k'),
-          options: f.options ? f.options.map(o => o.trim()).filter(o => o !== '') : undefined,
+          // No need to process options here, LocalizedOptionsInput handles it
           condition: f.condition ? {
               triggerValue: f.condition.triggerValue,
               fields: f.condition.fields.map(sf => processField(sf)) // Recurse
@@ -328,7 +398,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
             </div>
             <div>
                <h2 className="text-xl font-bold text-slate-800">Şablon Yöneticisi</h2>
-               <p className="text-slate-500 text-sm">Tüm otel verileri için standart formlar ve veri yapıları tasarlayın.</p>
+               <p className="text-slate-500 text-sm">Çoklu dil destekli veri yapıları oluşturun.</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition-colors">
@@ -393,6 +463,23 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                             className="text-xl font-bold bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-indigo-500 focus:outline-none w-full text-slate-800 placeholder:text-slate-300 transition-all py-1"
                         />
                     </div>
+                    
+                    {/* GLOBAL LANGUAGE TOGGLE */}
+                    <div className="flex items-center bg-slate-100 rounded-md p-1 border border-slate-200 mr-4">
+                        <button 
+                            onClick={() => setActiveTab('tr')}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-all flex items-center gap-1 ${activeTab === 'tr' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            TR
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('en')}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-all flex items-center gap-1 ${activeTab === 'en' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            EN
+                        </button>
+                    </div>
+
                     <button 
                         onClick={handleSave}
                         disabled={!formData.name.trim() || saveStatus === 'saving'}
@@ -413,7 +500,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                 </div>
 
                 {/* Builder Canvas */}
-                <div className="flex-1 overflow-y-auto p-8">
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50">
                     <div className="max-w-4xl mx-auto space-y-4 pb-20">
                         
                         {formData.fields.length === 0 && (
@@ -473,9 +560,10 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
 
                                     <div className="col-span-5">
                                         <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Etiket (Görünen İsim)</label>
-                                        <LocalizedInput 
+                                        <LocalizedTextInput 
                                             value={field.label} 
                                             onChange={(val) => handleUpdateField(field.id, { label: val })} 
+                                            activeTab={activeTab}
                                             placeholder="Örn: Yatak Tipi"
                                         />
                                     </div>
@@ -503,28 +591,30 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                     <div className="col-span-12 flex flex-col gap-4 pt-2 border-t border-slate-50 mt-2">
                                         
                                         <div className="flex items-start gap-4">
-                                            {/* Select Options */}
+                                            {/* Select Options - LOCALIZED */}
                                             {(field.type === 'select' || field.type === 'multiselect') && (
                                                 <div className="flex-1">
-                                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seçenekler (Virgülle Ayırın)</label>
-                                                    <OptionsInput 
+                                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Seçenekler</label>
+                                                    <LocalizedOptionsInput 
                                                         value={field.options} 
                                                         onChange={(opts) => handleUpdateField(field.id, { options: opts })} 
+                                                        activeTab={activeTab}
                                                     />
                                                 </div>
                                             )}
 
-                                            {/* AI Description */}
+                                            {/* AI Description - LOCALIZED */}
                                             <div className="flex-1">
                                                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
                                                     <BrainCircuit size={10} className="text-violet-500"/> AI Açıklaması (İpucu)
                                                 </label>
-                                                <input 
-                                                    type="text" 
-                                                    value={field.aiDescription || ''}
-                                                    onChange={(e) => handleUpdateField(field.id, { aiDescription: e.target.value })}
-                                                    placeholder="Örn: Odanın maksimum yetişkin kapasitesi"
-                                                    className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-violet-300 bg-violet-50/30 text-violet-800 placeholder:text-violet-300"
+                                                
+                                                <LocalizedTextInput 
+                                                    value={ensureLocalized(field.aiDescription)} 
+                                                    onChange={(val) => handleUpdateField(field.id, { aiDescription: val })} 
+                                                    activeTab={activeTab}
+                                                    placeholder="AI için ipucu..."
+                                                    className="w-full"
                                                 />
                                             </div>
 
@@ -574,10 +664,11 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                                     <div className="flex-1 grid grid-cols-2 gap-3">
                                                                         {/* Sub Label */}
                                                                         <div>
-                                                                            <label className="block text-[9px] text-slate-400 font-bold mb-1">Soru</label>
-                                                                            <LocalizedInput 
+                                                                            <label className="block text-[9px] text-slate-400 font-bold mb-1">Soru / Etiket</label>
+                                                                            <LocalizedTextInput 
                                                                                 value={sub.label} 
                                                                                 onChange={(val) => handleUpdateSubField(field.id, sub.id, { label: val })} 
+                                                                                activeTab={activeTab}
                                                                                 placeholder="Örn: Tipi Nedir?"
                                                                             />
                                                                         </div>
@@ -616,7 +707,11 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                                         {(sub.type === 'select' || sub.type === 'multiselect') && (
                                                                             <div className="col-span-2">
                                                                                 <label className="block text-[9px] text-slate-400 font-bold mb-1">Seçenekler</label>
-                                                                                <OptionsInput value={sub.options} onChange={(opts) => handleUpdateSubField(field.id, sub.id, { options: opts })} />
+                                                                                <LocalizedOptionsInput 
+                                                                                    value={sub.options} 
+                                                                                    onChange={(opts) => handleUpdateSubField(field.id, sub.id, { options: opts })} 
+                                                                                    activeTab={activeTab}
+                                                                                />
                                                                             </div>
                                                                         )}
                                                                     </div>

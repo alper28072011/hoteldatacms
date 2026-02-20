@@ -96,14 +96,22 @@ export interface NodeAttribute {
   subAttributes?: NodeAttribute[]; 
 }
 
+export interface LocalizedOptions {
+  tr: string[];
+  en: string[];
+}
+
 export interface TemplateField {
   id: string;
   key: string; // Machine key (e.g. 'opening_time')
   label: LocalizedText; // Display label (e.g. TR: 'Açılış Saati')
   type: FieldType;
-  options?: string[]; // For select/multiselect
+  
+  // Updated for Localization support
+  options?: LocalizedOptions | string[]; // Backwards compatible with string[]
+  
   required: boolean;
-  aiDescription?: string; // Hint for AI: "This field represents the start time of the event"
+  aiDescription?: LocalizedText | string; // Updated for Localization support
   
   // Conditional Logic
   condition?: {
