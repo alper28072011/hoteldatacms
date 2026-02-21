@@ -1,5 +1,5 @@
 
-import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute } from "../types";
+import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute, ExportConfig } from "../types";
 
 // Generate a simple unique ID with high collision resistance
 // Updated to accept a custom prefix derived from content
@@ -39,6 +39,24 @@ export const ensureLocalized = (val: LocalizedText | string | undefined): Locali
   if (typeof val === 'string') return { tr: val, en: '' };
   return { tr: val.tr || '', en: val.en || '', ...val };
 };
+
+/**
+ * EXPORT HELPER: Gets value based on config
+ * If single language: Returns string
+ * If multi language: Returns object { tr: "...", en: "..." }
+ */
+const getExportValue = (val: LocalizedText | string | undefined, config: ExportConfig): string | object => {
+    const localized = ensureLocalized(val);
+    
+    if (config.languages.length === 1) {
+        return localized[config.languages[0]];
+    }
+    
+    const result: any = {};
+    if (config.languages.includes('tr')) result.tr = localized.tr;
+    if (config.languages.includes('en')) result.en = localized.en;
+    return result;
+}
 
 /**
  * Formats text for AI Context as "Turkish (English)" if both exist.
@@ -548,218 +566,173 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   return null;
 };
 
-// --- AI TEXT GENERATION (UPDATED FOR DATA BLINDNESS PREVENTION) ---
-// This function structures the text so the LLM can associate attributes strictly with their parent.
+// --- EXPORT FUNCTION: JSON ---
+// Creates a clean, token-efficient, and AI-friendly JSON structure
+export const generateCleanAIJSON = (
+    node: HotelNode, 
+    config: ExportConfig = { format: 'json', languages: ['tr', 'en'], includeAIContext: true }
+): any => {
+  const semanticData: any = {};
+  
+  if (node.id) semanticData.id = node.id;
+  if (node.type) semanticData.type = node.type;
+  if (node.intent) semanticData.intent = node.intent;
+  
+  // Localized Fields
+  if (node.name) semanticData.name = getExportValue(node.name, config);
+  if (node.value) semanticData.value = getExportValue(node.value, config);
+  if (node.answer) semanticData.answer = getExportValue(node.answer, config); // For Q&A
+  if (node.question) semanticData.question = node.question; // Questions are usually static or bilingual string already
+  if (node.price) semanticData.price = node.price;
 
-const processAttributes = (attributes: NodeAttribute[], lines: string[], indent: string) => {
-    if (!attributes || attributes.length === 0) return;
+  // AI Context (Only if enabled)
+  if (config.includeAIContext && node.description) {
+      semanticData.ai_context = getExportValue(node.description, config);
+  }
+  
+  if (config.includeAIContext && node.tags && node.tags.length > 0) {
+      semanticData.tags = node.tags;
+  }
 
-    attributes.forEach(attr => {
-        const k = getRosettaText(attr.key);
-        let v = getRosettaText(attr.value);
+  // Attributes (Flattened for better token usage)
+  if (node.attributes && Array.isArray(node.attributes) && node.attributes.length > 0) {
+      semanticData.attributes = node.attributes.map(a => {
+          const attrObj: any = { 
+              key: getExportValue(a.key, config), 
+              value: getExportValue(a.value, config) 
+          };
+          
+          if (config.includeAIContext && a.subAttributes && a.subAttributes.length > 0) {
+              attrObj.details = a.subAttributes.map(sa => ({
+                  key: getExportValue(sa.key, config),
+                  value: getExportValue(sa.value, config)
+              }));
+          }
+          return attrObj;
+      });
+  }
 
-        // FIX: Boolean types visually appear as "No" when empty in UI, 
-        // so we must explicitly tell AI it is "No" (False) if empty or false-like.
-        if (attr.type === 'boolean') {
-            const valLower = v.toLowerCase().trim();
-            // Check for truthy values. Anything else (including empty string) is False.
-            const isTrue = valLower === 'true' || valLower === 'yes' || valLower === 'evet' || valLower === '1';
-            v = isTrue ? 'True' : 'False';
-        }
+  // Children Recursion
+  if (node.children && node.children.length > 0) {
+    semanticData.items = node.children.map((child: HotelNode) => generateCleanAIJSON(child, config));
+  }
 
-        if (k && v) {
-            // Using '+' bullet to distinguish attributes from general content
-            lines.push(`${indent}  + [Feature] ${k}: ${v}`);
-            
-            // RECURSIVE: Check for sub-attributes (Nested features)
-            if (attr.subAttributes && attr.subAttributes.length > 0) {
-                // If value is truthy, we process subs. If false, logically subs don't exist but we print them anyway for context if filled.
-                // Actually, if it's "False", the sub-attributes (e.g. Jacuzzi Type) are irrelevant.
-                // But let's check if they have content.
-                const hasSubContent = attr.subAttributes.some(sa => {
-                    const saVal = getRosettaText(sa.value);
-                    return saVal && saVal !== 'False' && saVal !== '';
-                });
-
-                if (hasSubContent || v === 'True') {
-                    attr.subAttributes.forEach(subAttr => {
-                        const sk = getRosettaText(subAttr.key);
-                        const sv = getRosettaText(subAttr.value);
-                        if (sk && sv) {
-                            // Indented deeper to show relationship
-                            lines.push(`${indent}    > [Detail] ${sk}: ${sv}`);
-                        }
-                    });
-                }
-            }
-        }
-    });
+  return semanticData;
 };
 
+// --- EXPORT FUNCTION: MARKDOWN / TXT ---
 export const generateAIText = async (
   root: HotelNode, 
-  onProgress: (percent: number) => void
+  onProgress: (percent: number) => void,
+  config: ExportConfig = { format: 'txt', languages: ['tr', 'en'], includeAIContext: true }
 ): Promise<string> => {
   
   const lines: string[] = [];
   let processedCount = 0;
   
-  // 1. First Pass: Count total nodes to manage progress bar accurately
   const countNodes = (node: HotelNode): number => {
       let count = 1;
-      if (node.children) {
-          count += node.children.reduce((acc, child) => acc + countNodes(child), 0);
-      }
+      if (node.children) count += node.children.reduce((acc, child) => acc + countNodes(child), 0);
       return count;
   };
   const totalNodes = countNodes(root);
 
-  // 2. Recursive Traversal Function
-  const processNode = async (node: HotelNode, depth: number, parentPath: string) => {
+  // Helper to format localized output for text
+  const formatTextLine = (label: string, val: LocalizedText | string | undefined): string => {
+      const v = getExportValue(val, config);
+      if (!v) return '';
+      if (typeof v === 'string') return `${label}: ${v}`;
+      // If object (multi-lang)
+      const parts: string[] = [];
+      if ((v as any).tr) parts.push(`[TR] ${(v as any).tr}`);
+      if ((v as any).en) parts.push(`[EN] ${(v as any).en}`);
+      return `${label}: ${parts.join(' / ')}`;
+  };
+
+  const processNode = async (node: HotelNode, depth: number) => {
       processedCount++;
-      // Yield every 50 items to keep UI responsive without freezing, but NO LIMIT on total count.
       if (processedCount % 50 === 0) {
           onProgress(Math.round((processedCount / totalNodes) * 100));
           await new Promise(resolve => setTimeout(resolve, 1)); 
       }
 
       const indent = "  ".repeat(depth);
-      
-      // Use getRosettaText to safely handle LocalizedText objects
-      const name = getRosettaText(node.name);
-      
-      // Update Path: Root > Category > Item
-      const currentPath = parentPath ? `${parentPath} > ${name}` : name;
-      
-      // Determine Header Level or Bullet
       let prefix = "- ";
       if (depth === 0) prefix = "# ";
       else if (depth === 1) prefix = "## ";
       else if (depth === 2) prefix = "### ";
       
-      // Force bullet for deeper levels or specific item types to keep Markdown clean
       if (depth > 2 || ['item', 'field', 'menu_item', 'qa_pair'].includes(String(node.type))) {
           prefix = "- ";
       }
 
-      // LINE 1: Title & Metadata & Unique ID (Critical for AI referencing)
-      const intentTag = node.intent ? `[INTENT: ${node.intent.toUpperCase()}]` : '';
-      const typeTag = `[TYPE: ${String(node.type).toUpperCase()}]`;
-      const idTag = `[ID: ${node.id}]`; // Add ID to context
-      
-      lines.push(`${indent}${prefix}${name} ${intentTag} ${typeTag} ${idTag}`);
-
-      // LINE 2: Content / Value / Answer
-      const value = getRosettaText(node.value || node.answer);
-      if (value) {
-          lines.push(`${indent}  * Content: ${value}`);
-      }
-
-      // LINE 3: Question (for QA pairs)
-      if (node.question) {
-          lines.push(`${indent}  * Question: ${node.question}`);
-      }
-
-      // LINE 4: Price
-      if (node.price) {
-          lines.push(`${indent}  * Price: ${node.price}`);
-      }
-
-      // LINE 5: Attributes (UPDATED FOR DATA BLINDNESS PREVENTION + NESTED SUPPORT)
-      if (node.attributes && node.attributes.length > 0) {
-          processAttributes(node.attributes, lines, indent);
-      }
-
-      // LINE 6: AI Hidden Note
-      const desc = getRosettaText(node.description);
-      if (desc) {
-          lines.push(`${indent}  * AI_Note: ${desc}`);
-      }
-
-      // LINE 7: Structured Data (Legacy support)
-      if (node.data) {
-          try {
-             const dataStr = JSON.stringify(node.data);
-             if (dataStr.length > 4) lines.push(`${indent}  * MetaData: ${dataStr}`);
-          } catch(e) {}
-      }
-
-      // RECURSION: Process Children
-      if (node.children && node.children.length > 0) {
-          // Add a small header if it's an item having children (e.g. "Contains:")
-          if (['item', 'room'].includes(String(node.type))) {
-              lines.push(`${indent}  * Includes / Contains:`);
-          }
+      // Name & Metadata
+      const nameStr = typeof getExportValue(node.name, config) === 'string' 
+          ? getExportValue(node.name, config) 
+          : JSON.stringify(getExportValue(node.name, config));
           
+      const intentTag = node.intent ? `[INTENT: ${node.intent}]` : '';
+      const typeTag = `[TYPE: ${node.type}]`;
+      const idTag = `[ID: ${node.id}]`;
+      
+      lines.push(`${indent}${prefix}${nameStr} ${intentTag} ${typeTag} ${idTag}`);
+
+      // Values
+      const contentLine = formatTextLine("Content", node.value || node.answer);
+      if (contentLine) lines.push(`${indent}  ${contentLine}`);
+
+      if (node.price) lines.push(`${indent}  Price: ${node.price}`);
+
+      // Attributes
+      if (node.attributes && node.attributes.length > 0) {
+          node.attributes.forEach(attr => {
+              // Only process attributes, simpler than the display function
+              const k = typeof getExportValue(attr.key, config) === 'string' ? getExportValue(attr.key, config) : JSON.stringify(getExportValue(attr.key, config));
+              const v = typeof getExportValue(attr.value, config) === 'string' ? getExportValue(attr.value, config) : JSON.stringify(getExportValue(attr.value, config));
+              
+              if (k && v) {
+                  lines.push(`${indent}  + [Feat] ${k}: ${v}`);
+                  // Sub-attributes
+                  if (config.includeAIContext && attr.subAttributes) {
+                      attr.subAttributes.forEach(sa => {
+                          const sk = typeof getExportValue(sa.key, config) === 'string' ? getExportValue(sa.key, config) : JSON.stringify(getExportValue(sa.key, config));
+                          const sv = typeof getExportValue(sa.value, config) === 'string' ? getExportValue(sa.value, config) : JSON.stringify(getExportValue(sa.value, config));
+                          if (sk && sv) lines.push(`${indent}    > ${sk}: ${sv}`);
+                      });
+                  }
+              }
+          });
+      }
+
+      // AI Context (System Note)
+      if (config.includeAIContext && node.description) {
+          const descLine = formatTextLine("SYSTEM_NOTE", node.description);
+          if (descLine) lines.push(`${indent}  ${descLine}`);
+      }
+
+      if (node.children) {
           for (const child of node.children) {
-              // Increase depth for children
-              await processNode(child, depth + 1, currentPath);
+              await processNode(child, depth + 1);
           }
       }
   };
 
-  // Start Recursion
-  await processNode(root, 0, "");
-  
+  await processNode(root, 0);
   return lines.join('\n');
 };
 
-export const generateCleanAIJSON = (node: HotelNode, parentPath: string = ''): any => {
-  const semanticData: any = {};
-  
-  const safeCopy = (val: any, depth: number): any => {
-      if (depth > 5) return undefined; 
-      if (val === null || val === undefined) return val;
-      if (typeof val !== 'object') return val;
-      if (Array.isArray(val)) return val.map(v => safeCopy(v, depth + 1));
-      if (val.constructor && val.constructor !== Object) return undefined;
-      
-      const res: any = {};
-      for (const k in val) {
-          if (Object.prototype.hasOwnProperty.call(val, k)) {
-              const safeVal = safeCopy(val[k], depth + 1);
-              if (safeVal !== undefined) res[k] = safeVal;
-          }
-      }
-      return res;
-  }
-
-  if (node.id) semanticData.id = node.id;
-  if (node.type) semanticData.type = node.type;
-  if (node.intent) semanticData.intent = node.intent; 
-  if (node.name) semanticData.name = node.name; 
-  if (node.value) semanticData.value = node.value;
-  if (node.description) semanticData.description = node.description; 
-  if (node.tags) semanticData.tags = node.tags;
-  
-  if (node.schemaType) semanticData.schemaType = node.schemaType;
-  if (node.data) semanticData.data = safeCopy(node.data, 0);
-
-  if (node.attributes && Array.isArray(node.attributes)) {
-      semanticData.attributes = node.attributes.map(a => {
-          const base: any = { key: a.key, value: a.value };
-          if (a.subAttributes && a.subAttributes.length > 0) {
-              base.details = a.subAttributes.map(sa => ({ key: sa.key, value: sa.value }));
-          }
-          return base;
-      });
-  }
-
-  const currentPath = parentPath ? `${parentPath} > ${getLocalizedValue(node.name, 'en') || 'Untitled'}` : (getLocalizedValue(node.name, 'en') || 'Untitled');
-  semanticData._path = currentPath;
-
-  if (node.children && node.children.length > 0) {
-    semanticData.contains = node.children.map((child: HotelNode) => generateCleanAIJSON(child, currentPath));
-  }
-
-  return semanticData;
-};
-
-export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent: number) => void): Promise<string> => {
+// --- EXPORT FUNCTION: CSV ---
+export const generateOptimizedCSV = async (
+    root: HotelNode, 
+    onProgress: (percent: number) => void,
+    config: ExportConfig = { format: 'csv', languages: ['tr', 'en'], includeAIContext: true }
+): Promise<string> => {
   const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[] }[] => {
     const result: { node: HotelNode, path: string[] }[] = [];
     const traverse = (node: HotelNode, path: string[]) => {
-      const currentPath = [...path, getLocalizedValue(node.name, 'tr') || 'İsimsiz'];
+      // Path usually follows English structure for consistency, or primary lang
+      const pathName = getLocalizedValue(node.name, config.languages[0] || 'en');
+      const currentPath = [...path, pathName];
       result.push({ node, path: currentPath });
       if (node.children) node.children.forEach(child => traverse(child, currentPath));
     };
@@ -770,11 +743,23 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
   const flatNodes = flattenTreeForExport(root);
   const totalNodes = flatNodes.length;
   
-  const headers = ['Sistem_ID', 'Yol', 'Tip', 'Intent', 'Şema', 'İsim_TR', 'İsim_EN', 'Değer_TR', 'Değer_EN', 'Özellikler', 'Yapısal_Veri'];
+  // Dynamic Headers based on Config
+  const headers = ['ID', 'Path', 'Type', 'Intent'];
+  
+  if (config.languages.includes('tr')) headers.push('Name_TR', 'Value_TR');
+  if (config.languages.includes('en')) headers.push('Name_EN', 'Value_EN');
+  
+  headers.push('Attributes_JSON'); // Attributes always complex, keep as JSON but localized
+  
+  if (config.includeAIContext) {
+      if (config.languages.includes('tr')) headers.push('AI_Desc_TR');
+      if (config.languages.includes('en')) headers.push('AI_Desc_EN');
+  }
+
   const rows: string[] = ['\uFEFF' + headers.join(',')]; 
 
   const safeCSV = (val: any) => {
-    const s = String(val || '').replace(/"/g, '""');
+    const s = String(val || '').replace(/"/g, '""'); // Escape double quotes
     return `"${s}"`;
   };
 
@@ -782,22 +767,37 @@ export const generateOptimizedCSV = async (root: HotelNode, onProgress: (percent
      const { node, path } = flatNodes[i];
      const nameObj = ensureLocalized(node.name);
      const valueObj = ensureLocalized(node.value || node.answer);
+     const descObj = ensureLocalized(node.description);
 
-     const attributesStr = JSON.stringify(node.attributes || []);
-
-     rows.push([
+     const rowData: string[] = [
         safeCSV(node.id),
         safeCSV(path.join(' > ')),
         safeCSV(node.type),
-        safeCSV(node.intent || 'informational'),
-        safeCSV(node.schemaType || 'generic'),
-        safeCSV(nameObj.tr),
-        safeCSV(nameObj.en),
-        safeCSV(valueObj.tr),
-        safeCSV(valueObj.en),
-        safeCSV(attributesStr),
-        safeCSV(node.data ? JSON.stringify(node.data) : '')
-     ].join(','));
+        safeCSV(node.intent || 'informational')
+     ];
+
+     if (config.languages.includes('tr')) {
+         rowData.push(safeCSV(nameObj.tr));
+         rowData.push(safeCSV(valueObj.tr));
+     }
+     if (config.languages.includes('en')) {
+         rowData.push(safeCSV(nameObj.en));
+         rowData.push(safeCSV(valueObj.en));
+     }
+
+     // Attributes: Process according to language config
+     const processedAttributes = node.attributes?.map(a => ({
+         key: getExportValue(a.key, config),
+         value: getExportValue(a.value, config)
+     })) || [];
+     rowData.push(safeCSV(JSON.stringify(processedAttributes)));
+
+     if (config.includeAIContext) {
+         if (config.languages.includes('tr')) rowData.push(safeCSV(descObj.tr));
+         if (config.languages.includes('en')) rowData.push(safeCSV(descObj.en));
+     }
+
+     rows.push(rowData.join(','));
      
      if (i % 50 === 0) {
        onProgress(Math.round((i / totalNodes) * 100));

@@ -282,3 +282,9 @@ export interface NodeContextPrediction {
   tags: string[];
   description: string;
 }
+
+export interface ExportConfig {
+    format: 'json' | 'csv' | 'txt';
+    languages: ('tr' | 'en')[];
+    includeAIContext: boolean;
+}

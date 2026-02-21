@@ -1,11 +1,9 @@
 
-
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from '../types';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
-  analyzeHotelStats, filterHotelTree, generateOptimizedCSV, generateCleanAIJSON, 
-  generateAIText, addChildToNode 
+  analyzeHotelStats, filterHotelTree, addChildToNode 
 } from '../utils/treeUtils';
 import TreeViewNode from './components/TreeViewNode';
 import NodeEditor from './components/NodeEditor';
@@ -17,13 +15,14 @@ import TemplateModal from './components/TemplateModal';
 import DataCheckModal from './components/DataCheckModal'; 
 import AIPersonaModal from './components/AIPersonaModal';
 import TemplateManager from './components/TemplateManager';
+import ExportModal from './components/ExportModal'; // NEW
 import { fetchHotelById, getHotelsList, createNewHotel } from './services/firestoreService';
 import { useHotel } from './contexts/HotelContext'; 
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
   ChevronDown, LayoutTemplate, Activity, Database, Clock, Save, 
-  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages, Brain
+  Scale, ChevronUp, Search, Wrench, Brain
 } from 'lucide-react';
 
 const Toast = ({ message, type }: { message: string, type: 'success' | 'error' | 'loading' }) => (
@@ -74,12 +73,11 @@ const App: React.FC = () => {
   const [isDataCheckOpen, setIsDataCheckOpen] = useState(false);
   const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
   const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false); // NEW
   
-  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [exportProgress, setExportProgress] = useState<number | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'loading'} | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   
@@ -185,7 +183,7 @@ const App: React.FC = () => {
     setTimeout(() => setNotification(null), 2000);
   };
 
-  // --- ARCHITECT & EXPORT HANDLERS ---
+  // --- ARCHITECT HANDLERS ---
   const handleArchitectActions = (actions: ArchitectAction[]) => {
       let successCount = 0;
       actions.forEach(action => {
@@ -227,55 +225,6 @@ const App: React.FC = () => {
     const sourceId = e.dataTransfer.getData('nodeId');
     if (sourceId && sourceId !== targetId) {
       moveNode(sourceId, targetId, position);
-    }
-  };
-
-  const handleExport = async (format: 'json' | 'clean-json' | 'csv' | 'txt') => {
-    setIsExportMenuOpen(false);
-    setMobileToolsOpen(false);
-    // Use localized name for file name
-    const hotelName = typeof hotelData.name === 'object' ? hotelData.name.en : hotelData.name;
-    const safeName = (hotelName || "hotel").replace(/\s+/g, '_');
-    const nowStr = new Date().toISOString().slice(0, 10);
-    
-    setIsExporting(true);
-    setExportProgress(10);
-
-    try {
-      await new Promise(r => setTimeout(r, 100));
-      let dataStr = '';
-      let fileName = '';
-
-      if (format === 'json') {
-          dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(hotelData, null, 2));
-          fileName = `${safeName}_FULL_${nowStr}.json`;
-      } else if (format === 'clean-json') {
-          setExportProgress(50);
-          const cleanData = generateCleanAIJSON(hotelData);
-          dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cleanData, null, 2));
-          fileName = `${safeName}_AI_READY_${nowStr}.json`;
-      } else if (format === 'txt') {
-          setExportProgress(30);
-          const txt = await generateAIText(hotelData, setExportProgress);
-          dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(txt);
-          fileName = `${safeName}_CONTEXT_${nowStr}.txt`;
-      } else {
-          const csv = await generateOptimizedCSV(hotelData, setExportProgress);
-          dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-          fileName = `${safeName}_DATA_${nowStr}.csv`;
-      }
-
-      const a = document.createElement('a');
-      a.href = dataStr;
-      a.download = fileName;
-      a.click();
-      setNotification({ message: "Dışa aktarma başarılı!", type: 'success' });
-    } catch (e) {
-      setNotification({ message: "Export hatası.", type: 'error' });
-    } finally {
-      setIsExporting(false);
-      setExportProgress(null);
-      setTimeout(() => setNotification(null), 3000);
     }
   };
 
@@ -328,7 +277,7 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen overflow-hidden bg-white text-slate-800 font-sans relative">
       {notification && <Toast message={notification.message} type={notification.type} />}
 
-      {isExporting && exportProgress !== null && (
+      {exportProgress !== null && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full text-center">
               <h3 className="text-xl font-bold text-slate-800 mb-2">Veri Hazırlanıyor</h3>
@@ -366,6 +315,7 @@ const App: React.FC = () => {
       <TemplateModal isOpen={isTemplateModalOpen} onClose={() => setIsTemplateModalOpen(false)} data={hotelData} />
       <AIPersonaModal isOpen={isPersonaModalOpen} onClose={() => setIsPersonaModalOpen(false)} />
       <TemplateManager isOpen={isTemplateManagerOpen} onClose={() => setIsTemplateManagerOpen(false)} />
+      <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} data={hotelData} onExportProgress={setExportProgress} />
 
       <header className="h-20 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-30 shrink-0 shadow-sm relative">
         <div className="flex items-center gap-3">
@@ -463,21 +413,9 @@ const App: React.FC = () => {
               </button>
 
               <button onClick={handleImportClick} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="İçe Aktar"><Upload size={18} /></button>
-              <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="Dışa Aktar"><Download size={18} /></button>
               
-              {isExportMenuOpen && (
-                 <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)}/>
-                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 z-50 py-1 animate-in fade-in zoom-in-95">
-                        <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase bg-slate-50/50">Standart</div>
-                        <button onClick={() => handleExport('json')} className="w-full text-left px-4 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 text-slate-700"><FileJson size={14} className="text-amber-500" /> Yedek (JSON)</button>
-                        <button onClick={() => handleExport('csv')} className="w-full text-left px-4 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 text-slate-700"><FileSpreadsheet size={14} className="text-emerald-500" /> Excel / CSV</button>
-                        <div className="px-3 py-2 mt-1 text-[10px] font-bold text-slate-400 uppercase bg-slate-50/50 border-t border-slate-100">AI Optimize</div>
-                        <button onClick={() => handleExport('clean-json')} className="w-full text-left px-4 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 text-slate-700"><Braces size={14} className="text-indigo-500" /> Temiz JSON</button>
-                        <button onClick={() => handleExport('txt')} className="w-full text-left px-4 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 text-slate-700"><FileText size={14} className="text-violet-500" /> Metin (Context)</button>
-                    </div>
-                 </>
-              )}
+              {/* NEW EXPORT BUTTON */}
+              <button onClick={() => setIsExportModalOpen(true)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="Dışa Aktar"><Download size={18} /></button>
             </div>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json"/>
             
