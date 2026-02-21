@@ -704,6 +704,11 @@ export const generateAIText = async (
           });
       }
 
+      // Tags / Keywords (NEW: AI Semantic Indexing)
+      if (config.includeAIContext && node.tags && node.tags.length > 0) {
+          lines.push(`${indent}  * Keywords: ${node.tags.map(t => `#${t}`).join(', ')}`);
+      }
+
       // AI Context (System Note)
       if (config.includeAIContext && node.description) {
           const descLine = formatTextLine("SYSTEM_NOTE", node.description);
@@ -754,6 +759,7 @@ export const generateOptimizedCSV = async (
   if (config.includeAIContext) {
       if (config.languages.includes('tr')) headers.push('AI_Desc_TR');
       if (config.languages.includes('en')) headers.push('AI_Desc_EN');
+      headers.push('Keywords'); // Add Keywords column
   }
 
   const rows: string[] = ['\uFEFF' + headers.join(',')]; 
@@ -795,6 +801,7 @@ export const generateOptimizedCSV = async (
      if (config.includeAIContext) {
          if (config.languages.includes('tr')) rowData.push(safeCSV(descObj.tr));
          if (config.languages.includes('en')) rowData.push(safeCSV(descObj.en));
+         rowData.push(safeCSV((node.tags || []).join(', ')));
      }
 
      rows.push(rowData.join(','));

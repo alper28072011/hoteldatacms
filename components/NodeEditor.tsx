@@ -465,6 +465,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
   const [newAttrKey, setNewAttrKey] = useState<LocalizedText>({ tr: '', en: '' });
   const [newAttrValue, setNewAttrValue] = useState<LocalizedText>({ tr: '', en: '' });
   
+  // Tag State
+  const [tagInput, setTagInput] = useState('');
+
   const [isEditingId, setIsEditingId] = useState(false);
   const [tempId, setTempId] = useState('');
   const [idError, setIdError] = useState<string | null>(null);
@@ -476,6 +479,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
     setIsEditingId(false);
     setTempId(node?.id || '');
     setIdError(null);
+    setTagInput('');
   }, [node?.id]);
 
   const breadcrumbs = useMemo(() => {
@@ -852,6 +856,20 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
     onUpdate(node.id, { attributes: [...currentAttributes, newAttr] });
     setNewAttrKey({ tr: '', en: '' });
     setNewAttrValue({ tr: '', en: '' });
+  };
+
+  const handleAddTag = () => {
+      if (!tagInput.trim()) return;
+      const currentTags = node.tags || [];
+      if (!currentTags.includes(tagInput.trim())) {
+          onUpdate(node.id, { tags: [...currentTags, tagInput.trim()] });
+      }
+      setTagInput('');
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+      const currentTags = node.tags || [];
+      onUpdate(node.id, { tags: currentTags.filter(t => t !== tagToRemove) });
   };
 
   // UNIFIED HEADER SELECTORS
@@ -1334,7 +1352,57 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                 </div>
             </div>
 
-            {/* 4. AI CONTEXT SECTION */}
+            {/* 4. TAGS / KEYWORDS SECTION (RE-ACTIVATED) */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <Hash size={18} className="text-slate-400" />
+                        <h3 className="text-sm font-bold text-slate-700">Anahtar Kelimeler & SEO</h3>
+                        <InfoTooltip title="Semantic Indexing" content="AI modellerinin bu veriyi hızlıca kategorize etmesi için etiketler. RAG (Retrieval) performansını artırır." />
+                    </div>
+                 </div>
+                 <div className="p-6">
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {(!node.tags || node.tags.length === 0) && (
+                            <span className="text-xs text-slate-400 italic">Henüz etiket eklenmemiş.</span>
+                        )}
+                        {node.tags && node.tags.map((tag, idx) => (
+                            <span key={idx} className="bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-1 rounded-full border border-slate-200 flex items-center gap-1.5">
+                                #{tag}
+                                <button onClick={() => handleRemoveTag(tag)} className="text-slate-400 hover:text-red-500 rounded-full">
+                                    <X size={12} />
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1 relative">
+                            <input 
+                                type="text" 
+                                value={tagInput}
+                                onChange={(e) => setTagInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                                placeholder="Yeni etiket yazıp Enter'a basın..."
+                                className="w-full bg-white border border-slate-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                            <button onClick={handleAddTag} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600">
+                                <Plus size={16} />
+                            </button>
+                        </div>
+                        <button 
+                            onClick={handleAutoGenerateContext} 
+                            disabled={isGeneratingContext}
+                            className="bg-violet-50 text-violet-600 border border-violet-200 hover:bg-violet-100 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+                        >
+                            {isGeneratingContext ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                            AI ile Üret
+                        </button>
+                    </div>
+                 </div>
+            </div>
+
+            {/* 5. AI CONTEXT SECTION */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                  <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                     <div className="flex items-center gap-2">
