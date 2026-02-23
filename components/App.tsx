@@ -405,7 +405,7 @@ const App: React.FC = () => {
               <button onClick={() => setIsDataCheckOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-cyan-700 bg-cyan-100 rounded hover:bg-cyan-200 mr-2"><Scale size={14} className="mr-1.5" /> Veri Kontrol</button>
               <button onClick={() => setIsHealthModalOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
               
-              <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 rounded transition-colors mr-2 shadow-sm"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
+              <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-100 rounded hover:bg-purple-200 mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
               
               <div className="w-px h-6 bg-slate-200 mx-2"></div>
               
