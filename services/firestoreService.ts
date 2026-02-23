@@ -9,8 +9,7 @@ import {
   addDoc, 
   deleteDoc, 
   writeBatch,
-  query,
-  select
+  query
 } from 'firebase/firestore';
 import { HotelNode, HotelSummary, HotelTemplate, AIPersona, NodeTemplate } from '../types';
 import { getLocalizedValue } from '../utils/treeUtils';

@@ -712,6 +712,37 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       finally { setTranslatingFieldId(null); }
   };
 
+  const handleSubAttributeTranslate = async (parentAttrId: string, subAttrId: string) => {
+      const parentAttr = node.attributes?.find(a => a.id === parentAttrId);
+      if (!parentAttr || !parentAttr.subAttributes) return;
+      
+      const subAttr = parentAttr.subAttributes.find(sa => sa.id === subAttrId);
+      if (!subAttr) return;
+
+      setTranslatingFieldId(subAttrId);
+      try {
+          const valObj = ensureLocalized(subAttr.value);
+          if (valObj.tr && !valObj.en) {
+              const translated = await translateText(valObj.tr, 'en');
+              
+              // Manual update for sub-attribute
+              const currentAttrs = [...(node.attributes || [])];
+              const parentIdx = currentAttrs.findIndex(a => a.id === parentAttrId);
+              const updatedParent = { ...currentAttrs[parentIdx] };
+              const updatedSubs = [...(updatedParent.subAttributes || [])];
+              const subIdx = updatedSubs.findIndex(sa => sa.id === subAttrId);
+              
+              if (subIdx >= 0) {
+                  updatedSubs[subIdx] = { ...updatedSubs[subIdx], value: { ...valObj, en: translated } };
+                  updatedParent.subAttributes = updatedSubs;
+                  currentAttrs[parentIdx] = updatedParent;
+                  onUpdate(node.id, { attributes: currentAttrs });
+              }
+          }
+      } catch (e) { console.error(e); }
+      finally { setTranslatingFieldId(null); }
+  };
+
   // UNIFIED UPDATE HANDLER
   // Handles updates for both Template-based and Custom attributes
   const handleAttributeUpdate = (attrId: string, fieldDef: TemplateField | undefined, value: LocalizedText, keyUpdate?: LocalizedText) => {
@@ -1253,6 +1284,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                                     onChange={(val) => handleSubAttributeUpdate(attr.id, subDef, val)}
                                                                     activeTab={activeTab}
                                                                     onTabChange={setDisplayLanguage}
+                                                                    actionButton={activeTab === 'en' ? (
+                                                                        <button 
+                                                                            onClick={() => handleSubAttributeTranslate(attr.id, subMatch!.id)}
+                                                                            disabled={translatingFieldId === subMatch!.id}
+                                                                            className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                                            title="Translate this field"
+                                                                        >
+                                                                            {translatingFieldId === subMatch!.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                                                        </button>
+                                                                    ) : undefined}
                                                                 />
                                                             </div>
                                                         </div>

@@ -5,19 +5,19 @@ import {
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
   analyzeHotelStats, filterHotelTree, addChildToNode 
 } from '../utils/treeUtils';
-import TreeViewNode from './components/TreeViewNode';
-import NodeEditor from './components/NodeEditor';
-import ChatBot from './components/ChatBot';
-import AIArchitectModal from './components/AIArchitectModal';
-import DataHealthModal from './components/DataHealthModal';
-import CreateHotelModal from './components/CreateHotelModal';
-import TemplateModal from './components/TemplateModal';
-import DataCheckModal from './components/DataCheckModal'; 
-import AIPersonaModal from './components/AIPersonaModal';
-import TemplateManager from './components/TemplateManager';
-import ExportModal from './components/ExportModal'; // NEW
-import { fetchHotelById, getHotelsList, createNewHotel } from './services/firestoreService';
-import { useHotel } from './contexts/HotelContext'; 
+import TreeViewNode from './TreeViewNode';
+import NodeEditor from './NodeEditor';
+import ChatBot from './ChatBot';
+import AIArchitectModal from './AIArchitectModal';
+import DataHealthModal from './DataHealthModal';
+import CreateHotelModal from './CreateHotelModal';
+import TemplateModal from './TemplateModal';
+import DataCheckModal from './DataCheckModal'; 
+import AIPersonaModal from './AIPersonaModal';
+import TemplateManager from './TemplateManager';
+import ExportModal from './ExportModal'; // NEW
+import { fetchHotelById, getHotelsList, createNewHotel } from '../services/firestoreService';
+import { useHotel } from '../contexts/HotelContext'; 
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
@@ -405,7 +405,15 @@ const App: React.FC = () => {
               <button onClick={() => setIsDataCheckOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-cyan-700 bg-cyan-100 rounded hover:bg-cyan-200 mr-2"><Scale size={14} className="mr-1.5" /> Veri Kontrol</button>
               <button onClick={() => setIsHealthModalOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
               
-              <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-[#7c3aed] hover:bg-[#6d28d9] rounded shadow-sm transition-colors mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
+              {/* REDESIGNED AI ARCHITECT BUTTON - SOLID COLOR FALLBACK */}
+              <button 
+                onClick={() => setIsArchitectOpen(true)} 
+                className="flex items-center gap-2 px-4 py-2 text-[11px] font-black text-white bg-[#7c3aed] hover:bg-[#6d28d9] rounded-lg shadow-md hover:shadow-lg transition-all duration-200 mr-2 border border-white/10 active:scale-95"
+                style={{ backgroundColor: '#7c3aed' }}
+              >
+                <Sparkles size={14} className="animate-pulse" />
+                <span className="uppercase tracking-wider">AI Mimar</span>
+              </button>
               
               <div className="w-px h-6 bg-slate-200 mx-2"></div>
               
@@ -425,7 +433,13 @@ const App: React.FC = () => {
                {mobileToolsOpen && (
                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-2">
                     <button onClick={() => { setIsTemplateManagerOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><LayoutTemplate size={16} /> Şablonlar</button>
-                    <button onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-[#7c3aed] hover:bg-[#f5f3ff] font-medium"><Sparkles size={16} /> AI Mimar</button>
+                    <button 
+                      onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} 
+                      className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-white bg-[#7c3aed] hover:bg-[#6d28d9] font-bold"
+                      style={{ backgroundColor: '#7c3aed' }}
+                    >
+                      <Sparkles size={16} /> AI Mimar
+                    </button>
                     <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>
                  </div>
                )}
@@ -505,7 +519,7 @@ const App: React.FC = () => {
              {/* AI READABILITY BAR (NEW) */}
              <div className="w-full max-w-[140px] flex flex-col gap-1">
                 <div className="flex justify-between items-center text-[9px] uppercase font-bold text-slate-500">
-                    <span className="flex items-center gap-1"><Brain size={10} className="text-[#8b5cf6]" /> AI Okunabilirlik</span>
+                    <span className="flex items-center gap-1"><Brain size={10} className="text-primary-500" /> AI Okunabilirlik</span>
                     <span>%{stats.aiReadabilityScore}</span>
                 </div>
                 <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden" title="Yapay zeka için verilerin ne kadar anlaşılır olduğu">
