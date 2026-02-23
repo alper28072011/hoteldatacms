@@ -580,3 +580,51 @@ export const runDataCheck = async (data: HotelNode, sourceType: 'url' | 'text' |
          return { summary: "Comparison failed.", items: [] };
      }
 }
+
+export const askDataCoach = async (data: HotelNode, userQuestion: string, history: {role: string, parts: string[]}[]): Promise<string> => {
+    try {
+        // LIMITS REMOVED: Sending full context
+        const textContext = await generateAIText(data, () => {});
+        
+        const systemInstruction = `
+        Sen uzman bir "AI Veri Mimarı" ve "Otel Veri Seti Koçusun".
+        
+        GÖREVİN:
+        Kullanıcının otel veri setini oluştururken karşılaştığı kafa karışıklıklarını gidermek ve veriyi LLM'lerin (Yapay Zeka Modellerinin) en iyi anlayabileceği şekilde yapılandırması için ona rehberlik etmek.
+        
+        MEVCUT VERİ YAPISI (JSON Ağacı Özeti):
+        ${textContext}
+        
+        KURALLAR:
+        1. **Analiz Et**: Kullanıcının sorusunu mevcut veri yapısıyla karşılaştır.
+        2. **Tavsiye Ver**: Veriyi nereye eklemesi gerektiğini, hangi kategoriyi kullanması gerektiğini veya yeni bir kategori açıp açmaması gerektiğini söyle.
+        3. **Nedenini Açıkla**: "Bunu 'Oda Özellikleri' altına eklersen AI, oda fiyatını soran birine daha iyi yanıt verir" gibi mantıksal gerekçeler sun.
+        4. **Örnek Göster**: Gerekirse "Şöyle bir yapı kurabilirsin:" diyerek küçük bir JSON veya hiyerarşi örneği ver.
+        5. **Nazik ve Eğitici Ol**: Kullanıcıyı azarlama, ona en iyi pratikleri (Best Practices) öğret.
+        6. **Dili Türkçe Kullan**.
+        
+        KULLANICI SORUSU: "${userQuestion}"
+        
+        Sadece tavsiye ve yönlendirme yap. Kod yazma, sadece mantığı ve yapıyı anlat.
+        `;
+
+        const chat = ai.chats.create({
+            model: modelConfig.model,
+            config: {
+                systemInstruction,
+                temperature: 0.7 // Slightly creative for coaching
+            },
+            history: history.map(h => ({
+                role: h.role,
+                parts: [{ text: h.parts[0] }]
+            }))
+        });
+
+        const result = await chat.sendMessage({ message: userQuestion });
+        return result.text || "Üzgünüm, şu an cevap veremiyorum.";
+
+    } catch (error) {
+        console.error("Data Coach Error:", error);
+        return "Veri koçu şu an müsait değil. Lütfen biraz sonra tekrar deneyin.";
+    }
+};

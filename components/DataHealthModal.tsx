@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { HotelNode, HealthReport, HealthIssue } from '../types';
-import { generateHealthReport, autoFixDatabase, AutoFixAction } from '../services/geminiService';
+import { generateHealthReport, autoFixDatabase, AutoFixAction, askDataCoach } from '../services/geminiService';
 import { runLocalValidation } from '../utils/validationUtils';
 import { useHotel } from '../contexts/HotelContext'; // Context access needed for updating tree scores
-import { X, Activity, Check, TriangleAlert, Sparkles, Loader2, RefreshCw, Zap, Search, BrainCircuit, Wand2, ArrowRight } from 'lucide-react';
+import { X, Activity, Check, TriangleAlert, Sparkles, Loader2, RefreshCw, Zap, Search, BrainCircuit, Wand2, ArrowRight, MessageSquare, Send } from 'lucide-react';
 
 interface DataHealthModalProps {
   isOpen: boolean;
@@ -24,8 +24,16 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
   const [reportSummary, setReportSummary] = useState<string>('');
   
   const [isScanning, setIsScanning] = useState(false);
-  const [activeTab, setActiveTab] = useState<'local' | 'autofix'>('local');
+  const [activeTab, setActiveTab] = useState<'local' | 'autofix' | 'coach'>('local');
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
+
+  // Coach State
+  const [coachMessages, setCoachMessages] = useState<{role: 'user' | 'model', text: string}[]>([
+      { role: 'model', text: 'Merhaba! Ben AI Veri Koçunuzum. Veri setinizi oluştururken kafanıza takılan, "Bunu nereye eklemeliyim?" veya "Bu yapıyı nasıl kurmalıyım?" gibi sorularınızı bana sorabilirsiniz. Mevcut verinizi inceleyip size en iyi yöntemi önereceğim.' }
+  ]);
+  const [coachInput, setCoachInput] = useState('');
+  const [isCoachThinking, setIsCoachThinking] = useState(false);
+  const chatEndRef = React.useRef<HTMLDivElement>(null);
 
   // Modalı açınca yerel doğrulamayı çalıştır
   useEffect(() => {
@@ -34,6 +42,12 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
       setLocalReport(issues);
     }
   }, [isOpen, data]);
+
+  useEffect(() => {
+      if (activeTab === 'coach') {
+          chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+  }, [coachMessages, activeTab]);
 
   const runAutoFixScan = async () => {
     setIsScanning(true);
@@ -105,11 +119,32 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
     }
   };
 
+  const handleCoachSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!coachInput.trim() || isCoachThinking) return;
+
+      const userMsg = coachInput.trim();
+      setCoachMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+      setCoachInput('');
+      setIsCoachThinking(true);
+
+      try {
+          // Convert history format for API
+          const historyForApi = coachMessages.map(m => ({ role: m.role, parts: [m.text] }));
+          const response = await askDataCoach(data, userMsg, historyForApi);
+          setCoachMessages(prev => [...prev, { role: 'model', text: response }]);
+      } catch (error) {
+          setCoachMessages(prev => [...prev, { role: 'model', text: "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin." }]);
+      } finally {
+          setIsCoachThinking(false);
+      }
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden min-h-[500px]">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[90vh] overflow-hidden min-h-[600px]">
         
         {/* Header */}
         <div className="bg-white border-b border-slate-200 p-6 flex justify-between items-center shrink-0">
@@ -119,7 +154,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
              </div>
              <div>
                 <h2 className="text-xl font-bold text-slate-800">Sağlık ve Onarım Merkezi</h2>
-                <p className="text-sm text-slate-500">Doğrulama & Otomatik Düzeltme</p>
+                <p className="text-sm text-slate-500">Doğrulama, Otomatik Düzeltme & Veri Koçluğu</p>
              </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition-colors">
@@ -131,12 +166,12 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-slate-50">
            
            {/* Sidebar */}
-           <div className="w-full md:w-1/3 bg-slate-50 md:border-r border-b md:border-b-0 border-slate-200 p-6 flex flex-col shrink-0 overflow-y-auto">
+           <div className="w-full md:w-1/3 bg-slate-50 md:border-r border-b md:border-b-0 border-slate-200 p-6 flex flex-col shrink-0 overflow-y-auto gap-4">
                 
                 {/* Local Status */}
                 <div 
                     onClick={() => setActiveTab('local')}
-                    className={`p-4 rounded-xl border cursor-pointer transition-all mb-4 ${activeTab === 'local' ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-200 hover:border-blue-300'}`}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all ${activeTab === 'local' ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-200 hover:border-blue-300'}`}
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="flex items-center gap-2 text-sm font-bold text-slate-700">
@@ -177,13 +212,27 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                         </button>
                     )}
                 </div>
+
+                {/* AI Data Coach Tab */}
+                <div 
+                    onClick={() => setActiveTab('coach')}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all ${activeTab === 'coach' ? 'bg-white border-emerald-400 shadow-md ring-1 ring-emerald-100' : 'bg-white border-slate-200 hover:border-emerald-300'}`}
+                >
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                            <MessageSquare size={16} className="text-emerald-500" /> AI Veri Koçu
+                        </span>
+                        <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">YENİ</span>
+                    </div>
+                    <div className="text-xs text-slate-500">Veri setinizi nasıl yapılandıracağınız konusunda kararsız mısınız? Koçunuza danışın.</div>
+                </div>
            </div>
 
            {/* Main List */}
            <div className="flex-1 bg-white flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
                     <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                        {activeTab === 'local' ? 'Tespit Edilen Yapısal Sorunlar' : 'Yapay Zeka Onarım Önerileri'}
+                        {activeTab === 'local' ? 'Tespit Edilen Yapısal Sorunlar' : activeTab === 'autofix' ? 'Yapay Zeka Onarım Önerileri' : 'AI Veri Seti Koçu'}
                     </h3>
                     
                     {activeTab === 'autofix' && autoFixes.length > 0 && (
@@ -196,7 +245,7 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                     )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 relative">
                     {/* AUTO FIX LIST */}
                     {activeTab === 'autofix' && (
                         autoFixes.length === 0 ? (
@@ -290,6 +339,56 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                                 )
                             })
                         )
+                    )}
+
+                    {/* AI DATA COACH CHAT UI */}
+                    {activeTab === 'coach' && (
+                        <div className="flex flex-col h-full">
+                            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                                {coachMessages.map((msg, idx) => (
+                                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                                            msg.role === 'user' 
+                                            ? 'bg-emerald-600 text-white rounded-br-none' 
+                                            : 'bg-slate-100 text-slate-700 rounded-bl-none border border-slate-200'
+                                        }`}>
+                                            {msg.role === 'model' && (
+                                                <div className="flex items-center gap-2 mb-1 text-emerald-600 font-bold text-xs uppercase tracking-wider">
+                                                    <Sparkles size={12} /> AI Veri Koçu
+                                                </div>
+                                            )}
+                                            <div className="whitespace-pre-wrap">{msg.text}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {isCoachThinking && (
+                                    <div className="flex justify-start">
+                                        <div className="bg-slate-50 text-slate-500 rounded-2xl rounded-bl-none px-4 py-3 border border-slate-100 flex items-center gap-2 text-xs">
+                                            <Loader2 size={14} className="animate-spin" /> Koç düşünüyor...
+                                        </div>
+                                    </div>
+                                )}
+                                <div ref={chatEndRef} />
+                            </div>
+                            
+                            <form onSubmit={handleCoachSubmit} className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+                                <input 
+                                    type="text" 
+                                    value={coachInput}
+                                    onChange={(e) => setCoachInput(e.target.value)}
+                                    placeholder="Veri seti hakkında bir soru sorun..."
+                                    className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                    disabled={isCoachThinking}
+                                />
+                                <button 
+                                    type="submit" 
+                                    disabled={!coachInput.trim() || isCoachThinking}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <Send size={20} />
+                                </button>
+                            </form>
+                        </div>
                     )}
                 </div>
            </div>
