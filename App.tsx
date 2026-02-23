@@ -213,6 +213,24 @@ const App: React.FC = () => {
       }
   };
 
+  const handleAutoFixAction = (action: AutoFixAction) => {
+      try {
+          if (action.type === 'move' && action.destinationId) {
+              moveNode(action.targetId, action.destinationId, 'inside');
+              setNotification({ message: "Öğe taşındı.", type: 'success' });
+          } else if (action.type === 'update' && action.payload) {
+              updateNode(action.targetId, action.payload);
+              setNotification({ message: "Öğe güncellendi.", type: 'success' });
+          } else if (action.type === 'changeType' && action.payload) {
+              updateNode(action.targetId, action.payload);
+              setNotification({ message: "Tip değiştirildi.", type: 'success' });
+          }
+      } catch (e) {
+          console.error("Auto fix failed", e);
+          setNotification({ message: "Düzeltme uygulanamadı.", type: 'error' });
+      }
+  };
+
   const handleDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData('nodeId', id);
     e.dataTransfer.effectAllowed = 'move';
@@ -348,6 +366,7 @@ const App: React.FC = () => {
         data={hotelData} 
         onApplyFix={updateNode} 
         onLocate={(id) => setSelectedNodeId(id)}
+        onAutoFixApply={handleAutoFixAction}
       />
       
       <DataCheckModal isOpen={isDataCheckOpen} onClose={() => setIsDataCheckOpen(false)} data={hotelData} onApplyAction={(action) => {
