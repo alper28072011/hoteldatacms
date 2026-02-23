@@ -772,6 +772,22 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                                                 </div>
                                                                                 <button onClick={() => handleDeleteSubField(field.id, sub.id)} className="mt-5 text-slate-300 hover:text-red-500"><X size={14}/></button>
                                                                             </div>
+
+                                                                            {/* Sub AI Description */}
+                                                                            <div className="col-span-2">
+                                                                                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                                                                    <BrainCircuit size={10} className="text-violet-500"/> AI Açıklaması (İpucu)
+                                                                                </label>
+                                                                                <LocalizedTextInput 
+                                                                                    value={ensureLocalized(sub.aiDescription)} 
+                                                                                    onChange={(val) => handleUpdateSubField(field.id, sub.id, { aiDescription: val })} 
+                                                                                    activeTab={activeTab}
+                                                                                    placeholder="AI için ipucu..."
+                                                                                    className="w-full"
+                                                                                    allowEnhance={true}
+                                                                                    enhanceType="description"
+                                                                                />
+                                                                            </div>
                                                                             
                                                                             {/* Sub Options (if select) */}
                                                                             {(sub.type === 'select' || sub.type === 'multiselect') && (
