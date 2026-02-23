@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { HotelNode, ArchitectAction, HotelSummary, SuggestedAction } from './types';
+import { AutoFixAction } from './services/geminiService';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
   analyzeHotelStats, filterHotelTree, generateOptimizedCSV, generateCleanAIJSON, 

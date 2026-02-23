@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType, TemplateField } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes, generateSlug, getLocalizedValue, ensureLocalized } from '../utils/treeUtils';
 import { generateNodeContext, generateValueFromAttributes, translateText } from '../services/geminiService';
-import { validateNodeInput } from '../utils/validationUtils';
+import { validateNodeInput, runLocalValidation } from '../utils/validationUtils';
 import { useHotel } from '../contexts/HotelContext';
 import { 
   Tag, Trash2, LayoutDashboard, Box, BrainCircuit, Sparkles, Loader2, 
@@ -12,8 +12,89 @@ import {
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
-  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy
+  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy, Activity
 } from 'lucide-react';
+import { HealthIssue } from '../types';
+
+// --- HELPER COMPONENT: NODE HEALTH BANNER ---
+const NodeHealthBanner: React.FC<{ node: HotelNode, issues: HealthIssue[] }> = ({ node, issues }) => {
+    const aiScore = node.aiConfidence !== undefined ? node.aiConfidence : 100; // Default to 100 if not scanned
+    const hasLocalIssues = issues.length > 0;
+    
+    // Determine Status
+    let status: 'critical' | 'warning' | 'good' = 'good';
+    if (aiScore < 50 || issues.some(i => i.severity === 'critical')) status = 'critical';
+    else if (aiScore < 80 || issues.length > 0) status = 'warning';
+
+    if (status === 'good') {
+         // Show success message if local checks pass but AI hasn't scanned yet (or score is high)
+         if (node.aiConfidence === undefined && !hasLocalIssues) {
+             return (
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 mb-6 flex items-center gap-3 animate-in fade-in">
+                    <div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-full"><Check size={16} /></div>
+                    <div className="text-xs text-emerald-700 font-medium">
+                        Yerel kontroller başarılı. Tam onay için AI taraması yapabilirsiniz.
+                    </div>
+                </div>
+             );
+         }
+         return null; 
+    }
+
+    return (
+        <div className={`rounded-lg border p-4 mb-6 animate-in slide-in-from-top-2 ${
+            status === 'critical' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+        }`}>
+            <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-full shrink-0 ${
+                    status === 'critical' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+                }`}>
+                    <Activity size={20} />
+                </div>
+                <div className="flex-1">
+                    <h4 className={`text-sm font-bold mb-1 ${
+                        status === 'critical' ? 'text-red-800' : 'text-amber-800'
+                    }`}>
+                        Veri Sağlığı Uyarısı
+                    </h4>
+                    
+                    <div className="space-y-2">
+                        {/* AI Score Warning */}
+                        {aiScore < 80 && (
+                            <div className="flex items-center gap-2 text-xs font-medium opacity-90">
+                                <span className={`w-2 h-2 rounded-full ${aiScore < 50 ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`}></span>
+                                <span>
+                                    AI Güven Skoru: <strong>%{aiScore}</strong> 
+                                    {aiScore < 50 ? ' (Kritik Düzeyde Düşük)' : ' (İyileştirilmesi Önerilir)'}
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Local Issues */}
+                        {issues.map((issue, idx) => (
+                            <div key={idx} className={`text-xs flex items-start gap-1.5 ${
+                                status === 'critical' ? 'text-red-700' : 'text-amber-700'
+                            }`}>
+                                <TriangleAlert size={12} className="mt-0.5 shrink-0" />
+                                <span>{issue.message}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Suggestion Footer */}
+                    <div className={`mt-3 text-[11px] font-medium border-t pt-2 ${
+                         status === 'critical' ? 'border-red-200 text-red-600' : 'border-amber-200 text-amber-600'
+                    }`}>
+                        <span className="flex items-center gap-1">
+                            <Sparkles size={12} />
+                            ÖNERİ: {issues[0]?.fix?.description || "Eksik alanları doldurun veya çevirileri tamamlayın."}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // --- HELPER COMPONENT: LANGUAGE TOGGLE ---
 const LanguageToggle = ({ activeTab, onTabChange }: { activeTab: 'tr' | 'en', onTabChange: (t: 'tr' | 'en') => void }) => (
@@ -494,6 +575,12 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
     return findPathToNode(root, node.id) || [];
   }, [root, node]);
 
+  // Calculate Health Issues (Local)
+  const healthIssues = useMemo(() => {
+      if (!root || !node) return [];
+      return runLocalValidation(root).filter(i => i.nodeId === node.id);
+  }, [root, node]);
+
   // Determine active template
   const activeTemplate = useMemo(() => {
       return nodeTemplates.find(t => t.id === node?.appliedTemplateId) || null;
@@ -580,7 +667,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
     const potentialNode = { ...node, [field]: value };
     const error = validateNodeInput(potentialNode);
     setValidationError(error);
-    onUpdate(node.id, { [field]: value });
+    // Reset AI Confidence on edit because the content has changed
+    onUpdate(node.id, { [field]: value, aiConfidence: undefined });
   };
 
   const handleApplyTemplate = (templateId: string) => {
@@ -826,7 +914,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           }
       }
       
-      onUpdate(node.id, { attributes: currentAttrs });
+      onUpdate(node.id, { attributes: currentAttrs, aiConfidence: undefined });
   };
 
   // HANDLER FOR NESTED ATTRIBUTES (Conditional Logic)
@@ -889,25 +977,25 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
       parentAttr.subAttributes = currentSubs;
       currentAttrs[parentIdx] = parentAttr;
-      onUpdate(node.id, { attributes: currentAttrs });
+      onUpdate(node.id, { attributes: currentAttrs, aiConfidence: undefined });
   };
 
   const handleUpdateAttribute = (attrId: string, field: 'key' | 'value', value: LocalizedText) => {
       const currentAttributes = Array.isArray(node.attributes) ? node.attributes : [];
       const updated = currentAttributes.map(a => a.id === attrId ? { ...a, [field]: value } : a);
-      onUpdate(node.id, { attributes: updated });
+      onUpdate(node.id, { attributes: updated, aiConfidence: undefined });
   };
 
   const handleDeleteAttribute = (attrId: string) => {
       const currentAttributes = Array.isArray(node.attributes) ? node.attributes : [];
-      onUpdate(node.id, { attributes: currentAttributes.filter(a => a.id !== attrId) });
+      onUpdate(node.id, { attributes: currentAttributes.filter(a => a.id !== attrId), aiConfidence: undefined });
   };
 
   const handleAddAttribute = () => {
     if (!newAttrKey.tr.trim() && !newAttrKey.en.trim()) return;
     const newAttr: NodeAttribute = { id: generateId('attr'), key: { ...newAttrKey }, value: { ...newAttrValue }, type: 'text' };
     const currentAttributes = Array.isArray(node.attributes) ? [...node.attributes] : [];
-    onUpdate(node.id, { attributes: [...currentAttributes, newAttr] });
+    onUpdate(node.id, { attributes: [...currentAttributes, newAttr], aiConfidence: undefined });
     setNewAttrKey({ tr: '', en: '' });
     setNewAttrValue({ tr: '', en: '' });
   };
@@ -916,14 +1004,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       if (!tagInput.trim()) return;
       const currentTags = node.tags || [];
       if (!currentTags.includes(tagInput.trim())) {
-          onUpdate(node.id, { tags: [...currentTags, tagInput.trim()] });
+          onUpdate(node.id, { tags: [...currentTags, tagInput.trim()], aiConfidence: undefined });
       }
       setTagInput('');
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
       const currentTags = node.tags || [];
-      onUpdate(node.id, { tags: currentTags.filter(t => t !== tagToRemove) });
+      onUpdate(node.id, { tags: currentTags.filter(t => t !== tagToRemove), aiConfidence: undefined });
   };
 
   // UNIFIED HEADER SELECTORS
@@ -1115,6 +1203,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
             {validationError && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3 animate-in slide-in-from-top-2"><TriangleAlert size={18} className="text-amber-600 shrink-0 mt-0.5" /><div><h4 className="text-sm font-bold text-amber-800">Doğrulama Uyarısı</h4><p className="text-xs text-amber-700 mt-1">{validationError}</p></div></div>
             )}
+            
+            <NodeHealthBanner node={node} issues={healthIssues} />
             
             {missingRequiredCount > 0 && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3 animate-in slide-in-from-top-2">

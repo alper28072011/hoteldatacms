@@ -64,7 +64,39 @@ export const runLocalValidation = (root: HotelNode): HealthIssue[] => {
   // 5. Eksik Hizmet Detayları (Saat, Konum vb.)
   issues.push(...findMissingServiceDetails(root));
 
+  // 6. Çeviri Kontrolü (Yeni)
+  issues.push(...findTranslationIssues(root));
+
   return issues;
+};
+
+const findTranslationIssues = (node: HotelNode, issues: HealthIssue[] = []): HealthIssue[] => {
+    const name = getText(node.name);
+    const nameObj = typeof node.name === 'object' ? node.name : { tr: node.name, en: '' };
+    
+    // İsim Çevirisi Kontrolü
+    if (nameObj.tr && (!nameObj.en || nameObj.en.trim() === '')) {
+        issues.push(createIssue(node, 'warning', `"${name}" isminin İngilizce çevirisi eksik.`, 'Çeviri Ekle', { name: { ...nameObj, en: '[Translated Name]' } }));
+    }
+
+    // Değer/Açıklama Çevirisi Kontrolü
+    if (node.value && typeof node.value === 'object') {
+        if (node.value.tr && (!node.value.en || node.value.en.trim() === '')) {
+            issues.push(createIssue(node, 'warning', `"${name}" içeriğinin İngilizce çevirisi eksik.`, 'Çeviri Ekle', { value: { ...node.value, en: '[Translated Content]' } }));
+        }
+    }
+
+    // Cevap Çevirisi (QA Pair)
+    if (node.type === 'qa_pair' && node.answer && typeof node.answer === 'object') {
+        if (node.answer.tr && (!node.answer.en || node.answer.en.trim() === '')) {
+            issues.push(createIssue(node, 'warning', `"${name}" cevabının İngilizce çevirisi eksik.`, 'Çeviri Ekle', { answer: { ...node.answer, en: '[Translated Answer]' } }));
+        }
+    }
+
+    if (node.children) {
+        node.children.forEach(child => findTranslationIssues(child, issues));
+    }
+    return issues;
 };
 
 const createIssue = (
