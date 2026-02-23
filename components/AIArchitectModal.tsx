@@ -102,7 +102,7 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-6 flex justify-between items-start shrink-0">
+        <div className="bg-violet-600 p-6 flex justify-between items-start shrink-0">
           <div>
             <div className="flex items-center gap-2 text-white/90 mb-1">
               <Sparkles size={18} />
