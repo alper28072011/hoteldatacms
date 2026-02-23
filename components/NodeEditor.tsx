@@ -288,14 +288,17 @@ const DynamicFieldInput: React.FC<{
         if (fieldDef && fieldDef.options) {
             // If options are localized (object), pick active lang
             if (!Array.isArray(fieldDef.options) && typeof fieldDef.options === 'object') {
-                options = fieldDef.options[activeTab];
+                options = (fieldDef.options as any)[activeTab] || [];
             } else if (Array.isArray(fieldDef.options)) {
                 // Legacy support
                 options = fieldDef.options as string[];
             }
         } else if (attribute.options) {
-            options = attribute.options;
+            options = Array.isArray(attribute.options) ? attribute.options : [];
         }
+
+        // Safety check
+        if (!Array.isArray(options)) options = [];
 
         return (
             <div className="relative">
@@ -321,13 +324,16 @@ const DynamicFieldInput: React.FC<{
         let options: string[] = [];
         if (fieldDef && fieldDef.options) {
             if (!Array.isArray(fieldDef.options) && typeof fieldDef.options === 'object') {
-                options = fieldDef.options[activeTab];
+                options = (fieldDef.options as any)[activeTab] || [];
             } else if (Array.isArray(fieldDef.options)) {
                 options = fieldDef.options as string[];
             }
         } else if (attribute.options) {
-            options = attribute.options;
+            options = Array.isArray(attribute.options) ? attribute.options : [];
         }
+
+        // Safety check
+        if (!Array.isArray(options)) options = [];
 
         const currentSelected = propVal[activeTab] ? propVal[activeTab].split(',').map(s => s.trim()) : [];
 
