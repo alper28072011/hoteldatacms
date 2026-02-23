@@ -405,7 +405,7 @@ const App: React.FC = () => {
               <button onClick={() => setIsDataCheckOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-cyan-700 bg-cyan-100 rounded hover:bg-cyan-200 mr-2"><Scale size={14} className="mr-1.5" /> Veri Kontrol</button>
               <button onClick={() => setIsHealthModalOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
               
-              <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-100 rounded hover:bg-purple-200 mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
+              <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-[#7c3aed] hover:bg-[#6d28d9] rounded shadow-sm transition-colors mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
               
               <div className="w-px h-6 bg-slate-200 mx-2"></div>
               
@@ -425,7 +425,7 @@ const App: React.FC = () => {
                {mobileToolsOpen && (
                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-2">
                     <button onClick={() => { setIsTemplateManagerOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><LayoutTemplate size={16} /> Şablonlar</button>
-                    <button onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>
+                    <button onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-[#7c3aed] hover:bg-[#f5f3ff] font-medium"><Sparkles size={16} /> AI Mimar</button>
                     <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>
                  </div>
                )}
@@ -505,7 +505,7 @@ const App: React.FC = () => {
              {/* AI READABILITY BAR (NEW) */}
              <div className="w-full max-w-[140px] flex flex-col gap-1">
                 <div className="flex justify-between items-center text-[9px] uppercase font-bold text-slate-500">
-                    <span className="flex items-center gap-1"><Brain size={10} className="text-violet-500" /> AI Okunabilirlik</span>
+                    <span className="flex items-center gap-1"><Brain size={10} className="text-[#8b5cf6]" /> AI Okunabilirlik</span>
                     <span>%{stats.aiReadabilityScore}</span>
                 </div>
                 <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden" title="Yapay zeka için verilerin ne kadar anlaşılır olduğu">

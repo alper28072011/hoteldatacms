@@ -123,13 +123,13 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
           <div className="flex border-b border-slate-100 bg-slate-50/50">
              <button 
                 onClick={() => setActiveTab('chat')}
-                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'chat' ? 'border-violet-500 text-violet-700 bg-violet-50/50' : 'border-transparent text-slate-500 hover:bg-slate-100'}`}
+                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'chat' ? 'border-[#8b5cf6] text-[#6d28d9] bg-[#f5f3ff]/50' : 'border-transparent text-slate-500 hover:bg-slate-100'}`}
              >
                 <MessageSquare size={16} /> Natural Language
              </button>
              <button 
                 onClick={() => setActiveTab('file')}
-                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'file' ? 'border-violet-500 text-violet-700 bg-violet-50/50' : 'border-transparent text-slate-500 hover:bg-slate-100'}`}
+                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'file' ? 'border-[#8b5cf6] text-[#6d28d9] bg-[#f5f3ff]/50' : 'border-transparent text-slate-500 hover:bg-slate-100'}`}
              >
                 <UploadCloud size={16} /> File Import
              </button>
@@ -178,11 +178,11 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
                     <div 
                       className={`
                         border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all
-                        ${selectedFile ? 'border-violet-300 bg-violet-50' : 'border-slate-300 hover:border-violet-400 hover:bg-slate-50'}
+                        ${selectedFile ? 'border-[#c4b5fd] bg-[#f5f3ff]' : 'border-slate-300 hover:border-[#a78bfa] hover:bg-slate-50'}
                       `}
                       onClick={() => fileInputRef.current?.click()}
                     >
-                       <div className={`p-4 rounded-full mb-3 ${selectedFile ? 'bg-violet-200 text-violet-700' : 'bg-slate-100 text-slate-400'}`}>
+                       <div className={`p-4 rounded-full mb-3 ${selectedFile ? 'bg-[#ddd6fe] text-[#6d28d9]' : 'bg-slate-100 text-slate-400'}`}>
                           {selectedFile ? <FileText size={32} /> : <UploadCloud size={32} />}
                        </div>
                        
@@ -190,7 +190,7 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
                           <div>
                              <p className="text-sm font-bold text-slate-800">{selectedFile.name}</p>
                              <p className="text-xs text-slate-500 mt-1">{(selectedFile.size / 1024).toFixed(1)} KB • {selectedFile.type || 'Unknown Type'}</p>
-                             <p className="text-xs text-violet-600 font-medium mt-3">Click to change file</p>
+                             <p className="text-xs text-[#7c3aed] font-medium mt-3">Click to change file</p>
                           </div>
                        ) : (
                           <div>
