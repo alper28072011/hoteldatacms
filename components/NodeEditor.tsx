@@ -885,6 +885,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
           // SMART OPTION SYNC: If Select/Multiselect, try to sync other language automatically
           let syncedValue = { ...value };
+          
+          // 1. Sync for Select/Multiselect
           if ((fieldDef.type === 'select' || fieldDef.type === 'multiselect') && 
               fieldDef.options && !Array.isArray(fieldDef.options) && typeof fieldDef.options === 'object') {
               
@@ -910,6 +912,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
               }
           }
 
+          // 2. Sync for Numeric/Date/Time types (Universal Values)
+          if (['number', 'currency', 'date', 'time'].includes(fieldDef.type)) {
+              const currentLang = activeTab;
+              const otherLang = activeTab === 'tr' ? 'en' : 'tr';
+              if (value[currentLang] !== undefined) {
+                  syncedValue[otherLang] = value[currentLang];
+              }
+          }
+
           if (existingIdx >= 0) {
               currentAttrs[existingIdx] = { ...currentAttrs[existingIdx], value: syncedValue };
           } else {
@@ -927,7 +938,21 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           const existingIdx = currentAttrs.findIndex(a => a.id === attrId);
           if (existingIdx >= 0) {
               if (keyUpdate) currentAttrs[existingIdx].key = keyUpdate;
-              else currentAttrs[existingIdx].value = value;
+              else {
+                  let syncedValue = { ...value };
+                  const attr = currentAttrs[existingIdx];
+                  
+                  // Sync for Numeric/Date/Time types (Custom Attributes)
+                  if (['number', 'currency', 'date', 'time'].includes(attr.type)) {
+                      const currentLang = activeTab;
+                      const otherLang = activeTab === 'tr' ? 'en' : 'tr';
+                      if (value[currentLang] !== undefined) {
+                          syncedValue[otherLang] = value[currentLang];
+                      }
+                  }
+                  
+                  currentAttrs[existingIdx].value = syncedValue;
+              }
           }
       }
       
@@ -956,6 +981,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
       // SMART OPTION SYNC for Sub-attributes
       let syncedValue = { ...value };
+      
+      // 1. Sync for Select/Multiselect
       if ((fieldDef.type === 'select' || fieldDef.type === 'multiselect') && 
           fieldDef.options && !Array.isArray(fieldDef.options) && typeof fieldDef.options === 'object') {
           
@@ -977,6 +1004,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
               if (otherVals.length > 0) {
                   syncedValue[otherLang] = otherVals.join(', ');
               }
+          }
+      }
+
+      // 2. Sync for Numeric/Date/Time types
+      if (['number', 'currency', 'date', 'time'].includes(fieldDef.type)) {
+          const currentLang = activeTab;
+          const otherLang = activeTab === 'tr' ? 'en' : 'tr';
+          if (value[currentLang] !== undefined) {
+              syncedValue[otherLang] = value[currentLang];
           }
       }
 
