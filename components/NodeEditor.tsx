@@ -14,6 +14,7 @@ import {
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
   ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy, Activity
 } from 'lucide-react';
+import FullContentPreview from './FullContentPreview';
 import { HealthIssue } from '../types';
 
 // --- HELPER COMPONENT: NODE HEALTH BANNER ---
@@ -538,6 +539,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
   const { changeNodeId, displayLanguage, setDisplayLanguage, nodeTemplates, duplicateNode } = useHotel(); 
   
   const activeTab = displayLanguage; 
+  const [rootViewMode, setRootViewMode] = useState<'dashboard' | 'preview'>('dashboard');
   
   const stats = useMemo(() => node ? analyzeHotelStats(node) : null, [node]);
   
@@ -1179,9 +1181,124 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       return (
       <div className="h-full flex flex-col bg-slate-50/30">
         <div className="h-20 border-b border-slate-200 px-6 flex items-center justify-between bg-white shrink-0">
-          <div><h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard size={20} className="text-blue-600"/> Dashboard</h2></div>
-          <div className="text-right"><div className="text-sm font-medium text-slate-600">Toplam Öğe</div><div className="text-2xl font-bold text-slate-800 leading-none">{stats?.totalNodes || 0}</div></div>
+          <div className="flex items-center gap-6">
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <LayoutDashboard size={20} className="text-blue-600"/> 
+                {getLocalizedValue(node.name, activeTab) || 'Dashboard'}
+            </h2>
+            
+            {/* View Mode Toggle */}
+            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                <button 
+                    onClick={() => setRootViewMode('dashboard')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-2 ${rootViewMode === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    <LayoutDashboard size={14} /> Dashboard
+                </button>
+                <button 
+                    onClick={() => setRootViewMode('preview')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-2 ${rootViewMode === 'preview' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    <FileText size={14} /> İçerik Önizleme
+                </button>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+             <LanguageToggle activeTab={activeTab} onTabChange={setDisplayLanguage} />
+             <div className="h-8 w-px bg-slate-200"></div>
+             <div className="text-right">
+                <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Toplam Öğe</div>
+                <div className="text-xl font-bold text-slate-800 leading-none">{stats?.totalNodes || 0}</div>
+             </div>
+          </div>
         </div>
+
+        {rootViewMode === 'preview' ? (
+            <FullContentPreview node={node} language={activeTab} />
+        ) : (
+            <div className="flex-1 overflow-y-auto p-8">
+                {/* Dashboard Stats Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    {/* Total Nodes */}
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Database size={20} /></div>
+                            <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">GENEL</span>
+                        </div>
+                        <div className="text-3xl font-bold text-slate-800 mb-1">{stats?.totalNodes || 0}</div>
+                        <div className="text-xs text-slate-500">Toplam içerik öğesi</div>
+                    </div>
+
+                    {/* Missing Translations */}
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                         <div className="flex items-center justify-between mb-4">
+                            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><Languages size={20} /></div>
+                            <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">DİKKAT</span>
+                        </div>
+                        <div className="text-3xl font-bold text-slate-800 mb-1">{stats?.missingTranslations || 0}</div>
+                        <div className="text-xs text-slate-500">Eksik İngilizce çeviri</div>
+                    </div>
+
+                    {/* Empty Fields */}
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                         <div className="flex items-center justify-between mb-4">
+                            <div className="p-2 bg-red-50 text-red-600 rounded-lg"><AlertTriangle size={20} /></div>
+                            <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded">KRİTİK</span>
+                        </div>
+                        <div className="text-3xl font-bold text-slate-800 mb-1">{stats?.emptyFields || 0}</div>
+                        <div className="text-xs text-slate-500">Boş bırakılan alan</div>
+                    </div>
+
+                    {/* AI Score */}
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                         <div className="flex items-center justify-between mb-4">
+                            <div className="p-2 bg-violet-50 text-violet-600 rounded-lg"><BrainCircuit size={20} /></div>
+                            <span className="text-xs font-bold text-violet-600 bg-violet-50 px-2 py-1 rounded">AI SKOR</span>
+                        </div>
+                        <div className="text-3xl font-bold text-slate-800 mb-1">%{(stats?.aiReadiness || 0).toFixed(0)}</div>
+                        <div className="text-xs text-slate-500">İçerik olgunluk skoru</div>
+                    </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <Activity size={18} className="text-emerald-600" />
+                            Sistem Durumu
+                        </h3>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                <span className="text-sm font-medium text-slate-600">Veri Yapısı</span>
+                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded flex items-center gap-1"><Check size={12}/> SAĞLIKLI</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                <span className="text-sm font-medium text-slate-600">Son Güncelleme</span>
+                                <span className="text-xs font-mono text-slate-500">{new Date().toLocaleDateString('tr-TR')}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-xl shadow-lg p-6 text-white relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Sparkles size={120} />
+                        </div>
+                        <h3 className="text-xl font-bold mb-2 relative z-10">AI İçerik Asistanı</h3>
+                        <p className="text-indigo-100 text-sm mb-6 relative z-10 max-w-xs">
+                            Tüm içeriğinizi tek tıkla analiz edin, eksikleri bulun ve otomatik olarak tamamlayın.
+                        </p>
+                        <button 
+                            onClick={() => setRootViewMode('preview')}
+                            className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-50 transition-colors shadow-sm flex items-center gap-2 relative z-10"
+                        >
+                            <Eye size={16} />
+                            İçeriği İncele
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
       </div>
     );
   }
