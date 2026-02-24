@@ -1439,9 +1439,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
                                                     return (
                                                         <div key={subDef.id} className={`flex ${isSubTall ? 'items-start' : 'items-center'} gap-4`}>
-                                                            <div className={`w-1/3 min-w-[120px] flex items-center gap-1.5 ${isSubTall ? 'pt-2' : ''}`}>
-                                                                <CornerDownRight size={12} className="text-indigo-300 shrink-0" />
-                                                                <span className="text-xs font-semibold text-slate-600">{getLocalizedValue(subDef.label, activeTab)}</span>
+                                                            <div className={`w-1/3 min-w-[120px] ${isSubTall ? 'pt-2' : ''}`}>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <CornerDownRight size={12} className="text-indigo-300 shrink-0" />
+                                                                    <span className="text-xs font-semibold text-slate-600">{getLocalizedValue(subDef.label, activeTab)}</span>
+                                                                </div>
+                                                                {subDef.aiDescription && (
+                                                                    <div className="text-[10px] text-slate-400 mt-1 ml-4 leading-tight">
+                                                                        {getLocalizedValue(subDef.aiDescription, activeTab)}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             <div className="flex-1">
                                                                 <DynamicFieldInput 
