@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType, TemplateField } from '../types';
+import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType, TemplateField, ScheduleData } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes, generateSlug, getLocalizedValue, ensureLocalized } from '../utils/treeUtils';
 import { generateNodeContext, generateValueFromAttributes, translateText } from '../services/geminiService';
 import { validateNodeInput, runLocalValidation } from '../utils/validationUtils';
@@ -12,7 +12,7 @@ import {
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
-  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy, Activity
+  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy, Activity, Repeat
 } from 'lucide-react';
 import FullContentPreview from './FullContentPreview';
 import { HealthIssue } from '../types';
@@ -232,6 +232,136 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({
                     </div>
                 )}
             </div>
+        </div>
+    );
+};
+
+// --- HELPER COMPONENT: SCHEDULE INPUT ---
+const ScheduleInput: React.FC<{
+    value: LocalizedText;
+    onChange: (val: LocalizedText) => void;
+    activeTab: 'tr' | 'en';
+    hasError?: boolean;
+}> = ({ value, onChange, activeTab, hasError }) => {
+    // Parse existing data or default
+    const parseData = (jsonStr: string): ScheduleData => {
+        try {
+            return JSON.parse(jsonStr);
+        } catch (e) {
+            return {
+                recurrence: 'daily',
+                startTime: '10:00',
+                endTime: '11:00',
+                daysOfWeek: []
+            };
+        }
+    };
+
+    // We store the JSON string in the localized text field.
+    // Ideally, schedule data is language-agnostic, so we sync TR and EN.
+    const currentData = parseData(value.tr || value.en || '{}');
+
+    const updateData = (updates: Partial<ScheduleData>) => {
+        const newData = { ...currentData, ...updates };
+        const jsonStr = JSON.stringify(newData);
+        // Sync both languages as the schedule structure is universal
+        onChange({ tr: jsonStr, en: jsonStr });
+    };
+
+    const days = [
+        { key: 'Pzt', label: 'Pzt' },
+        { key: 'Sal', label: 'Sal' },
+        { key: 'Çar', label: 'Çar' },
+        { key: 'Per', label: 'Per' },
+        { key: 'Cum', label: 'Cum' },
+        { key: 'Cmt', label: 'Cmt' },
+        { key: 'Paz', label: 'Paz' },
+    ];
+
+    const toggleDay = (day: string) => {
+        const currentDays = currentData.daysOfWeek || [];
+        let newDays;
+        if (currentDays.includes(day)) {
+            newDays = currentDays.filter(d => d !== day);
+        } else {
+            newDays = [...currentDays, day];
+        }
+        updateData({ daysOfWeek: newDays });
+    };
+
+    return (
+        <div className={`w-full bg-white border rounded-lg p-3 text-sm space-y-3 ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}>
+            
+            {/* Recurrence Selector */}
+            <div className="flex items-center gap-2">
+                <Repeat size={14} className="text-slate-400" />
+                <select 
+                    value={currentData.recurrence}
+                    onChange={(e) => updateData({ recurrence: e.target.value as any })}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-300"
+                >
+                    <option value="daily">Her Gün</option>
+                    <option value="weekly">Haftalık</option>
+                    <option value="biweekly">İki Haftada Bir</option>
+                    <option value="once">Tek Seferlik</option>
+                </select>
+            </div>
+
+            {/* Date Picker (Only for Once) */}
+            {currentData.recurrence === 'once' && (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                    <Calendar size={14} className="text-slate-400" />
+                    <input 
+                        type="date" 
+                        value={currentData.startDate || ''}
+                        onChange={(e) => updateData({ startDate: e.target.value })}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300"
+                    />
+                </div>
+            )}
+
+            {/* Days Selector (For Weekly/Biweekly) */}
+            {(currentData.recurrence === 'weekly' || currentData.recurrence === 'biweekly') && (
+                <div className="flex gap-1 justify-between animate-in fade-in slide-in-from-top-1">
+                    {days.map(d => {
+                        const isSelected = currentData.daysOfWeek?.includes(d.key);
+                        return (
+                            <button
+                                key={d.key}
+                                onClick={() => toggleDay(d.key)}
+                                className={`w-8 h-8 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
+                                    isSelected 
+                                    ? 'bg-indigo-600 text-white shadow-sm scale-105' 
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                }`}
+                            >
+                                {d.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Time Range */}
+            <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                <Clock size={14} className="text-slate-400" />
+                <div className="flex items-center gap-2 flex-1">
+                    <input 
+                        type="time" 
+                        value={currentData.startTime}
+                        onChange={(e) => updateData({ startTime: e.target.value })}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
+                    />
+                    <span className="text-slate-300">-</span>
+                    <input 
+                        type="time" 
+                        value={currentData.endTime || ''}
+                        onChange={(e) => updateData({ endTime: e.target.value })}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
+                    />
+                </div>
+            </div>
+
         </div>
     );
 };
@@ -507,6 +637,22 @@ const DynamicFieldInput: React.FC<{
                 </div>
              </div>
         )
+    }
+
+    if (type === 'schedule') {
+        return (
+            <div className="relative group">
+                <ScheduleInput 
+                    value={localValue} 
+                    onChange={handleLocalChange} 
+                    activeTab={activeTab}
+                    hasError={hasError}
+                />
+                 <div className="absolute right-2 top-2 z-10 flex items-center">
+                    {renderActionButtons()}
+                </div>
+            </div>
+        );
     }
 
     // Default: Text

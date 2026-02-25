@@ -84,7 +84,16 @@ export type FieldType =
   | 'date'        // Calendar date
   | 'time'        // Clock time
   | 'currency'    // Price field
+  | 'schedule'    // Event Schedule
   | 'separator';  // Visual divider / Section Header
+
+export interface ScheduleData {
+  recurrence: 'daily' | 'weekly' | 'biweekly' | 'once';
+  daysOfWeek?: string[]; // ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
+  startDate?: string;    // YYYY-MM-DD (Tek seferlik etkinlikler veya başlangıç tarihi için)
+  startTime: string;     // Örn: "10:00"
+  endTime?: string;      // Örn: "11:30"
+}
 
 export interface NodeAttribute {
   id: string;

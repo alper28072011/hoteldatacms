@@ -621,6 +621,34 @@ export const generateCleanAIJSON = (
 };
 
 // --- EXPORT FUNCTION: MARKDOWN / TXT ---
+
+const translateScheduleToNaturalLanguage = (jsonStr: string, lang: 'tr' | 'en'): string => {
+    try {
+        const data: ScheduleData = JSON.parse(jsonStr);
+        const { recurrence, daysOfWeek, startDate, startTime, endTime } = data;
+        const timeRange = endTime ? `${startTime} - ${endTime}` : startTime;
+
+        if (lang === 'tr') {
+            if (recurrence === 'daily') return `Her gün saat ${timeRange} arasında.`;
+            if (recurrence === 'weekly') return `Her hafta ${daysOfWeek?.join(', ')} günleri saat ${timeRange} arasında.`;
+            if (recurrence === 'biweekly') return `İki haftada bir ${daysOfWeek?.join(', ')} günleri saat ${timeRange} arasında.`;
+            if (recurrence === 'once') return `${startDate} tarihinde saat ${timeRange} (Tek seferlik).`;
+        } else {
+            const enDays = daysOfWeek?.map(d => {
+                const map: any = { 'Pzt': 'Mon', 'Sal': 'Tue', 'Çar': 'Wed', 'Per': 'Thu', 'Cum': 'Fri', 'Cmt': 'Sat', 'Paz': 'Sun' };
+                return map[d] || d;
+            });
+            if (recurrence === 'daily') return `Every day between ${timeRange}.`;
+            if (recurrence === 'weekly') return `Every week on ${enDays?.join(', ')} at ${timeRange}.`;
+            if (recurrence === 'biweekly') return `Every two weeks on ${enDays?.join(', ')} at ${timeRange}.`;
+            if (recurrence === 'once') return `On ${startDate} at ${timeRange} (One-time).`;
+        }
+        return jsonStr;
+    } catch (e) {
+        return jsonStr;
+    }
+};
+
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void,
@@ -638,9 +666,24 @@ export const generateAIText = async (
   const totalNodes = countNodes(root);
 
   // Helper to format localized output for text
-  const formatTextLine = (label: string, val: LocalizedText | string | undefined): string => {
+  const formatTextLine = (label: string, val: LocalizedText | string | undefined, type?: FieldType): string => {
       const v = getExportValue(val, config);
       if (!v) return '';
+      
+      // SPECIAL HANDLING FOR SCHEDULE
+      if (type === 'schedule') {
+          const parts: string[] = [];
+          if (config.languages.includes('tr')) {
+             const trVal = typeof val === 'object' ? val.tr : (val as string);
+             parts.push(`[TR] ${translateScheduleToNaturalLanguage(trVal, 'tr')}`);
+          }
+          if (config.languages.includes('en')) {
+             const enVal = typeof val === 'object' ? val.en : (val as string);
+             parts.push(`[EN] ${translateScheduleToNaturalLanguage(enVal, 'en')}`);
+          }
+          if (parts.length > 0) return `${label}: ${parts.join(' / ')}`;
+      }
+
       if (typeof v === 'string') return `${label}: ${v}`;
       // If object (multi-lang)
       const parts: string[] = [];
@@ -688,7 +731,11 @@ export const generateAIText = async (
           node.attributes.forEach(attr => {
               // Only process attributes, simpler than the display function
               const k = typeof getExportValue(attr.key, config) === 'string' ? getExportValue(attr.key, config) : JSON.stringify(getExportValue(attr.key, config));
-              const v = typeof getExportValue(attr.value, config) === 'string' ? getExportValue(attr.value, config) : JSON.stringify(getExportValue(attr.value, config));
+              
+              // Use formatTextLine logic for value to handle schedule
+              const vLine = formatTextLine("Value", attr.value, attr.type);
+              // Extract just the value part from "Value: ..."
+              const v = vLine.replace(/^Value: /, '');
               
               if (k && v) {
                   lines.push(`${indent}  + [Feat] ${k}: ${v}`);
@@ -696,7 +743,9 @@ export const generateAIText = async (
                   if (config.includeAIContext && attr.subAttributes) {
                       attr.subAttributes.forEach(sa => {
                           const sk = typeof getExportValue(sa.key, config) === 'string' ? getExportValue(sa.key, config) : JSON.stringify(getExportValue(sa.key, config));
-                          const sv = typeof getExportValue(sa.value, config) === 'string' ? getExportValue(sa.value, config) : JSON.stringify(getExportValue(sa.value, config));
+                          const svLine = formatTextLine("Value", sa.value, sa.type);
+                          const sv = svLine.replace(/^Value: /, '');
+                          
                           if (sk && sv) lines.push(`${indent}    > ${sk}: ${sv}`);
                       });
                   }

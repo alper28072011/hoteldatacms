@@ -32,6 +32,7 @@ const getTypeIcon = (type: FieldType) => {
         case 'date': return <Calendar size={14} className="text-pink-500"/>;
         case 'time': return <Clock size={14} className="text-cyan-500"/>;
         case 'currency': return <DollarSign size={14} className="text-green-600"/>;
+        case 'schedule': return <Calendar size={14} className="text-rose-500"/>;
         case 'separator': return <Minus size={14} className="text-slate-500"/>;
         default: return <Type size={14}/>;
     }
@@ -48,6 +49,7 @@ const getTypeLabel = (type: FieldType) => {
         case 'date': return 'Tarih';
         case 'time': return 'Saat';
         case 'currency': return 'Para Birimi';
+        case 'schedule': return 'Etkinlik Takvimi';
         case 'separator': return 'Ayraç / Başlık';
         default: return type;
     }
@@ -607,7 +609,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                                                 {/* Type Dropdown */}
                                                 {showTypeSelector?.index === index && showTypeSelector?.subIndex === undefined && (
                                                     <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-lg z-20 py-1 grid grid-cols-1 max-h-60 overflow-y-auto">
-                                                        {(['text', 'textarea', 'number', 'boolean', 'select', 'multiselect', 'date', 'time', 'currency', 'separator'] as FieldType[]).map(t => (
+                                                        {(['text', 'textarea', 'number', 'boolean', 'select', 'multiselect', 'date', 'time', 'currency', 'schedule', 'separator'] as FieldType[]).map(t => (
                                                             <button 
                                                                 key={t} 
                                                                 onClick={() => { handleUpdateField(field.id, { type: t }); setShowTypeSelector(null); }}
