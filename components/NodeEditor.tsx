@@ -836,7 +836,22 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           const valObj = ensureLocalized(attr.value);
           if (valObj.tr && !valObj.en) {
               const translated = await translateText(valObj.tr, 'en');
-              handleUpdateAttribute(attrId, 'value', { ...valObj, en: translated });
+              handleAttributeUpdate(attrId, undefined, { ...valObj, en: translated });
+          }
+      } catch (e) { console.error(e); }
+      finally { setTranslatingFieldId(null); }
+  };
+
+  const handleSingleAttributeKeyTranslate = async (attrId: string) => {
+      const attr = node.attributes?.find(a => a.id === attrId);
+      if (!attr) return;
+      
+      setTranslatingFieldId(attrId + '_key');
+      try {
+          const keyObj = ensureLocalized(attr.key);
+          if (keyObj.tr && !keyObj.en) {
+              const translated = await translateText(keyObj.tr, 'en');
+              handleAttributeUpdate(attrId, undefined, attr.value as LocalizedText, { ...keyObj, en: translated });
           }
       } catch (e) { console.error(e); }
       finally { setTranslatingFieldId(null); }
@@ -1620,6 +1635,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                             placeholder="Özellik Adı" 
                                             activeTab={activeTab} 
                                             onTabChange={setDisplayLanguage}
+                                            actionButton={activeTab === 'en' ? (
+                                                <button 
+                                                    onClick={() => handleSingleAttributeKeyTranslate(attr.id)}
+                                                    disabled={translatingFieldId === attr.id + '_key'}
+                                                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                    title="Translate this key"
+                                                >
+                                                    {translatingFieldId === attr.id + '_key' ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                                </button>
+                                            ) : undefined}
                                         />
                                     </div>
                                     <div className="flex-1 relative">
