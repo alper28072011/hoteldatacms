@@ -56,8 +56,8 @@ const ContentNodeRenderer: React.FC<{ node: HotelNode; level: number; language: 
                     <div className="mb-4 overflow-x-auto">
                         <table className="min-w-full text-sm text-left border-collapse">
                             <tbody>
-                                {node.attributes.map(attr => (
-                                    <tr key={attr.id} className="border-b border-slate-100 print:border-slate-200">
+                                {node.attributes.map((attr, index) => (
+                                    <tr key={attr.id || index} className="border-b border-slate-100 print:border-slate-200">
                                         <td className="py-1.5 pr-4 font-semibold text-slate-600 w-1/3 align-top">
                                             {getLocalizedValue(attr.key, language)}
                                         </td>
@@ -66,8 +66,8 @@ const ContentNodeRenderer: React.FC<{ node: HotelNode; level: number; language: 
                                             {/* Sub Attributes */}
                                             {attr.subAttributes && attr.subAttributes.length > 0 && (
                                                 <div className="mt-1 pl-4 border-l-2 border-slate-200">
-                                                    {attr.subAttributes.map(sub => (
-                                                        <div key={sub.id} className="flex gap-2 text-xs mt-1">
+                                                    {attr.subAttributes.map((sub, subIndex) => (
+                                                        <div key={sub.id || subIndex} className="flex gap-2 text-xs mt-1">
                                                             <span className="font-medium text-slate-500">{getLocalizedValue(sub.key, language)}:</span>
                                                             <span>{getLocalizedValue(sub.value, language)}</span>
                                                         </div>
@@ -85,8 +85,8 @@ const ContentNodeRenderer: React.FC<{ node: HotelNode; level: number; language: 
                 {/* Tags */}
                 {node.tags && node.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-3 print:hidden">
-                        {node.tags.map(tag => (
-                            <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">#{tag}</span>
+                        {node.tags.map((tag, index) => (
+                            <span key={`${tag}-${index}`} className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">#{tag}</span>
                         ))}
                     </div>
                 )}
@@ -95,8 +95,8 @@ const ContentNodeRenderer: React.FC<{ node: HotelNode; level: number; language: 
             {/* Children Recursion */}
             {node.children && node.children.length > 0 && (
                 <div className="ml-4 border-l border-slate-100 pl-4 print:border-l-0 print:pl-0 print:ml-0">
-                    {node.children.map(child => (
-                        <ContentNodeRenderer key={child.id} node={child} level={level + 1} language={language} />
+                    {node.children.map((child, index) => (
+                        <ContentNodeRenderer key={child.id || index} node={child} level={level + 1} language={language} />
                     ))}
                 </div>
             )}
@@ -138,7 +138,7 @@ const FullContentPreview: React.FC<FullContentPreviewProps> = ({ node, language 
                 <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-xl min-h-[800px] p-12 print:shadow-none print:p-0" ref={componentRef}>
                     
                     {/* Cover Page Header */}
-                    <div className="text-center mb-12 border-b-2 border-slate-100 pb-8 print:h-screen print:flex print:flex-col print:justify-center print:items-center print:border-0 print:mb-0 print:pb-0">
+                    <div className="text-center mb-12 border-b-2 border-slate-100 pb-8 print:h-screen print:flex print:flex-col print:justify-center print:items-center print:border-0 print:mb-0 print:pb-0 print:page-break-after-always relative z-10 bg-white">
                         <div>
                             <h1 className="text-4xl font-extrabold text-slate-900 mb-2 uppercase tracking-tight">
                                 {getLocalizedValue(node.name, language) || 'Hotel Content'}
@@ -155,17 +155,10 @@ const FullContentPreview: React.FC<FullContentPreviewProps> = ({ node, language 
                     </div>
 
                     {/* Content Tree */}
-                    <div className="content-tree space-y-8">
-                        {node.children && node.children.map(child => (
-                            <ContentNodeRenderer key={child.id} node={child} level={0} language={language} />
+                    <div className="content-tree space-y-8 print:pb-12">
+                        {node.children && node.children.map((child, index) => (
+                            <ContentNodeRenderer key={child.id || index} node={child} level={0} language={language} />
                         ))}
-                    </div>
-
-                    {/* Footer for Print */}
-                    <div className="hidden print:flex fixed bottom-0 left-0 w-full justify-center items-center h-[40px] bg-white z-50">
-                        <div className="w-full border-t border-slate-300 pt-2 text-center text-[10px] text-slate-400">
-                           <span className="page-number-display"></span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -179,21 +172,17 @@ const FullContentPreview: React.FC<FullContentPreviewProps> = ({ node, language 
                     body {
                         -webkit-print-color-adjust: exact;
                     }
-                    /* Reserve space for footer */
-                    .content-tree {
-                        padding-bottom: 50px; 
+
+                    .print\:page-break-after-always {
+                        page-break-after: always;
                     }
+
                     .page-break-before-always {
                         page-break-before: always;
                     }
                     /* AI Hints Hide */
                     .ai-hint, .no-print {
                         display: none !important;
-                    }
-                    
-                    /* Attempt to show page numbers (Browser support varies) */
-                    .page-number-display::after {
-                        content: counter(page);
                     }
                 }
             `}</style>
