@@ -625,19 +625,34 @@ export const generateCleanAIJSON = (
 const translateScheduleToNaturalLanguage = (jsonStr: string, lang: 'tr' | 'en'): string => {
     try {
         const data: ScheduleData = JSON.parse(jsonStr);
-        const { recurrence, daysOfWeek, startDate, startTime, endTime } = data;
+        const { recurrence, daysOfWeek, startDate, startTime, endTime, sessions } = data;
         const timeRange = endTime ? `${startTime} - ${endTime}` : startTime;
 
         if (lang === 'tr') {
+            if (recurrence === 'complex' && sessions && sessions.length > 0) {
+                const sessionParts = sessions.map(s => {
+                    const tRange = s.endTime ? `${s.startTime} - ${s.endTime}` : s.startTime;
+                    return `${s.day} günleri saat ${tRange}`;
+                });
+                return `Etkinlik Programı: ${sessionParts.join(', ')}.`;
+            }
             if (recurrence === 'daily') return `Her gün saat ${timeRange} arasında.`;
             if (recurrence === 'weekly') return `Her hafta ${daysOfWeek?.join(', ')} günleri saat ${timeRange} arasında.`;
             if (recurrence === 'biweekly') return `İki haftada bir ${daysOfWeek?.join(', ')} günleri saat ${timeRange} arasında.`;
             if (recurrence === 'once') return `${startDate} tarihinde saat ${timeRange} (Tek seferlik).`;
         } else {
-            const enDays = daysOfWeek?.map(d => {
-                const map: any = { 'Pzt': 'Mon', 'Sal': 'Tue', 'Çar': 'Wed', 'Per': 'Thu', 'Cum': 'Fri', 'Cmt': 'Sat', 'Paz': 'Sun' };
-                return map[d] || d;
-            });
+            const map: any = { 'Pzt': 'Mon', 'Sal': 'Tue', 'Çar': 'Wed', 'Per': 'Thu', 'Cum': 'Fri', 'Cmt': 'Sat', 'Paz': 'Sun' };
+            
+            if (recurrence === 'complex' && sessions && sessions.length > 0) {
+                const sessionParts = sessions.map(s => {
+                    const tRange = s.endTime ? `${s.startTime} - ${s.endTime}` : s.startTime;
+                    const enDay = map[s.day] || s.day;
+                    return `on ${enDay} at ${tRange}`;
+                });
+                return `Event Schedule: ${sessionParts.join(', ')}.`;
+            }
+
+            const enDays = daysOfWeek?.map(d => map[d] || d);
             if (recurrence === 'daily') return `Every day between ${timeRange}.`;
             if (recurrence === 'weekly') return `Every week on ${enDays?.join(', ')} at ${timeRange}.`;
             if (recurrence === 'biweekly') return `Every two weeks on ${enDays?.join(', ')} at ${timeRange}.`;

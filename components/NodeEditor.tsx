@@ -252,7 +252,8 @@ const ScheduleInput: React.FC<{
                 recurrence: 'daily',
                 startTime: '10:00',
                 endTime: '11:00',
-                daysOfWeek: []
+                daysOfWeek: [],
+                sessions: []
             };
         }
     };
@@ -289,6 +290,28 @@ const ScheduleInput: React.FC<{
         updateData({ daysOfWeek: newDays });
     };
 
+    // --- COMPLEX SCHEDULE HANDLERS ---
+    const addSession = () => {
+        const sessions = currentData.sessions || [];
+        updateData({ 
+            sessions: [...sessions, { day: 'Pzt', startTime: '10:00', endTime: '11:00' }] 
+        });
+    };
+
+    const removeSession = (index: number) => {
+        const sessions = currentData.sessions || [];
+        updateData({ 
+            sessions: sessions.filter((_, i) => i !== index) 
+        });
+    };
+
+    const updateSession = (index: number, field: keyof import('../types').ScheduleSession, val: string) => {
+        const sessions = currentData.sessions || [];
+        const newSessions = [...sessions];
+        newSessions[index] = { ...newSessions[index], [field]: val };
+        updateData({ sessions: newSessions });
+    };
+
     return (
         <div className={`w-full bg-white border rounded-lg p-3 text-sm space-y-3 ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}>
             
@@ -304,63 +327,117 @@ const ScheduleInput: React.FC<{
                     <option value="weekly">Haftalık</option>
                     <option value="biweekly">İki Haftada Bir</option>
                     <option value="once">Tek Seferlik</option>
+                    <option value="complex">Karmaşık / Çoklu Gün</option>
                 </select>
             </div>
 
-            {/* Date Picker (Only for Once) */}
-            {currentData.recurrence === 'once' && (
-                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
-                    <Calendar size={14} className="text-slate-400" />
-                    <input 
-                        type="date" 
-                        value={currentData.startDate || ''}
-                        onChange={(e) => updateData({ startDate: e.target.value })}
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300"
-                    />
-                </div>
-            )}
-
-            {/* Days Selector (For Weekly/Biweekly) */}
-            {(currentData.recurrence === 'weekly' || currentData.recurrence === 'biweekly') && (
-                <div className="flex gap-1 justify-between animate-in fade-in slide-in-from-top-1">
-                    {days.map(d => {
-                        const isSelected = currentData.daysOfWeek?.includes(d.key);
-                        return (
-                            <button
-                                key={d.key}
-                                onClick={() => toggleDay(d.key)}
-                                className={`w-8 h-8 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
-                                    isSelected 
-                                    ? 'bg-indigo-600 text-white shadow-sm scale-105' 
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                }`}
+            {/* --- COMPLEX MODE --- */}
+            {currentData.recurrence === 'complex' && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Oturumlar</div>
+                    
+                    {(currentData.sessions || []).map((session, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-slate-50 p-2 rounded border border-slate-100">
+                            {/* Day Select */}
+                            <select 
+                                value={session.day}
+                                onChange={(e) => updateSession(idx, 'day', e.target.value)}
+                                className="bg-white border border-slate-200 rounded px-1 py-1 text-xs font-bold w-16"
                             >
-                                {d.label}
+                                {days.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+                            </select>
+
+                            {/* Time Range */}
+                            <div className="flex items-center gap-1 flex-1">
+                                <input 
+                                    type="time" 
+                                    value={session.startTime}
+                                    onChange={(e) => updateSession(idx, 'startTime', e.target.value)}
+                                    className="bg-white border border-slate-200 rounded px-1 py-1 text-xs w-full text-center"
+                                />
+                                <span className="text-slate-300 text-[10px]">-</span>
+                                <input 
+                                    type="time" 
+                                    value={session.endTime || ''}
+                                    onChange={(e) => updateSession(idx, 'endTime', e.target.value)}
+                                    className="bg-white border border-slate-200 rounded px-1 py-1 text-xs w-full text-center"
+                                />
+                            </div>
+
+                            <button onClick={() => removeSession(idx)} className="text-slate-300 hover:text-red-500 p-1">
+                                <X size={14} />
                             </button>
-                        );
-                    })}
+                        </div>
+                    ))}
+
+                    <button 
+                        onClick={addSession}
+                        className="w-full py-1.5 border border-dashed border-slate-300 rounded text-xs text-slate-500 hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-300 transition-colors flex items-center justify-center gap-1"
+                    >
+                        <Plus size={12} /> Oturum Ekle
+                    </button>
                 </div>
             )}
 
-            {/* Time Range */}
-            <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
-                <Clock size={14} className="text-slate-400" />
-                <div className="flex items-center gap-2 flex-1">
-                    <input 
-                        type="time" 
-                        value={currentData.startTime}
-                        onChange={(e) => updateData({ startTime: e.target.value })}
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
-                    />
-                    <span className="text-slate-300">-</span>
-                    <input 
-                        type="time" 
-                        value={currentData.endTime || ''}
-                        onChange={(e) => updateData({ endTime: e.target.value })}
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
-                    />
-                </div>
-            </div>
+            {/* --- SIMPLE MODES --- */}
+            {currentData.recurrence !== 'complex' && (
+                <>
+                    {/* Date Picker (Only for Once) */}
+                    {currentData.recurrence === 'once' && (
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                            <Calendar size={14} className="text-slate-400" />
+                            <input 
+                                type="date" 
+                                value={currentData.startDate || ''}
+                                onChange={(e) => updateData({ startDate: e.target.value })}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300"
+                            />
+                        </div>
+                    )}
+
+                    {/* Days Selector (For Weekly/Biweekly) */}
+                    {(currentData.recurrence === 'weekly' || currentData.recurrence === 'biweekly') && (
+                        <div className="flex gap-1 justify-between animate-in fade-in slide-in-from-top-1">
+                            {days.map(d => {
+                                const isSelected = currentData.daysOfWeek?.includes(d.key);
+                                return (
+                                    <button
+                                        key={d.key}
+                                        onClick={() => toggleDay(d.key)}
+                                        className={`w-8 h-8 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
+                                            isSelected 
+                                            ? 'bg-indigo-600 text-white shadow-sm scale-105' 
+                                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                        }`}
+                                    >
+                                        {d.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Time Range */}
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                        <Clock size={14} className="text-slate-400" />
+                        <div className="flex items-center gap-2 flex-1">
+                            <input 
+                                type="time" 
+                                value={currentData.startTime}
+                                onChange={(e) => updateData({ startTime: e.target.value })}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
+                            />
+                            <span className="text-slate-300">-</span>
+                            <input 
+                                type="time" 
+                                value={currentData.endTime || ''}
+                                onChange={(e) => updateData({ endTime: e.target.value })}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
+                            />
+                        </div>
+                    </div>
+                </>
+            )}
 
         </div>
     );

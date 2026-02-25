@@ -87,12 +87,19 @@ export type FieldType =
   | 'schedule'    // Event Schedule
   | 'separator';  // Visual divider / Section Header
 
+export interface ScheduleSession {
+  day: string; // 'Pzt', 'Sal'...
+  startTime: string;
+  endTime?: string;
+}
+
 export interface ScheduleData {
-  recurrence: 'daily' | 'weekly' | 'biweekly' | 'once';
+  recurrence: 'daily' | 'weekly' | 'biweekly' | 'once' | 'complex';
   daysOfWeek?: string[]; // ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
   startDate?: string;    // YYYY-MM-DD (Tek seferlik etkinlikler veya başlangıç tarihi için)
   startTime: string;     // Örn: "10:00"
   endTime?: string;      // Örn: "11:30"
+  sessions?: ScheduleSession[]; // For complex schedules (e.g. Mon 10:00, Wed 14:00)
 }
 
 export interface NodeAttribute {
