@@ -82,6 +82,12 @@ const App: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'loading'} | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -569,6 +575,13 @@ const App: React.FC = () => {
              <div className="flex items-center gap-1.5"><Database size={14} className="text-slate-400" /><span>{stats.totalNodes} Öğe</span></div>
              <div className="hidden lg:flex items-center gap-1.5 pl-4 border-l border-slate-300 ml-2">
                 <Clock size={14} className="text-slate-400" />
+                <span className="text-slate-500">Yerel Saat:</span>
+                <span className="font-mono font-bold text-slate-800">
+                  {currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+             </div>
+             <div className="hidden lg:flex items-center gap-1.5 pl-4 border-l border-slate-300 ml-2">
+                <Save size={14} className="text-slate-400" />
                 <span className="text-slate-500">Son Kayıt:</span>
                 <span className="font-mono font-bold text-slate-800">{formatLastSaved(hotelData.lastSaved)}</span>
              </div>

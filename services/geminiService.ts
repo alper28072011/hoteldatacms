@@ -187,6 +187,8 @@ export const chatWithData = async (
     const textContext = await generateAIText(data, () => {}); 
     
     const now = new Date();
+    const formattedDate = now.toLocaleDateString('tr-TR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const formattedTime = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
     
     let personaInstruction = "KİMLİK: Sen 'Veri Simülatörü'sün. Görevin, aşağıdaki veri setini KESİN BİR ŞEKİLDE tarayarak kullanıcı sorularını sadece bu verilere dayanarak cevaplamaktır.";
     
@@ -197,6 +199,9 @@ export const chatWithData = async (
     const systemInstruction = `
     ${personaInstruction}
     
+    ŞU ANKİ ZAMAN (Sistem Saati): ${formattedDate} Saat: ${formattedTime}
+    (Kullanıcı "bugün", "yarın", "şu an" dediğinde bu saati referans al.)
+
     GÖREVİN:
     1. Kullanıcının sorusunu analiz et (Niyet Tespiti).
     2. Aşağıdaki OTEL VERİTABANI'nı satır satır tara.
