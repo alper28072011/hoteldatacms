@@ -246,14 +246,24 @@ const ScheduleInput: React.FC<{
     // Parse existing data or default
     const parseData = (jsonStr: string): ScheduleData => {
         try {
-            return JSON.parse(jsonStr);
+            const parsed = JSON.parse(jsonStr);
+            // Ensure timeRanges exists if not present but startTime/endTime exist
+            if (!parsed.timeRanges && parsed.startTime) {
+                parsed.timeRanges = [{ startTime: parsed.startTime, endTime: parsed.endTime }];
+            }
+            // Default if empty
+            if (!parsed.timeRanges || parsed.timeRanges.length === 0) {
+                 parsed.timeRanges = [{ startTime: parsed.startTime || '10:00', endTime: parsed.endTime || '11:00' }];
+            }
+            return parsed;
         } catch (e) {
             return {
                 recurrence: 'daily',
                 startTime: '10:00',
                 endTime: '11:00',
                 daysOfWeek: [],
-                sessions: []
+                sessions: [],
+                timeRanges: [{ startTime: '10:00', endTime: '11:00' }]
             };
         }
     };
@@ -310,6 +320,41 @@ const ScheduleInput: React.FC<{
         const newSessions = [...sessions];
         newSessions[index] = { ...newSessions[index], [field]: val };
         updateData({ sessions: newSessions });
+    };
+
+    // --- TIME RANGE HANDLERS (For Daily/Weekly) ---
+    const addTimeRange = () => {
+        const ranges = currentData.timeRanges || [];
+        updateData({ 
+            timeRanges: [...ranges, { startTime: '10:00', endTime: '11:00' }] 
+        });
+    };
+
+    const removeTimeRange = (index: number) => {
+        const ranges = currentData.timeRanges || [];
+        if (ranges.length <= 1) return; // Prevent removing the last one for UX stability
+        const newRanges = ranges.filter((_, i) => i !== index);
+        
+        // Sync legacy fields
+        updateData({ 
+            timeRanges: newRanges,
+            startTime: newRanges[0]?.startTime || '',
+            endTime: newRanges[0]?.endTime || ''
+        });
+    };
+
+    const updateTimeRange = (index: number, field: keyof import('../types').TimeRange, val: string) => {
+        const ranges = currentData.timeRanges || [];
+        const newRanges = [...ranges];
+        newRanges[index] = { ...newRanges[index], [field]: val };
+        
+        // Sync legacy fields if it's the first range
+        const updates: Partial<ScheduleData> = { timeRanges: newRanges };
+        if (index === 0) {
+            if (field === 'startTime') updates.startTime = val;
+            if (field === 'endTime') updates.endTime = val;
+        }
+        updateData(updates);
     };
 
     return (
@@ -379,12 +424,12 @@ const ScheduleInput: React.FC<{
                 </div>
             )}
 
-            {/* --- SIMPLE MODES --- */}
+            {/* --- SIMPLE MODES (Daily, Weekly, Biweekly, Once) --- */}
             {currentData.recurrence !== 'complex' && (
                 <>
                     {/* Date Picker (Only for Once) */}
                     {currentData.recurrence === 'once' && (
-                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1 mb-2">
                             <Calendar size={14} className="text-slate-400" />
                             <input 
                                 type="date" 
@@ -397,7 +442,7 @@ const ScheduleInput: React.FC<{
 
                     {/* Days Selector (For Weekly/Biweekly) */}
                     {(currentData.recurrence === 'weekly' || currentData.recurrence === 'biweekly') && (
-                        <div className="flex gap-1 justify-between animate-in fade-in slide-in-from-top-1">
+                        <div className="flex gap-1 justify-between animate-in fade-in slide-in-from-top-1 mb-2">
                             {days.map(d => {
                                 const isSelected = currentData.daysOfWeek?.includes(d.key);
                                 return (
@@ -417,24 +462,43 @@ const ScheduleInput: React.FC<{
                         </div>
                     )}
 
-                    {/* Time Range */}
-                    <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
-                        <Clock size={14} className="text-slate-400" />
-                        <div className="flex items-center gap-2 flex-1">
-                            <input 
-                                type="time" 
-                                value={currentData.startTime}
-                                onChange={(e) => updateData({ startTime: e.target.value })}
-                                className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
-                            />
-                            <span className="text-slate-300">-</span>
-                            <input 
-                                type="time" 
-                                value={currentData.endTime || ''}
-                                onChange={(e) => updateData({ endTime: e.target.value })}
-                                className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
-                            />
+                    {/* Multiple Time Ranges */}
+                    <div className="space-y-2 pt-1 border-t border-slate-100">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex justify-between items-center">
+                            <span>Saat Aralıkları</span>
+                            <button 
+                                onClick={addTimeRange}
+                                className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                            >
+                                <Plus size={10} /> Ekle
+                            </button>
                         </div>
+
+                        {(currentData.timeRanges || []).map((range, idx) => (
+                            <div key={idx} className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                                <Clock size={14} className="text-slate-400" />
+                                <div className="flex items-center gap-2 flex-1">
+                                    <input 
+                                        type="time" 
+                                        value={range.startTime}
+                                        onChange={(e) => updateTimeRange(idx, 'startTime', e.target.value)}
+                                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
+                                    />
+                                    <span className="text-slate-300">-</span>
+                                    <input 
+                                        type="time" 
+                                        value={range.endTime || ''}
+                                        onChange={(e) => updateTimeRange(idx, 'endTime', e.target.value)}
+                                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-300 text-center"
+                                    />
+                                </div>
+                                {(currentData.timeRanges || []).length > 1 && (
+                                    <button onClick={() => removeTimeRange(idx)} className="text-slate-300 hover:text-red-500 p-1">
+                                        <X size={14} />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 </>
             )}

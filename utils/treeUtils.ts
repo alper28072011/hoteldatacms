@@ -1,5 +1,5 @@
 
-import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute, ExportConfig } from "../types";
+import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute, ExportConfig, ScheduleData, TimeRange } from "../types";
 
 // Generate a simple unique ID with high collision resistance
 // Updated to accept a custom prefix derived from content
@@ -625,8 +625,17 @@ export const generateCleanAIJSON = (
 const translateScheduleToNaturalLanguage = (jsonStr: string, lang: 'tr' | 'en'): string => {
     try {
         const data: ScheduleData = JSON.parse(jsonStr);
-        const { recurrence, daysOfWeek, startDate, startTime, endTime, sessions } = data;
-        const timeRange = endTime ? `${startTime} - ${endTime}` : startTime;
+        const { recurrence, daysOfWeek, startDate, startTime, endTime, sessions, timeRanges } = data;
+        
+        // Helper to format time ranges
+        const formatTimeRanges = (ranges: TimeRange[] | undefined, singleStart: string, singleEnd?: string) => {
+             if (ranges && ranges.length > 0) {
+                 return ranges.map(r => r.endTime ? `${r.startTime}-${r.endTime}` : r.startTime).join(' ve ');
+             }
+             return singleEnd ? `${singleStart}-${singleEnd}` : singleStart;
+        };
+
+        const timeString = formatTimeRanges(timeRanges, startTime, endTime);
 
         if (lang === 'tr') {
             if (recurrence === 'complex' && sessions && sessions.length > 0) {
@@ -636,10 +645,10 @@ const translateScheduleToNaturalLanguage = (jsonStr: string, lang: 'tr' | 'en'):
                 });
                 return `Etkinlik Programı: ${sessionParts.join(', ')}.`;
             }
-            if (recurrence === 'daily') return `Her gün saat ${timeRange} arasında.`;
-            if (recurrence === 'weekly') return `Her hafta ${daysOfWeek?.join(', ')} günleri saat ${timeRange} arasında.`;
-            if (recurrence === 'biweekly') return `İki haftada bir ${daysOfWeek?.join(', ')} günleri saat ${timeRange} arasında.`;
-            if (recurrence === 'once') return `${startDate} tarihinde saat ${timeRange} (Tek seferlik).`;
+            if (recurrence === 'daily') return `Her gün saat ${timeString} arasında.`;
+            if (recurrence === 'weekly') return `Her hafta ${daysOfWeek?.join(', ')} günleri saat ${timeString} arasında.`;
+            if (recurrence === 'biweekly') return `İki haftada bir ${daysOfWeek?.join(', ')} günleri saat ${timeString} arasında.`;
+            if (recurrence === 'once') return `${startDate} tarihinde saat ${timeString} (Tek seferlik).`;
         } else {
             const map: any = { 'Pzt': 'Mon', 'Sal': 'Tue', 'Çar': 'Wed', 'Per': 'Thu', 'Cum': 'Fri', 'Cmt': 'Sat', 'Paz': 'Sun' };
             
@@ -653,10 +662,20 @@ const translateScheduleToNaturalLanguage = (jsonStr: string, lang: 'tr' | 'en'):
             }
 
             const enDays = daysOfWeek?.map(d => map[d] || d);
-            if (recurrence === 'daily') return `Every day between ${timeRange}.`;
-            if (recurrence === 'weekly') return `Every week on ${enDays?.join(', ')} at ${timeRange}.`;
-            if (recurrence === 'biweekly') return `Every two weeks on ${enDays?.join(', ')} at ${timeRange}.`;
-            if (recurrence === 'once') return `On ${startDate} at ${timeRange} (One-time).`;
+            
+            // English time range joiner should be 'and'
+            const formatTimeRangesEn = (ranges: TimeRange[] | undefined, singleStart: string, singleEnd?: string) => {
+                 if (ranges && ranges.length > 0) {
+                     return ranges.map(r => r.endTime ? `${r.startTime}-${r.endTime}` : r.startTime).join(' and ');
+                 }
+                 return singleEnd ? `${singleStart}-${singleEnd}` : singleStart;
+            };
+            const timeStringEn = formatTimeRangesEn(timeRanges, startTime, endTime);
+
+            if (recurrence === 'daily') return `Every day between ${timeStringEn}.`;
+            if (recurrence === 'weekly') return `Every week on ${enDays?.join(', ')} at ${timeStringEn}.`;
+            if (recurrence === 'biweekly') return `Every two weeks on ${enDays?.join(', ')} at ${timeStringEn}.`;
+            if (recurrence === 'once') return `On ${startDate} at ${timeStringEn} (One-time).`;
         }
         return jsonStr;
     } catch (e) {

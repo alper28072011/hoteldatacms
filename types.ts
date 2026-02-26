@@ -93,6 +93,11 @@ export interface ScheduleSession {
   endTime?: string;
 }
 
+export interface TimeRange {
+  startTime: string;
+  endTime?: string;
+}
+
 export interface ScheduleData {
   recurrence: 'daily' | 'weekly' | 'biweekly' | 'once' | 'complex';
   daysOfWeek?: string[]; // ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
@@ -100,6 +105,7 @@ export interface ScheduleData {
   startTime: string;     // Örn: "10:00"
   endTime?: string;      // Örn: "11:30"
   sessions?: ScheduleSession[]; // For complex schedules (e.g. Mon 10:00, Wed 14:00)
+  timeRanges?: TimeRange[]; // New: Multiple time ranges for daily/weekly recurrence
 }
 
 export interface NodeAttribute {
