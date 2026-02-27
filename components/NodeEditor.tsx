@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import * as XLSX from 'xlsx';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType, TemplateField, ScheduleData } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes, generateSlug, getLocalizedValue, ensureLocalized } from '../utils/treeUtils';
 import { generateNodeContext, generateValueFromAttributes, translateText } from '../services/geminiService';
@@ -12,7 +13,7 @@ import {
   X, FolderOpen, Info, TriangleAlert, Wand2, Calendar, Utensils, BedDouble, 
   Clock, Users, DollarSign, GripVertical, Type, Layers, Eye, BookOpen, Quote, Printer, Lock, Unlock, Edit3,
   Shield, AlertTriangle, MessageCircleQuestion, Milestone, HandPlatter, Languages, Globe, RefreshCw, LayoutTemplate, 
-  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy, Activity, Repeat
+  ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy, Activity, Repeat, Download, Upload
 } from 'lucide-react';
 import FullContentPreview from './FullContentPreview';
 import { HealthIssue } from '../types';
@@ -1371,6 +1372,55 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       onUpdate(node.id, { tags: currentTags.filter(t => t !== tagToRemove), aiConfidence: undefined });
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportAttributes = () => {
+      if (!node.attributes || node.attributes.length === 0) {
+          alert("Dışarı aktarılacak veri bulunamadı.");
+          return;
+      }
+
+      const dataToExport = node.attributes.map(attr => ({
+          Key_TR: attr.key.tr,
+          Key_EN: attr.key.en,
+          Value_TR: typeof attr.value === 'object' ? attr.value.tr : attr.value,
+          Value_EN: typeof attr.value === 'object' ? attr.value.en : '',
+          Type: attr.type
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Attributes");
+      XLSX.writeFile(wb, `${node.id}_attributes.xlsx`);
+  };
+
+  const handleImportAttributes = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const data = XLSX.utils.sheet_to_json(ws);
+
+          const newAttributes: NodeAttribute[] = data.map((row: any) => ({
+              id: generateId('attr'),
+              key: { tr: row.Key_TR || row.Key || '', en: row.Key_EN || '' },
+              value: { tr: row.Value_TR || row.Value || '', en: row.Value_EN || '' },
+              type: row.Type || 'text'
+          }));
+
+          const currentAttributes = Array.isArray(node.attributes) ? [...node.attributes] : [];
+          onUpdate(node.id, { attributes: [...currentAttributes, ...newAttributes], aiConfidence: undefined });
+      };
+      reader.readAsBinaryString(file);
+      
+      if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   // UNIFIED HEADER SELECTORS
   const renderHeaderSelectors = () => {
       const containerStyle = (bgColor: string, borderColor: string) => 
@@ -1756,6 +1806,27 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                     </div>
                     
                     <div className="flex items-center gap-3">
+                        {/* EXPORT / IMPORT ACTIONS */}
+                        <div className="flex items-center gap-1 border-r border-slate-200 pr-2">
+                            <button
+                                onClick={handleExportAttributes}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                title="Excel/CSV Olarak İndir"
+                            >
+                                <Download size={16} />
+                            </button>
+                            <label className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer" title="Excel/CSV Yükle">
+                                <Upload size={16} />
+                                <input 
+                                    ref={fileInputRef}
+                                    type="file" 
+                                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                                    className="hidden" 
+                                    onChange={handleImportAttributes}
+                                />
+                            </label>
+                        </div>
+
                         {activeTab === 'en' && (templateRenderList.length > 0 || customRenderList.length > 0) && (
                             <button 
                                 onClick={handleBulkTranslateAttributes} 
