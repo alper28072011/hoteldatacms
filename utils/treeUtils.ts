@@ -1,5 +1,7 @@
 
-import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute, ExportConfig, ScheduleData, TimeRange } from "../types";
+import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute, ExportConfig, ScheduleData, TimeRange, FieldType } from "../types";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Generate a simple unique ID with high collision resistance
 // Updated to accept a custom prefix derived from content
@@ -895,4 +897,96 @@ export const generateOptimizedCSV = async (
      }
   }
   return rows.join('\n');
+};
+
+// --- EXPORT FUNCTION: PDF ---
+export const generatePDF = (
+    root: HotelNode,
+    config: ExportConfig = { format: 'pdf', languages: ['tr', 'en'], includeAIContext: true }
+): jsPDF => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.text("Hotel Data Export", 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    const dateStr = new Date().toLocaleDateString();
+    doc.text(`Generated on: ${dateStr}`, 14, 30);
+
+    // Prepare Data
+    const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[] }[] => {
+        const result: { node: HotelNode, path: string[] }[] = [];
+        const traverse = (node: HotelNode, path: string[]) => {
+            const pathName = getLocalizedValue(node.name, config.languages[0] || 'en');
+            const currentPath = [...path, pathName];
+            result.push({ node, path: currentPath });
+            if (node.children) node.children.forEach(child => traverse(child, currentPath));
+        };
+        traverse(root, []);
+        return result;
+    };
+
+    const flatNodes = flattenTreeForExport(root);
+    
+    // Define Columns
+    const head = [['ID', 'Path', 'Type']];
+    const body: any[] = [];
+
+    // Dynamic Headers
+    if (config.languages.includes('tr')) { head[0].push('Name (TR)', 'Value (TR)'); }
+    if (config.languages.includes('en')) { head[0].push('Name (EN)', 'Value (EN)'); }
+    
+    if (config.includeAIContext) {
+        head[0].push('AI Context / Tags');
+    }
+
+    // Populate Rows
+    flatNodes.forEach(({ node, path }) => {
+        const row: string[] = [
+            node.id,
+            path.join(' > '),
+            node.type
+        ];
+
+        if (config.languages.includes('tr')) {
+            row.push(getLocalizedValue(node.name, 'tr'));
+            row.push(getLocalizedValue(node.value || node.answer, 'tr'));
+        }
+        if (config.languages.includes('en')) {
+            row.push(getLocalizedValue(node.name, 'en'));
+            row.push(getLocalizedValue(node.value || node.answer, 'en'));
+        }
+
+        if (config.includeAIContext) {
+            const contextParts = [];
+            if (node.description) {
+                const desc = getExportValue(node.description, config);
+                const descStr = typeof desc === 'string' ? desc : JSON.stringify(desc);
+                contextParts.push(`Desc: ${descStr.substring(0, 100)}${descStr.length > 100 ? '...' : ''}`);
+            }
+            if (node.tags && node.tags.length > 0) contextParts.push(`Tags: ${node.tags.join(', ')}`);
+            
+            row.push(contextParts.join('\n'));
+        }
+        
+        body.push(row);
+    });
+
+    autoTable(doc, {
+        head: head,
+        body: body,
+        startY: 40,
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: [16, 185, 129] }, // Emerald color
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        columnStyles: {
+            0: { cellWidth: 20 }, // ID
+            1: { cellWidth: 30 }, // Path
+            2: { cellWidth: 20 }, // Type
+            // Others auto
+        }
+    });
+
+    return doc;
 };

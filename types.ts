@@ -306,7 +306,7 @@ export interface NodeContextPrediction {
 }
 
 export interface ExportConfig {
-    format: 'json' | 'csv' | 'txt';
+    format: 'json' | 'csv' | 'txt' | 'pdf';
     languages: ('tr' | 'en')[];
     includeAIContext: boolean;
 }
