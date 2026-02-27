@@ -27,7 +27,7 @@ import {
   FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages
 } from 'lucide-react';
 import { ExportConfig } from './types';
-import { generatePDF } from './utils/treeUtils';
+import { generatePDF, filterHotelData } from './utils/treeUtils';
 
 const Toast = ({ message, type }: { message: string, type: 'success' | 'error' | 'loading' }) => (
   <div className={`
@@ -276,7 +276,8 @@ const App: React.FC = () => {
       let fileName = '';
 
       if (config.format === 'json') {
-          dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(hotelData, null, 2));
+          const dataToExport = filterHotelData(hotelData, config);
+          dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToExport, null, 2));
           fileName = `${safeName}_FULL_${nowStr}.json`;
       } else if (config.format === 'csv') {
           const csv = await generateOptimizedCSV(hotelData, setExportProgress, config);

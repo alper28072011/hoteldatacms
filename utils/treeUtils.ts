@@ -572,7 +572,7 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
 // Creates a clean, token-efficient, and AI-friendly JSON structure
 export const generateCleanAIJSON = (
     node: HotelNode, 
-    config: ExportConfig = { format: 'json', languages: ['tr', 'en'], includeAIContext: true }
+    config: ExportConfig = { format: 'json', languages: ['tr', 'en'], options: { descriptions: true, tags: true } }
 ): any => {
   const semanticData: any = {};
   
@@ -588,11 +588,11 @@ export const generateCleanAIJSON = (
   if (node.price) semanticData.price = node.price;
 
   // AI Context (Only if enabled)
-  if (config.includeAIContext && node.description) {
+  if (config.options?.descriptions && node.description) {
       semanticData.ai_context = getExportValue(node.description, config);
   }
   
-  if (config.includeAIContext && node.tags && node.tags.length > 0) {
+  if (config.options?.tags && node.tags && node.tags.length > 0) {
       semanticData.tags = node.tags;
   }
 
@@ -604,7 +604,7 @@ export const generateCleanAIJSON = (
               value: getExportValue(a.value, config) 
           };
           
-          if (config.includeAIContext && a.subAttributes && a.subAttributes.length > 0) {
+          if (config.options?.descriptions && a.subAttributes && a.subAttributes.length > 0) {
               attrObj.details = a.subAttributes.map(sa => ({
                   key: getExportValue(sa.key, config),
                   value: getExportValue(sa.value, config)
@@ -688,7 +688,7 @@ const translateScheduleToNaturalLanguage = (jsonStr: string, lang: 'tr' | 'en'):
 export const generateAIText = async (
   root: HotelNode, 
   onProgress: (percent: number) => void,
-  config: ExportConfig = { format: 'txt', languages: ['tr', 'en'], includeAIContext: true }
+  config: ExportConfig = { format: 'txt', languages: ['tr', 'en'], options: { descriptions: true, tags: true } }
 ): Promise<string> => {
   
   const lines: string[] = [];
@@ -776,7 +776,7 @@ export const generateAIText = async (
               if (k && v) {
                   lines.push(`${indent}  + [Feat] ${k}: ${v}`);
                   // Sub-attributes
-                  if (config.includeAIContext && attr.subAttributes) {
+                  if (config.options?.descriptions && attr.subAttributes) {
                       attr.subAttributes.forEach(sa => {
                           const sk = typeof getExportValue(sa.key, config) === 'string' ? getExportValue(sa.key, config) : JSON.stringify(getExportValue(sa.key, config));
                           const svLine = formatTextLine("Value", sa.value, sa.type);
@@ -790,12 +790,12 @@ export const generateAIText = async (
       }
 
       // Tags / Keywords (NEW: AI Semantic Indexing)
-      if (config.includeAIContext && node.tags && node.tags.length > 0) {
+      if (config.options?.tags && node.tags && node.tags.length > 0) {
           lines.push(`${indent}  * Keywords: ${node.tags.map(t => `#${t}`).join(', ')}`);
       }
 
       // AI Context (System Note)
-      if (config.includeAIContext && node.description) {
+      if (config.options?.descriptions && node.description) {
           const descLine = formatTextLine("SYSTEM_NOTE", node.description);
           if (descLine) lines.push(`${indent}  ${descLine}`);
       }
@@ -815,7 +815,7 @@ export const generateAIText = async (
 export const generateOptimizedCSV = async (
     root: HotelNode, 
     onProgress: (percent: number) => void,
-    config: ExportConfig = { format: 'csv', languages: ['tr', 'en'], includeAIContext: true }
+    config: ExportConfig = { format: 'csv', languages: ['tr', 'en'], options: { descriptions: true, tags: true } }
 ): Promise<string> => {
   const flattenTreeForExport = (root: HotelNode): { node: HotelNode, path: string[] }[] => {
     const result: { node: HotelNode, path: string[] }[] = [];
@@ -841,9 +841,12 @@ export const generateOptimizedCSV = async (
   
   headers.push('Attributes_JSON'); // Attributes always complex, keep as JSON but localized
   
-  if (config.includeAIContext) {
+  if (config.options?.descriptions) {
       if (config.languages.includes('tr')) headers.push('AI_Desc_TR');
       if (config.languages.includes('en')) headers.push('AI_Desc_EN');
+  }
+  
+  if (config.options?.tags) {
       headers.push('Keywords'); // Add Keywords column
   }
 
@@ -883,9 +886,12 @@ export const generateOptimizedCSV = async (
      })) || [];
      rowData.push(safeCSV(JSON.stringify(processedAttributes)));
 
-     if (config.includeAIContext) {
+     if (config.options?.descriptions) {
          if (config.languages.includes('tr')) rowData.push(safeCSV(descObj.tr));
          if (config.languages.includes('en')) rowData.push(safeCSV(descObj.en));
+     }
+     
+     if (config.options?.tags) {
          rowData.push(safeCSV((node.tags || []).join(', ')));
      }
 
@@ -902,7 +908,7 @@ export const generateOptimizedCSV = async (
 // --- EXPORT FUNCTION: PDF ---
 export const generatePDF = (
     root: HotelNode,
-    config: ExportConfig = { format: 'pdf', languages: ['tr', 'en'], includeAIContext: true }
+    config: ExportConfig = { format: 'pdf', languages: ['tr', 'en'], options: { descriptions: true, tags: true } }
 ): jsPDF => {
     const doc = new jsPDF();
     
@@ -930,14 +936,14 @@ export const generatePDF = (
     const flatNodes = flattenTreeForExport(root);
     
     // Define Columns
-    const head = [['ID', 'Path', 'Type']];
+    const head: string[][] = [['ID', 'Path', 'Type']];
     const body: any[] = [];
 
     // Dynamic Headers
     if (config.languages.includes('tr')) { head[0].push('Name (TR)', 'Value (TR)'); }
     if (config.languages.includes('en')) { head[0].push('Name (EN)', 'Value (EN)'); }
     
-    if (config.includeAIContext) {
+    if (config.options?.descriptions || config.options?.tags) {
         head[0].push('AI Context / Tags');
     }
 
@@ -958,14 +964,16 @@ export const generatePDF = (
             row.push(getLocalizedValue(node.value || node.answer, 'en'));
         }
 
-        if (config.includeAIContext) {
-            const contextParts = [];
-            if (node.description) {
+        if (config.options?.descriptions || config.options?.tags) {
+            const contextParts: string[] = [];
+            if (config.options?.descriptions && node.description) {
                 const desc = getExportValue(node.description, config);
                 const descStr = typeof desc === 'string' ? desc : JSON.stringify(desc);
                 contextParts.push(`Desc: ${descStr.substring(0, 100)}${descStr.length > 100 ? '...' : ''}`);
             }
-            if (node.tags && node.tags.length > 0) contextParts.push(`Tags: ${node.tags.join(', ')}`);
+            if (config.options?.tags && node.tags && node.tags.length > 0) {
+                contextParts.push(`Tags: ${node.tags.join(', ')}`);
+            }
             
             row.push(contextParts.join('\n'));
         }
@@ -989,4 +997,30 @@ export const generatePDF = (
     });
 
     return doc;
+};
+
+export const filterHotelData = (node: HotelNode, config: ExportConfig): HotelNode => {
+    const newNode = { ...node };
+    
+    if (!config.options?.descriptions) {
+        delete newNode.description;
+        // Also remove subAttributes from attributes if they are considered details
+        if (newNode.attributes) {
+            newNode.attributes = newNode.attributes.map(attr => {
+                const newAttr = { ...attr };
+                delete newAttr.subAttributes; 
+                return newAttr;
+            });
+        }
+    }
+    
+    if (!config.options?.tags) {
+        delete newNode.tags;
+    }
+    
+    if (newNode.children) {
+        newNode.children = newNode.children.map(child => filterHotelData(child, config));
+    }
+    
+    return newNode;
 };

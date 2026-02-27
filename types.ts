@@ -308,5 +308,8 @@ export interface NodeContextPrediction {
 export interface ExportConfig {
     format: 'json' | 'csv' | 'txt' | 'pdf';
     languages: ('tr' | 'en')[];
-    includeAIContext: boolean;
+    options: {
+        descriptions: boolean; // AI Context / System Notes
+        tags: boolean;         // Keywords
+    };
 }

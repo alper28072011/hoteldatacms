@@ -13,7 +13,8 @@ interface ExportModalProps {
 const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, isExporting, progress }) => {
     const [format, setFormat] = useState<ExportConfig['format']>('json');
     const [languageMode, setLanguageMode] = useState<'tr' | 'en' | 'multi'>('multi');
-    const [includeAI, setIncludeAI] = useState(true);
+    const [includeDescriptions, setIncludeDescriptions] = useState(true);
+    const [includeTags, setIncludeTags] = useState(true);
 
     if (!isOpen) return null;
 
@@ -22,7 +23,10 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
         onExport({
             format,
             languages,
-            includeAIContext: includeAI
+            options: {
+                descriptions: includeDescriptions,
+                tags: includeTags
+            }
         });
     };
 
@@ -108,14 +112,24 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
                             <h3 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider flex items-center gap-2">
                                 <Cpu size={14} /> 3. İçerik Detayı
                             </h3>
-                            <div className="space-y-2">
-                                <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${includeAI ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}`}>
+                            <div className="space-y-3">
+                                <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${includeDescriptions ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200 hover:bg-slate-50'}`}>
                                     <div className="pt-0.5">
-                                        <input type="checkbox" checked={includeAI} onChange={(e) => setIncludeAI(e.target.checked)} className="rounded text-emerald-600 focus:ring-emerald-500" />
+                                        <input type="checkbox" checked={includeDescriptions} onChange={(e) => setIncludeDescriptions(e.target.checked)} className="rounded text-emerald-600 focus:ring-emerald-500" />
                                     </div>
                                     <div>
-                                        <span className="text-sm font-bold text-slate-700 block">AI Bağlamı & Etiketler</span>
-                                        <span className="text-xs text-slate-500 block mt-0.5">Sistem notları, etiketler ve açıklamalar dahil edilir. LLM eğitimi için önerilir.</span>
+                                        <span className="text-sm font-bold text-slate-700 block">Sistem Notları & Açıklamalar</span>
+                                        <span className="text-xs text-slate-500 block mt-0.5">AI bağlamı için kullanılan detaylı açıklamalar.</span>
+                                    </div>
+                                </label>
+
+                                <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${includeTags ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200 hover:bg-slate-50'}`}>
+                                    <div className="pt-0.5">
+                                        <input type="checkbox" checked={includeTags} onChange={(e) => setIncludeTags(e.target.checked)} className="rounded text-emerald-600 focus:ring-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <span className="text-sm font-bold text-slate-700 block">Etiketler (Keywords)</span>
+                                        <span className="text-xs text-slate-500 block mt-0.5">Arama ve sınıflandırma için kullanılan anahtar kelimeler.</span>
                                     </div>
                                 </label>
                             </div>
