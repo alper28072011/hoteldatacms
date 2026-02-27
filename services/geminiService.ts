@@ -105,6 +105,39 @@ export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Pr
     }
 };
 
+export const optimizeMainContent = async (text: string, lang: 'tr' | 'en'): Promise<string> => {
+    if (!text || !text.trim()) return '';
+    try {
+        const langName = lang === 'tr' ? 'Turkish' : 'English';
+        const prompt = `
+        Sen uzman bir "İçerik Editörü" ve "UX Yazarı"sın.
+        
+        GÖREV:
+        Aşağıda bir otel veri yönetim sistemi (CMS) için kullanıcı tarafından girilmiş ham bir içerik var.
+        Bu içeriği, misafirlere sunulacak profesyonel, net, akıcı ve cezbedici bir metne dönüştür.
+        Aynı zamanda yapay zeka modellerinin de kolayca anlayabileceği yapısal bir bütünlükte olsun.
+        
+        KURALLAR:
+        1. Çıktı dili KESİNLİKLE ${langName} olmalıdır.
+        2. Yazım ve imla hatalarını düzelt.
+        3. Anlatımı güçlendir ama abartıya kaçma.
+        4. Eğer maddeler halinde yazılması daha uygunsa (örn: özellik listesi), madde işaretleri kullan.
+        5. Sadece optimize edilmiş metni döndür.
+        
+        KULLANICI GİRDİSİ: "${text}"
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt
+        });
+        return response.text?.trim() || text;
+    } catch (e) {
+        console.error("Content optimization failed", e);
+        return text;
+    }
+};
+
 export const evaluateNodeHealth = async (node: HotelNode, parentPath: string): Promise<HotelNode['aiAnalysis']> => {
     try {
         const cleanNode = generateCleanAIJSON(node);

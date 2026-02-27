@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 import { HotelNode, NodeType, NodeAttribute, SchemaType, IntentType, LocalizedText, FieldType, TemplateField, ScheduleData } from '../types';
 import { analyzeHotelStats, findPathToNode, generateId, getAllowedTypes, generateSlug, getLocalizedValue, ensureLocalized } from '../utils/treeUtils';
-import { generateNodeContext, generateValueFromAttributes, translateText } from '../services/geminiService';
+import { generateNodeContext, generateValueFromAttributes, translateText, optimizeMainContent, optimizeAIDescription } from '../services/geminiService';
 import { validateNodeInput, runLocalValidation } from '../utils/validationUtils';
 import { useHotel } from '../contexts/HotelContext';
 import { 
@@ -228,7 +228,7 @@ const LocalizedInput: React.FC<LocalizedInputProps> = ({
                 )}
                 
                 {actionButton && (
-                    <div className="absolute right-2 bottom-2 z-10">
+                    <div className="absolute right-4 bottom-3 z-10">
                         {actionButton}
                     </div>
                 )}
@@ -1050,12 +1050,22 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           const currentDesc = ensureLocalized(node.description);
           onUpdate(node.id, { description: { ...currentDesc, en: translated } });
       } else {
-          // GENERATION
-          const pathString = breadcrumbs.map(b => getLocalizedValue(b.name, 'tr') || 'İsimsiz').join(' > ');
-          const result = await generateNodeContext(node, pathString, 'tr');
-          const currentDesc = ensureLocalized(node.description);
-          // Only update description
-          onUpdate(node.id, { description: { ...currentDesc, tr: result.description } });
+          // GENERATION OR OPTIMIZATION
+          const currentText = getLocalizedValue(node.description, 'tr');
+          
+          if (currentText && currentText.trim().length > 0) {
+              // OPTIMIZE EXISTING CONTEXT
+              const optimized = await optimizeAIDescription(currentText, 'tr');
+              const currentDesc = ensureLocalized(node.description);
+              onUpdate(node.id, { description: { ...currentDesc, tr: optimized } });
+          } else {
+              // GENERATE NEW CONTEXT
+              const pathString = breadcrumbs.map(b => getLocalizedValue(b.name, 'tr') || 'İsimsiz').join(' > ');
+              const result = await generateNodeContext(node, pathString, 'tr');
+              const currentDesc = ensureLocalized(node.description);
+              // Only update description
+              onUpdate(node.id, { description: { ...currentDesc, tr: result.description } });
+          }
       }
     } catch (error) { console.error(error); } finally { setIsGeneratingContext(false); }
   };
@@ -1088,12 +1098,24 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
             const newVal = { ...currentVal, en: translated };
             onUpdate(node.id, { [node.type === 'qa_pair' ? 'answer' : 'value']: newVal });
         } else {
-            if (!node.attributes || node.attributes.length === 0) { alert("Önce birkaç özellik ekleyin."); setIsGeneratingValue(false); return; }
-            const name = getLocalizedValue(node.name, 'tr');
-            const generatedText = await generateValueFromAttributes(name, node.attributes, 'tr');
-            const currentVal = ensureLocalized(node.type === 'qa_pair' ? node.answer : node.value);
-            const newVal = { ...currentVal, tr: generatedText };
-            onUpdate(node.id, { [node.type === 'qa_pair' ? 'answer' : 'value']: newVal });
+            const currentValue = node.type === 'qa_pair' ? node.answer : node.value;
+            const currentText = getLocalizedValue(currentValue, 'tr');
+
+            if (currentText && currentText.trim().length > 0) {
+                // OPTIMIZE EXISTING CONTENT
+                const optimized = await optimizeMainContent(currentText, 'tr');
+                const currentVal = ensureLocalized(currentValue);
+                const newVal = { ...currentVal, tr: optimized };
+                onUpdate(node.id, { [node.type === 'qa_pair' ? 'answer' : 'value']: newVal });
+            } else {
+                // GENERATE NEW CONTENT
+                if (!node.attributes || node.attributes.length === 0) { alert("Önce birkaç özellik ekleyin."); setIsGeneratingValue(false); return; }
+                const name = getLocalizedValue(node.name, 'tr');
+                const generatedText = await generateValueFromAttributes(name, node.attributes, 'tr');
+                const currentVal = ensureLocalized(currentValue);
+                const newVal = { ...currentVal, tr: generatedText };
+                onUpdate(node.id, { [node.type === 'qa_pair' ? 'answer' : 'value']: newVal });
+            }
         }
     } catch (e) { console.error(e); } finally { setIsGeneratingValue(false); }
   };
@@ -1512,9 +1534,18 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
   const renderActionBtn = (
       isLoading: boolean, 
       action: () => void, 
-      type: 'translate' | 'generate' | 'context'
+      type: 'translate' | 'generate' | 'context',
+      hasContent: boolean = false
   ) => {
       const isTranslate = (type === 'translate' || type === 'context') && activeTab === 'en';
+      
+      let label = isTranslate ? "Çevir" : (type === 'generate' ? "AI Yaz" : "Oto Doldur");
+      let icon = isTranslate ? <Globe size={12}/> : <Sparkles size={12} />;
+      
+      if (!isTranslate && hasContent) {
+          label = "AI İyileştir";
+          icon = <Wand2 size={12} />;
+      }
       
       return (
         <button 
@@ -1526,8 +1557,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                 : 'text-violet-600 bg-violet-50 border-violet-100 hover:bg-violet-100'
             }`}
         >
-            {isLoading ? <Loader2 size={12} className="animate-spin"/> : (isTranslate ? <Globe size={12}/> : <Sparkles size={12} />)} 
-            {isTranslate ? "Çevir" : (type === 'generate' ? "AI Yaz" : "Oto Doldur")}
+            {isLoading ? <Loader2 size={12} className="animate-spin"/> : icon} 
+            {label}
         </button>
       );
   };
@@ -1783,7 +1814,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                         multiline={true}
                         activeTab={activeTab}
                         onTabChange={setDisplayLanguage}
-                        actionButton={renderActionBtn(isGeneratingValue, handleAutoGenerateValue, 'generate')}
+                        actionButton={renderActionBtn(isGeneratingValue, handleAutoGenerateValue, 'generate', !!getLocalizedValue(node.type === 'qa_pair' ? node.answer : node.value, activeTab))}
                     />
 
                     {node.type === 'qa_pair' && <input type="text" value={node.question || ''} onChange={(e) => handleChange('question', e.target.value)} className="hidden" />}
@@ -2182,7 +2213,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                         activeTab={activeTab} 
                         onTabChange={setDisplayLanguage}
                         inputClassName="min-h-[110px]" 
-                        actionButton={renderActionBtn(isGeneratingContext, handleAutoGenerateDescription, 'context')}
+                        actionButton={renderActionBtn(isGeneratingContext, handleAutoGenerateDescription, 'context', !!getLocalizedValue(node.description, activeTab))}
                     />
                  </div>
             </div>
