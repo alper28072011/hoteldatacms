@@ -534,7 +534,8 @@ const DynamicFieldInput: React.FC<{
 
     // Validation Check
     const isRequired = fieldDef?.required;
-    const isEmpty = !localValue[activeTab] || localValue[activeTab].trim() === '';
+    const currentVal = localValue[activeTab];
+    const isEmpty = !currentVal || (typeof currentVal === 'string' ? currentVal.trim() === '' : String(currentVal).trim() === '');
     const hasError = isRequired && isEmpty;
 
     // --- HANDLERS ---
@@ -842,6 +843,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
   // Custom Attribute State
   const [newAttrKey, setNewAttrKey] = useState<LocalizedText>({ tr: '', en: '' });
   const [newAttrValue, setNewAttrValue] = useState<LocalizedText>({ tr: '', en: '' });
+  const [newAttrType, setNewAttrType] = useState<FieldType>('text');
   
   // Tag State
   const [tagInput, setTagInput] = useState('');
@@ -1351,11 +1353,12 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
   const handleAddAttribute = () => {
     if (!newAttrKey.tr.trim() && !newAttrKey.en.trim()) return;
-    const newAttr: NodeAttribute = { id: generateId('attr'), key: { ...newAttrKey }, value: { ...newAttrValue }, type: 'text' };
+    const newAttr: NodeAttribute = { id: generateId('attr'), key: { ...newAttrKey }, value: { ...newAttrValue }, type: newAttrType };
     const currentAttributes = Array.isArray(node.attributes) ? [...node.attributes] : [];
     onUpdate(node.id, { attributes: [...currentAttributes, newAttr], aiConfidence: undefined });
     setNewAttrKey({ tr: '', en: '' });
     setNewAttrValue({ tr: '', en: '' });
+    setNewAttrType('text');
   };
 
   const handleAddTag = () => {
@@ -1408,8 +1411,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
           const newAttributes: NodeAttribute[] = data.map((row: any) => ({
               id: generateId('attr'),
-              key: { tr: row.Key_TR || row.Key || '', en: row.Key_EN || '' },
-              value: { tr: row.Value_TR || row.Value || '', en: row.Value_EN || '' },
+              key: { tr: String(row.Key_TR || row.Key || ''), en: String(row.Key_EN || '') },
+              value: { tr: String(row.Value_TR || row.Value || ''), en: String(row.Value_EN || '') },
               type: row.Type || 'text'
           }));
 
@@ -1986,24 +1989,50 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                             const isTall = attr.type === 'textarea' || attr.type === 'multiselect';
                             return (
                                 <div key={attr.id} className={`flex ${isTall ? 'items-start' : 'items-center'} gap-4 group`}>
-                                    <div className="w-1/3 min-w-[140px]">
-                                        <LocalizedInput 
-                                            value={attr.key} 
-                                            onChange={(val) => handleAttributeUpdate(attr.id, undefined, attr.value as LocalizedText, val)} 
-                                            placeholder="Özellik Adı" 
-                                            activeTab={activeTab} 
-                                            onTabChange={setDisplayLanguage}
-                                            actionButton={activeTab === 'en' ? (
-                                                <button 
-                                                    onClick={() => handleSingleAttributeKeyTranslate(attr.id)}
-                                                    disabled={translatingFieldId === attr.id + '_key'}
-                                                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
-                                                    title="Translate this key"
-                                                >
-                                                    {translatingFieldId === attr.id + '_key' ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
-                                                </button>
-                                            ) : undefined}
-                                        />
+                                    <div className="w-1/3 min-w-[140px] flex gap-2">
+                                        <div className="flex-1">
+                                            <LocalizedInput 
+                                                value={attr.key} 
+                                                onChange={(val) => handleAttributeUpdate(attr.id, undefined, attr.value as LocalizedText, val)} 
+                                                placeholder="Özellik Adı" 
+                                                activeTab={activeTab} 
+                                                onTabChange={setDisplayLanguage}
+                                                actionButton={activeTab === 'en' ? (
+                                                    <button 
+                                                        onClick={() => handleSingleAttributeKeyTranslate(attr.id)}
+                                                        disabled={translatingFieldId === attr.id + '_key'}
+                                                        className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                        title="Translate this key"
+                                                    >
+                                                        {translatingFieldId === attr.id + '_key' ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                                    </button>
+                                                ) : undefined}
+                                            />
+                                        </div>
+                                        {/* TYPE SELECTOR FOR CUSTOM ATTRIBUTE */}
+                                        <div className="w-[85px] shrink-0">
+                                            <select
+                                                value={attr.type}
+                                                onChange={(e) => {
+                                                    const newType = e.target.value as FieldType;
+                                                    const currentAttributes = Array.isArray(node.attributes) ? node.attributes : [];
+                                                    const updated = currentAttributes.map(a => a.id === attr.id ? { ...a, type: newType } : a);
+                                                    onUpdate(node.id, { attributes: updated });
+                                                }}
+                                                className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-600 rounded-lg px-2 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer font-medium"
+                                                title="Veri Tipi"
+                                            >
+                                                <option value="text">Metin</option>
+                                                <option value="textarea">Uzun Metin</option>
+                                                <option value="number">Sayı</option>
+                                                <option value="boolean">Mantıksal</option>
+                                                <option value="date">Tarih</option>
+                                                <option value="time">Saat</option>
+                                                <option value="currency">Para</option>
+                                                <option value="select">Seçim</option>
+                                                <option value="multiselect">Çoklu</option>
+                                            </select>
+                                        </div>
                                     </div>
                                     <div className="flex-1 relative">
                                         <DynamicFieldInput 
@@ -2035,22 +2064,40 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                     
                     {/* Add New Attribute Row */}
                     <div className="flex items-center gap-4 pt-6 border-t border-slate-100 mt-2 bg-slate-50/30 p-4 rounded-lg border-dashed border border-slate-200">
-                        <div className="w-1/3 min-w-[140px]">
-                            <LocalizedInput 
-                                value={newAttrKey} 
-                                onChange={setNewAttrKey} 
-                                placeholder="Yeni Özellik Adı" 
-                                activeTab={activeTab} 
-                                onTabChange={setDisplayLanguage}
-                            />
+                        <div className="w-1/3 min-w-[140px] flex gap-2">
+                            <div className="flex-1">
+                                <LocalizedInput 
+                                    value={newAttrKey} 
+                                    onChange={setNewAttrKey} 
+                                    placeholder="Yeni Özellik Adı" 
+                                    activeTab={activeTab} 
+                                    onTabChange={setDisplayLanguage}
+                                />
+                            </div>
+                            <div className="w-[85px] shrink-0">
+                                <select
+                                    value={newAttrType}
+                                    onChange={(e) => setNewAttrType(e.target.value as FieldType)}
+                                    className="w-full bg-white border border-slate-200 text-xs text-slate-600 rounded-lg px-2 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer font-medium"
+                                >
+                                    <option value="text">Metin</option>
+                                    <option value="textarea">Uzun Metin</option>
+                                    <option value="number">Sayı</option>
+                                    <option value="boolean">Mantıksal</option>
+                                    <option value="date">Tarih</option>
+                                    <option value="time">Saat</option>
+                                    <option value="currency">Para</option>
+                                    <option value="select">Seçim</option>
+                                    <option value="multiselect">Çoklu</option>
+                                </select>
+                            </div>
                         </div>
                         <div className="flex-1 flex gap-3 items-center">
                             <div className="flex-1">
-                                <LocalizedInput 
-                                    value={newAttrValue} 
-                                    onChange={setNewAttrValue} 
-                                    placeholder="Değer" 
-                                    activeTab={activeTab} 
+                                <DynamicFieldInput 
+                                    attribute={{ id: 'temp', key: newAttrKey, value: newAttrValue, type: newAttrType }}
+                                    onChange={(val) => setNewAttrValue(val)}
+                                    activeTab={activeTab}
                                     onTabChange={setDisplayLanguage}
                                 />
                             </div>
