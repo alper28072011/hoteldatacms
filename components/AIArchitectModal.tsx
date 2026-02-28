@@ -1,8 +1,11 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { processArchitectCommand, processArchitectFile } from '../services/geminiService';
-import { HotelNode, ArchitectResponse, ArchitectAction } from '../types';
-import { Sparkles, X, Check, TriangleAlert, ArrowRight, Loader2, FileText, UploadCloud, MessageSquare, Info } from 'lucide-react';
+import { HotelNode, ArchitectResponse, ArchitectAction, NodeTemplate, NodeType } from '../types';
+import { Sparkles, X, Check, TriangleAlert, ArrowRight, Loader2, FileText, UploadCloud, MessageSquare, Info, Table, Download, FileSpreadsheet } from 'lucide-react';
+import { useHotel } from '../contexts/HotelContext';
+import * as XLSX from 'xlsx';
+import { generateId } from '../utils/treeUtils';
 
 interface AIArchitectModalProps {
   isOpen: boolean;
@@ -12,7 +15,8 @@ interface AIArchitectModalProps {
 }
 
 const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, data, onApplyActions }) => {
-  const [activeTab, setActiveTab] = useState<'chat' | 'file'>('chat');
+  const { nodeTemplates } = useHotel();
+  const [activeTab, setActiveTab] = useState<'chat' | 'file' | 'csv'>('chat');
   
   // Chat State
   const [command, setCommand] = useState('');
@@ -21,16 +25,43 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // CSV State
+  const [targetNodeId, setTargetNodeId] = useState<string>('root');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<any[]>([]);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
   // Common State
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [proposal, setProposal] = useState<ArchitectResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Flatten tree for target selection (only containers)
+  const containerNodes = useMemo(() => {
+      if (!isOpen) return [];
+      const nodes: { id: string, name: string, type: string, depth: number }[] = [];
+      const traverse = (node: HotelNode, depth: number) => {
+          const isContainer = ['root', 'category', 'list', 'menu'].includes(String(node.type));
+          if (isContainer) {
+              const name = typeof node.name === 'object' ? node.name.tr : node.name;
+              nodes.push({ id: node.id, name: String(name), type: String(node.type), depth });
+              if (node.children) {
+                  node.children.forEach(child => traverse(child, depth + 1));
+              }
+          }
+      };
+      traverse(data, 0);
+      return nodes;
+  }, [data, isOpen]);
 
   if (!isOpen) return null;
 
   const resetState = () => {
     setCommand('');
     setSelectedFile(null);
+    setCsvFile(null);
+    setCsvPreview([]);
     setProposal(null);
     setError(null);
   };
@@ -89,6 +120,153 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
     }
   };
 
+  const handleDownloadSampleCSV = () => {
+      if (!selectedTemplateId) {
+          setError("Please select a template first.");
+          return;
+      }
+      const template = nodeTemplates.find(t => t.id === selectedTemplateId);
+      if (!template) return;
+
+      // 1. Headers
+      const headers = ['Name_TR', 'Name_EN', 'Type', 'Intent'];
+      const guideRow = [
+          '[Örn: Hamburger]', 
+          '[Ex: Hamburger]', 
+          '[item | menu_item | category | list | menu]', 
+          '[informational | request | policy | complaint | safety | navigation]'
+      ];
+
+      // 2. Dynamic Fields
+      template.fields.forEach(f => {
+          const baseHeader = f.label.tr || f.key;
+          headers.push(`${baseHeader}_TR`);
+          headers.push(`${baseHeader}_EN`);
+
+          // Guide Logic
+          let guide = '[Metin]';
+          if (f.type === 'boolean') guide = '[true | false]';
+          else if (f.type === 'number') guide = '[Sayı]';
+          else if (f.type === 'currency') guide = '[100 TL]';
+          else if (f.type === 'select' || f.type === 'multiselect') {
+             const opts = f.options ? (Array.isArray(f.options) ? f.options : f.options.tr) : [];
+             guide = `[${opts.slice(0, 3).join(' | ')}${opts.length > 3 ? '...' : ''}]`;
+          }
+          else if (f.type === 'date') guide = '[YYYY-MM-DD]';
+          else if (f.type === 'time') guide = '[HH:MM]';
+          
+          guideRow.push(guide); // For TR column
+          guideRow.push(guide.replace('Metin', 'Text').replace('Sayı', 'Number')); // For EN column
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, guideRow]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Template");
+      // Use .xlsx to ensure correct column parsing in all locales (fixes delimiter issues)
+      XLSX.writeFile(wb, `${template.name}_Sample.xlsx`);
+  };
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          setCsvFile(file);
+          setError(null);
+
+          // Parse Preview
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+              const bstr = evt.target?.result;
+              const wb = XLSX.read(bstr, { type: 'binary' });
+              const wsname = wb.SheetNames[0];
+              const ws = wb.Sheets[wsname];
+              const data = XLSX.utils.sheet_to_json(ws);
+              
+              // Filter out guide row for preview if it exists
+              const cleanData = data.filter((row: any) => !String(row.Type || '').trim().startsWith('['));
+              setCsvPreview(cleanData.slice(0, 5)); // Preview first 5 real rows
+          };
+          reader.readAsBinaryString(file);
+      }
+  };
+
+  const handleProcessCSV = async () => {
+      if (!csvFile || !selectedTemplateId) return;
+      setIsAnalyzing(true);
+      setError(null);
+
+      try {
+          const template = nodeTemplates.find(t => t.id === selectedTemplateId);
+          if (!template) throw new Error("Template not found");
+
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+              const bstr = evt.target?.result;
+              const wb = XLSX.read(bstr, { type: 'binary' });
+              const wsname = wb.SheetNames[0];
+              const ws = wb.Sheets[wsname];
+              const rows: any[] = XLSX.utils.sheet_to_json(ws);
+
+              // Filter out the guide row (heuristic: check if Type starts with '[')
+              const cleanRows = rows.filter(row => {
+                  const typeVal = row.Type || '';
+                  return !String(typeVal).trim().startsWith('[');
+              });
+
+              const actions: ArchitectAction[] = cleanRows.map(row => {
+                  // 1. Basic Info
+                  const nameTR = row.Name_TR || row.Name || 'Yeni Öğe';
+                  const nameEN = row.Name_EN || nameTR; // Fallback to TR if EN missing
+                  const type = row.Type || 'item';
+                  const intent = row.Intent || 'informational';
+
+                  // 2. Attributes from Template
+                  const attributes = template.fields.map(field => {
+                      const headerBase = field.label.tr || field.key;
+                      // Support both new format (_TR/_EN) and legacy/simple format (no suffix)
+                      const valTR = row[`${headerBase}_TR`] || row[headerBase] || '';
+                      const valEN = row[`${headerBase}_EN`] || ''; 
+                      
+                      return {
+                          id: generateId('attr'),
+                          key: { tr: field.label.tr, en: field.label.en },
+                          value: { tr: String(valTR), en: String(valEN) },
+                          type: field.type,
+                          options: field.options ? (Array.isArray(field.options) ? field.options : field.options.tr) : undefined
+                      };
+                  });
+
+                  return {
+                      type: 'add',
+                      targetId: targetNodeId,
+                      data: {
+                          name: { tr: nameTR, en: nameEN },
+                          type: type,
+                          intent: intent,
+                          appliedTemplateId: template.id,
+                          attributes: attributes,
+                          value: { tr: '', en: '' }, // Empty as requested
+                          description: { tr: '', en: '' }, // Empty as requested
+                          tags: [] // Empty as requested
+                      },
+                      reason: `Imported from CSV using template: ${template.name}`
+                  };
+              });
+
+              setProposal({
+                  summary: `Ready to import ${cleanRows.length} items from CSV into selected target.`,
+                  actions: actions
+              });
+              setIsAnalyzing(false);
+          };
+          reader.readAsBinaryString(csvFile);
+
+      } catch (err) {
+          console.error(err);
+          setError("Failed to process CSV.");
+          setIsAnalyzing(false);
+      }
+  };
+
   const handleApply = () => {
     if (proposal && proposal.actions) {
       onApplyActions(proposal.actions);
@@ -132,6 +310,12 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
                 className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'file' ? 'border-primary-500 text-primary-700 bg-primary-100/50' : 'border-transparent text-slate-500 hover:bg-slate-100'}`}
              >
                 <UploadCloud size={16} /> File Import
+             </button>
+             <button 
+                onClick={() => setActiveTab('csv')}
+                className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'csv' ? 'border-primary-500 text-primary-700 bg-primary-100/50' : 'border-transparent text-slate-500 hover:bg-slate-100'}`}
+             >
+                <FileSpreadsheet size={16} /> Bulk CSV
              </button>
           </div>
         )}
@@ -227,6 +411,138 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
                         </button>
                     </div>
                  </div>
+              )}
+
+              {/* CSV TAB CONTENT */}
+              {activeTab === 'csv' && (
+                  <div className="space-y-6">
+                      {/* Step 1: Configuration */}
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Parent Node</label>
+                              <select 
+                                  value={targetNodeId} 
+                                  onChange={(e) => setTargetNodeId(e.target.value)}
+                                  className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                              >
+                                  <option value="root">Root (Ana Dizin)</option>
+                                  {containerNodes.map(n => (
+                                      <option key={n.id} value={n.id}>
+                                          {'-'.repeat(n.depth)} {n.name} ({n.type})
+                                      </option>
+                                  ))}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Template</label>
+                              <select 
+                                  value={selectedTemplateId} 
+                                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                  className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                              >
+                                  <option value="">-- Select Template --</option>
+                                  {nodeTemplates.map(t => (
+                                      <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                              </select>
+                          </div>
+                      </div>
+
+                      {/* Step 2: Download Sample */}
+                      {selectedTemplateId && (
+                          <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-center justify-between">
+                              <div>
+                                  <h4 className="text-sm font-bold text-blue-800">Need a starting point?</h4>
+                                  <p className="text-xs text-blue-600 mt-1">Download a CSV template based on your selection.</p>
+                              </div>
+                              <button 
+                                  onClick={handleDownloadSampleCSV}
+                                  className="flex items-center gap-2 px-3 py-2 bg-white border border-blue-200 text-blue-700 rounded-md text-xs font-bold hover:bg-blue-50 transition-colors shadow-sm"
+                              >
+                                  <Download size={14} /> Download Sample Excel
+                              </button>
+                          </div>
+                      )}
+
+                      {/* Step 3: Upload */}
+                      <div 
+                        className={`
+                          border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all
+                          ${csvFile ? 'border-emerald-300 bg-emerald-50' : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50'}
+                        `}
+                        onClick={() => csvInputRef.current?.click()}
+                      >
+                         <div className={`p-3 rounded-full mb-2 ${csvFile ? 'bg-emerald-200 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                            {csvFile ? <FileSpreadsheet size={24} /> : <UploadCloud size={24} />}
+                         </div>
+                         
+                         {csvFile ? (
+                            <div>
+                               <p className="text-sm font-bold text-slate-800">{csvFile.name}</p>
+                               <p className="text-xs text-slate-500">{(csvFile.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                         ) : (
+                            <div>
+                               <p className="text-sm font-bold text-slate-700">Upload Filled Excel / CSV</p>
+                               <p className="text-xs text-slate-500 mt-1">Click to browse</p>
+                            </div>
+                         )}
+                         <input 
+                            type="file" 
+                            ref={csvInputRef} 
+                            onChange={handleCsvFileChange} 
+                            className="hidden" 
+                            accept=".csv, .xlsx, .xls"
+                         />
+                      </div>
+
+                      {/* Step 4: Preview */}
+                      {csvPreview.length > 0 && (
+                          <div className="border border-slate-200 rounded-lg overflow-hidden">
+                              <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                                  Preview (First 5 Rows)
+                              </div>
+                              <div className="overflow-x-auto">
+                                  <table className="w-full text-xs text-left">
+                                      <thead className="bg-white text-slate-500 font-medium border-b border-slate-100">
+                                          <tr>
+                                              {Object.keys(csvPreview[0]).map(k => (
+                                                  <th key={k} className="px-3 py-2">{k}</th>
+                                              ))}
+                                          </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                          {csvPreview.map((row, i) => (
+                                              <tr key={i} className="bg-white hover:bg-slate-50">
+                                                  {Object.values(row).map((v: any, j) => (
+                                                      <td key={j} className="px-3 py-2 text-slate-700">{String(v)}</td>
+                                                  ))}
+                                              </tr>
+                                          ))}
+                                      </tbody>
+                                  </table>
+                              </div>
+                          </div>
+                      )}
+
+                      <div className="flex justify-end pt-2">
+                          <button
+                            onClick={handleProcessCSV}
+                            disabled={isAnalyzing || !csvFile || !selectedTemplateId}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm shadow-emerald-200"
+                          >
+                            {isAnalyzing ? (
+                              <>
+                                <Loader2 size={18} className="animate-spin" /> Processing CSV...
+                              </>
+                            ) : (
+                              <>
+                                <Check size={18} /> Generate Nodes
+                              </>
+                            )}
+                          </button>
+                      </div>
+                  </div>
               )}
               
               {error && (

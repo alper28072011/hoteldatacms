@@ -5,7 +5,7 @@ import { AutoFixAction } from './services/geminiService';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
   analyzeHotelStats, filterHotelTree, generateOptimizedCSV, generateCleanAIJSON, 
-  generateAIText, addChildToNode 
+  generateAIText, addChildToNode, updateNodeInTree, deleteNodeFromTree
 } from './utils/treeUtils';
 import TreeViewNode from './components/TreeViewNode';
 import NodeEditor from './components/NodeEditor';
@@ -197,31 +197,31 @@ const App: React.FC = () => {
 
   // --- ARCHITECT & EXPORT HANDLERS (Same as before, abbreviated for brevity) ---
   const handleArchitectActions = (actions: ArchitectAction[]) => {
-      // (Keep existing implementation but map features to attributes correctly)
-      let successCount = 0;
-      actions.forEach(action => {
-          try {
-              if (action.type === 'add' && action.data) {
-                  setHotelData(prev => {
-                      const newNode = { ...action.data, id: action.data?.id || generateId('ai') } as HotelNode;
+      if (actions.length === 0) return;
+      
+      setHotelData(prev => {
+          let currentTree = prev;
+          
+          actions.forEach(action => {
+              try {
+                  if (action.type === 'add' && action.data) {
+                      const newNode = { ...action.data, id: action.data.id || generateId('ai') } as HotelNode;
                       // Ensure localized text
                       if(typeof newNode.name === 'string') newNode.name = { tr: newNode.name, en: '' };
-                      return addChildToNode(prev, action.targetId, newNode);
-                  });
-                  successCount++;
-              } else if (action.type === 'update' && action.data) {
-                  updateNode(action.targetId, action.data);
-                  successCount++;
-              } else if (action.type === 'delete') {
-                  deleteNode(action.targetId);
-                  successCount++;
-              }
-          } catch(e) { console.error(e); }
+                      currentTree = addChildToNode(currentTree, action.targetId, newNode);
+                  } else if (action.type === 'update' && action.data) {
+                      currentTree = updateNodeInTree(currentTree, action.targetId, action.data);
+                  } else if (action.type === 'delete') {
+                      currentTree = deleteNodeFromTree(currentTree, action.targetId);
+                  }
+              } catch(e) { console.error(e); }
+          });
+          
+          return currentTree;
       });
-      if(successCount > 0) {
-          setNotification({ message: "Yapı güncellendi.", type: 'success' });
-          setTimeout(() => setNotification(null), 2000);
-      }
+
+      setNotification({ message: `${actions.length} işlem uygulandı.`, type: 'success' });
+      setTimeout(() => setNotification(null), 2000);
   };
 
   const handleAutoFixAction = (action: AutoFixAction) => {

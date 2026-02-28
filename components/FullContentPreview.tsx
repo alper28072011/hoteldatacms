@@ -17,7 +17,7 @@ const ContentNodeRenderer: React.FC<{ node: HotelNode; level: number; language: 
     // Skip empty nodes if desired, or show placeholder
     if (!name) return null;
 
-    const HeadingTag = `h${Math.min(level + 1, 6)}` as keyof JSX.IntrinsicElements;
+    const HeadingTag = `h${Math.min(level + 1, 6)}` as React.ElementType;
     
     // Styles based on level
     const headingClass = level === 0 ? "text-3xl font-bold mb-4 mt-8 border-b-2 border-slate-800 pb-2" :
