@@ -71,7 +71,16 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
 
       // 4. Merge issues from report into local view if any
       if (healthReport.issues && healthReport.issues.length > 0) {
-          // You might want to display semantic issues here too
+          const semanticFixes: AutoFixAction[] = healthReport.issues.map(issue => ({
+              id: issue.id || `issue_${Math.random().toString(36).substr(2, 9)}`,
+              type: issue.fix?.action === 'delete' ? 'update' : (issue.fix?.action as any) || 'update', // Default to update
+              targetId: issue.nodeId,
+              payload: issue.fix?.data,
+              reasoning: `${issue.message} ${issue.fix?.description ? `(${issue.fix.description})` : ''}`,
+              severity: issue.severity === 'optimization' ? 'content' : (issue.severity === 'critical' ? 'critical' : 'structural')
+          }));
+          
+          setAutoFixes(prev => [...prev, ...semanticFixes]);
       }
 
       setActiveTab('autofix');
@@ -283,6 +292,31 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                                             </div>
                                             
                                             <p className="text-slate-700 text-sm mb-3 font-medium">{action.reasoning}</p>
+
+                                            {/* Show proposed content changes if available */}
+                                            {action.payload && (action.payload.description || action.payload.value) && (
+                                                <div className="mb-3 bg-slate-50 p-3 rounded border border-slate-100 text-xs">
+                                                    <div className="font-bold text-slate-500 mb-1 uppercase tracking-wider">Önerilen İçerik:</div>
+                                                    {action.payload.description && (
+                                                        <div className="mb-2">
+                                                            <span className="font-semibold text-slate-600">Açıklama:</span>
+                                                            <div className="pl-2 border-l-2 border-emerald-200 text-slate-600 italic">
+                                                                {typeof action.payload.description === 'string' ? action.payload.description : 
+                                                                 `${action.payload.description.tr} / ${action.payload.description.en}`}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {action.payload.value && (
+                                                        <div>
+                                                            <span className="font-semibold text-slate-600">Değer:</span>
+                                                            <div className="pl-2 border-l-2 border-emerald-200 text-slate-600 italic">
+                                                                {typeof action.payload.value === 'string' ? action.payload.value : 
+                                                                 `${action.payload.value.tr} / ${action.payload.value.en}`}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
 
                                             <div className="flex items-center gap-2">
                                                 {!isFixed ? (

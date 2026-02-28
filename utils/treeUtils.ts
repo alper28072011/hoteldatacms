@@ -690,6 +690,103 @@ export const generateMinifiedAIContext = (
     return minified;
 };
 
+// --- EXPORT FUNCTION: MINIFIED AI TEXT ---
+// Compact Markdown/Text for minimal token usage
+export const generateMinifiedAIText = async (
+  root: HotelNode, 
+  onProgress: (percent: number) => void,
+  config: ExportConfig = { format: 'txt_minified', languages: ['tr', 'en'], options: { descriptions: true, tags: true } }
+): Promise<string> => {
+  
+  const lines: string[] = [];
+  let processedCount = 0;
+  
+  const countNodes = (node: HotelNode): number => {
+      let count = 1;
+      if (node.children) count += node.children.reduce((acc, child) => acc + countNodes(child), 0);
+      return count;
+  };
+  const totalNodes = countNodes(root);
+
+  const processNode = async (node: HotelNode, depth: number) => {
+      processedCount++;
+      if (processedCount % 50 === 0) {
+          onProgress(Math.round((processedCount / totalNodes) * 100));
+          await new Promise(resolve => setTimeout(resolve, 1)); 
+      }
+
+      // 1. Compact Indentation (using dashes for hierarchy instead of spaces)
+      const prefix = "-".repeat(depth + 1) + " ";
+
+      // 2. Name & Value Combined
+      const nameVal = getExportValue(node.name, config);
+      const nameStr = typeof nameVal === 'string' ? nameVal : JSON.stringify(nameVal);
+      
+      let lineContent = `${prefix}${nameStr}`;
+
+      // Value / Answer
+      const val = getExportValue(node.value || node.answer, config);
+      if (val) {
+          const valStr = typeof val === 'string' ? val : JSON.stringify(val);
+          // If value is short, append to line with separator. If long, maybe new line? 
+          // For minified, let's try to keep it inline or minimal break.
+          // Using pipe separator for compactness
+          lineContent += ` | ${valStr}`;
+      }
+
+      if (node.price) lineContent += ` (${node.price})`;
+
+      // 3. Metadata (Short Codes)
+      // i:intent, t:type
+      const meta: string[] = [];
+      if (node.intent && node.intent !== 'informational') meta.push(`i:${node.intent.substring(0,3)}`);
+      // Only show type if it's structural (category, list, menu) to save tokens on items
+      if (['category', 'list', 'menu', 'root'].includes(String(node.type))) meta.push(`t:${String(node.type).substring(0,3)}`);
+      
+      if (meta.length > 0) lineContent += ` [${meta.join(',')}]`;
+
+      // 4. Attributes (Inline Object-like syntax)
+      if (node.attributes && node.attributes.length > 0) {
+          const attrs = node.attributes
+              .map(a => {
+                  const k = getExportValue(a.key, config);
+                  const v = getExportValue(a.value, config);
+                  if (!k || !v) return null;
+                  const kStr = typeof k === 'string' ? k : JSON.stringify(k);
+                  const vStr = typeof v === 'string' ? v : JSON.stringify(v);
+                  return `${kStr}:${vStr}`;
+              })
+              .filter(Boolean)
+              .join(', ');
+          
+          if (attrs) lineContent += ` {${attrs}}`;
+      }
+
+      // 5. Context & Tags (Optional, minimal syntax)
+      if (config.options?.descriptions && node.description) {
+          const desc = getExportValue(node.description, config);
+          const descStr = typeof desc === 'string' ? desc : JSON.stringify(desc);
+          // Use a distinct marker for description, e.g. ">>"
+          lineContent += ` >> ${descStr}`;
+      }
+
+      if (config.options?.tags && node.tags && node.tags.length > 0) {
+          lineContent += ` #${node.tags.join(',')}`;
+      }
+
+      lines.push(lineContent);
+
+      if (node.children) {
+          for (const child of node.children) {
+              await processNode(child, depth + 1);
+          }
+      }
+  };
+
+  await processNode(root, 0);
+  return lines.join('\n');
+};
+
 // --- EXPORT FUNCTION: MARKDOWN / TXT ---
 
 const translateScheduleToNaturalLanguage = (jsonStr: string, lang: 'tr' | 'en'): string => {

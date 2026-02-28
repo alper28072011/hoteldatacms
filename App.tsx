@@ -5,7 +5,7 @@ import { AutoFixAction } from './services/geminiService';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
   analyzeHotelStats, filterHotelTree, generateOptimizedCSV, generateCleanAIJSON, 
-  generateAIText, addChildToNode, updateNodeInTree, deleteNodeFromTree, generateMinifiedAIContext
+  generateAIText, addChildToNode, updateNodeInTree, deleteNodeFromTree, generateMinifiedAIContext, generateMinifiedAIText
 } from './utils/treeUtils';
 import TreeViewNode from './components/TreeViewNode';
 import NodeEditor from './components/NodeEditor';
@@ -293,6 +293,11 @@ const App: React.FC = () => {
           const txt = await generateAIText(hotelData, setExportProgress, config);
           dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(txt);
           fileName = `${safeName}_CONTEXT_${nowStr}.txt`;
+      } else if (config.format === 'txt_minified') {
+          setExportProgress(30);
+          const txt = await generateMinifiedAIText(hotelData, setExportProgress, config);
+          dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(txt);
+          fileName = `${safeName}_AI_CONTEXT_MIN_${nowStr}.txt`;
       } else if (config.format === 'pdf') {
           setExportProgress(50);
           const doc = generatePDF(hotelData, config);

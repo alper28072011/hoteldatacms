@@ -475,7 +475,7 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
     } catch(e) { return ""; }
 }
 
-export const generateHealthReport = async (data: HotelNode): Promise<HealthReport> => {
+    export const generateHealthReport = async (data: HotelNode): Promise<HealthReport> => {
     try {
         const textContext = await generateAIText(data, () => {});
         
@@ -485,6 +485,10 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
         1. Completeness (Missing descriptions, prices, schedules).
         2. Consistency (Language mix, logical hierarchy errors).
         3. Semantic Sense (e.g. "Pool" inside "Room Service").
+        4. **Token Efficiency (NEW)**: Identify unnecessarily long 'value' or 'description' fields that consume too many tokens.
+           - Detect repetitive phrases or verbose explanations.
+           - Suggest concise alternatives that preserve the EXACT meaning but use fewer words.
+           - Target both Turkish and English fields.
         
         Data (Markdown):
         ${textContext}
@@ -499,8 +503,17 @@ export const generateHealthReport = async (data: HotelNode): Promise<HealthRepor
                     "nodeId": "extracted_id_from_data", // Important: Extract [ID: ...] from text
                     "nodeName": "Name of node",
                     "severity": "critical" | "warning" | "optimization",
-                    "message": "Issue description in Turkish",
-                    "fix": { "targetId": "same_node_id", "action": "update", "data": {}, "description": "Fix desc" } (Optional)
+                    "message": "Issue description in Turkish (e.g. 'Açıklama gereksiz uzun (50 kelime), 15 kelimeye düşürülebilir.')",
+                    "fix": { 
+                        "targetId": "same_node_id", 
+                        "action": "update", 
+                        "data": { 
+                            "description": { "tr": "Kısa TR açıklama", "en": "Short EN description" },
+                            // OR if value is long:
+                            "value": { "tr": "Kısa TR değer", "en": "Short EN value" }
+                        }, 
+                        "description": "Önerilen kısaltmayı uygula" 
+                    } 
                 }
             ],
             "nodeScores": { "node_id": number (0-100) } // Score for specific nodes found in text
