@@ -294,9 +294,22 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
                                             <p className="text-slate-700 text-sm mb-3 font-medium">{action.reasoning}</p>
 
                                             {/* Show proposed content changes if available */}
-                                            {action.payload && (action.payload.description || action.payload.value) && (
+                                            {action.payload && (action.payload.description || action.payload.value || action.payload.id) && (
                                                 <div className="mb-3 bg-slate-50 p-3 rounded border border-slate-100 text-xs">
-                                                    <div className="font-bold text-slate-500 mb-1 uppercase tracking-wider">Önerilen İçerik:</div>
+                                                    <div className="font-bold text-slate-500 mb-1 uppercase tracking-wider">Önerilen Değişiklikler:</div>
+                                                    
+                                                    {/* ID Change Suggestion */}
+                                                    {action.payload.id && (
+                                                        <div className="mb-2 bg-amber-50 p-2 rounded border border-amber-100">
+                                                            <span className="font-semibold text-amber-700 block mb-1 flex items-center gap-1"><TriangleAlert size={10}/> ID Güncellemesi:</span>
+                                                            <div className="flex items-center gap-2 font-mono text-[10px]">
+                                                                <span className="text-slate-400 line-through">{action.targetId}</span>
+                                                                <ArrowRight size={10} className="text-slate-300" />
+                                                                <span className="text-emerald-600 font-bold bg-emerald-50 px-1 rounded">{action.payload.id}</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {action.payload.description && (
                                                         <div className="mb-2">
                                                             <span className="font-semibold text-slate-600">Açıklama:</span>

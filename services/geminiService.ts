@@ -86,12 +86,12 @@ export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Pr
         KURALLAR:
         1. Çıktı dili KESİNLİKLE ${langName} olmalıdır.
         2. Açıklama net, emir kipi içeren ve bağlam sağlayan bir formatta olmalı.
-        3. Gereksiz kelimeleri at, teknik ve açıklayıcı ol.
+        3. **TOKEN OPTİMİZASYONU**: Gereksiz kelimeleri at, teknik ve açıklayıcı ol. En kısa ve en etkili cümleyi kur.
         4. Sadece optimize edilmiş metni döndür, başka bir şey yazma.
         
         KULLANICI GİRDİSİ: "${text}"
         
-        ÖRNEK ÇIKTI (TR): "Bu alan odanın deniz, kara veya havuz manzaralı olup olmadığını belirtir. Misafir manzara sorduğunda bu veriyi kullan."
+        ÖRNEK ÇIKTI (TR): "Odanın manzara bilgisini içerir. Misafir sorduğunda kullan."
         `;
         
         const response = await ai.models.generateContent({
@@ -121,8 +121,9 @@ export const optimizeMainContent = async (text: string, lang: 'tr' | 'en'): Prom
         1. Çıktı dili KESİNLİKLE ${langName} olmalıdır.
         2. Yazım ve imla hatalarını düzelt.
         3. Anlatımı güçlendir ama abartıya kaçma.
-        4. Eğer maddeler halinde yazılması daha uygunsa (örn: özellik listesi), madde işaretleri kullan.
-        5. Sadece optimize edilmiş metni döndür.
+        4. **TOKEN DOSTU**: Gereksiz uzun cümlelerden kaçın. Kısa, öz ve net ol.
+        5. Eğer maddeler halinde yazılması daha uygunsa (örn: özellik listesi), madde işaretleri kullan.
+        6. Sadece optimize edilmiş metni döndür.
         
         KULLANICI GİRDİSİ: "${text}"
         `;
@@ -442,8 +443,11 @@ export const generateNodeContext = async (node: HotelNode, pathString: string, l
         Data: ${nodeData}
         
         Task:
-        1. Generate 5-10 SEO/Search tags relevant to this item (${lang}).
-        2. Write a short, hidden AI context note (${lang}) that explains what this node is for an LLM (e.g. "This node contains the opening hours for the main pool").
+        1. Generate MAX 5 SEO/Search tags relevant to this item (${lang}).
+           - Tags must be high-value keywords that help understand context.
+           - Avoid generic words.
+        2. Write a short, hidden AI context note (${lang}) that explains what this node is for an LLM.
+           - Keep it concise and token-efficient.
         
         Output JSON: { "tags": string[], "description": string }
         `;
@@ -485,10 +489,11 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
         1. Completeness (Missing descriptions, prices, schedules).
         2. Consistency (Language mix, logical hierarchy errors).
         3. Semantic Sense (e.g. "Pool" inside "Room Service").
-        4. **Token Efficiency (NEW)**: Identify unnecessarily long 'value' or 'description' fields that consume too many tokens.
-           - Detect repetitive phrases or verbose explanations.
-           - Suggest concise alternatives that preserve the EXACT meaning but use fewer words.
-           - Target both Turkish and English fields.
+        4. Token Efficiency: Identify unnecessarily long 'value' or 'description' fields.
+        5. **ID Quality (NEW)**: Check if 'id' values are random/meaningless strings (e.g. "node-123812", "ai-9384") or overly complex.
+           - Suggest semantic, short, kebab-case IDs (e.g. "pool-main", "rest-italian", "wifi-info").
+           - Keep them concise (max 2-3 words).
+           - DO NOT suggest changing "root".
         
         Data (Markdown):
         ${textContext}
@@ -503,16 +508,16 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
                     "nodeId": "extracted_id_from_data", // Important: Extract [ID: ...] from text
                     "nodeName": "Name of node",
                     "severity": "critical" | "warning" | "optimization",
-                    "message": "Issue description in Turkish (e.g. 'Açıklama gereksiz uzun (50 kelime), 15 kelimeye düşürülebilir.')",
+                    "message": "Issue description in Turkish",
                     "fix": { 
                         "targetId": "same_node_id", 
                         "action": "update", 
                         "data": { 
-                            "description": { "tr": "Kısa TR açıklama", "en": "Short EN description" },
-                            // OR if value is long:
-                            "value": { "tr": "Kısa TR değer", "en": "Short EN value" }
+                            "id": "new-semantic-id", // If ID change suggested
+                            "description": { "tr": "...", "en": "..." },
+                            "value": { "tr": "...", "en": "..." }
                         }, 
-                        "description": "Önerilen kısaltmayı uygula" 
+                        "description": "Önerilen düzeltme açıklaması" 
                     } 
                 }
             ],
