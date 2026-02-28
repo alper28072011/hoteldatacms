@@ -622,6 +622,74 @@ export const generateCleanAIJSON = (
   return semanticData;
 };
 
+// --- EXPORT FUNCTION: MINIFIED AI CONTEXT ---
+// Extremely compact JSON for minimal token usage while preserving context
+export const generateMinifiedAIContext = (
+    node: HotelNode,
+    config: ExportConfig = { format: 'ai_minified', languages: ['tr', 'en'], options: { descriptions: true, tags: true } }
+): any => {
+    const minified: any = {};
+
+    // 1. Essential Identity (Short Keys)
+    // n: name, t: type, i: intent
+    const nameVal = getExportValue(node.name, config);
+    if (nameVal) minified.n = nameVal;
+    
+    // Type is crucial for context (is it a menu or an item?)
+    if (node.type) minified.t = node.type;
+    
+    // Intent is optional but helpful for AI (is it a rule or info?)
+    if (node.intent && node.intent !== 'informational') minified.i = node.intent;
+
+    // 2. Content (Short Keys)
+    // v: value/answer, p: price
+    const val = getExportValue(node.value || node.answer, config);
+    if (val) minified.v = val;
+    
+    if (node.price) minified.p = node.price;
+
+    // 3. Attributes (Compact Map)
+    // a: attributes { "Key": "Value" }
+    if (node.attributes && node.attributes.length > 0) {
+        const attrs: Record<string, any> = {};
+        node.attributes.forEach(attr => {
+            const k = getExportValue(attr.key, config);
+            const v = getExportValue(attr.value, config);
+            
+            // Only add if both key and value exist
+            if (k && v) {
+                // If complex object (multi-lang), stringify key to use as object key
+                const keyStr = typeof k === 'string' ? k : JSON.stringify(k);
+                attrs[keyStr] = v;
+            }
+        });
+        if (Object.keys(attrs).length > 0) minified.a = attrs;
+    }
+
+    // 4. Context & Metadata (Optional)
+    // d: description (AI Context), tg: tags
+    if (config.options.descriptions && node.description) {
+        const desc = getExportValue(node.description, config);
+        if (desc) minified.d = desc;
+    }
+
+    if (config.options.tags && node.tags && node.tags.length > 0) {
+        minified.tg = node.tags;
+    }
+
+    // 5. Hierarchy (Short Key)
+    // c: children
+    if (node.children && node.children.length > 0) {
+        const kids = node.children
+            .map(child => generateMinifiedAIContext(child, config))
+            .filter(childObj => Object.keys(childObj).length > 0); // Remove empty nodes
+            
+        if (kids.length > 0) minified.c = kids;
+    }
+
+    return minified;
+};
+
 // --- EXPORT FUNCTION: MARKDOWN / TXT ---
 
 const translateScheduleToNaturalLanguage = (jsonStr: string, lang: 'tr' | 'en'): string => {

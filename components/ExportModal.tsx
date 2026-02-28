@@ -32,6 +32,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onExport, is
 
     const formats = [
         { id: 'json', label: 'JSON (Full)', icon: FileJson, desc: 'Tam yedekleme ve sistem entegrasyonu için.' },
+        { id: 'ai_minified', label: 'AI Token Optimized', icon: Cpu, desc: 'Yapay zeka modelleri için minimum boyutlu JSON.' },
         { id: 'csv', label: 'Excel / CSV', icon: FileSpreadsheet, desc: 'Tablo görünümü ve toplu düzenleme için.' },
         { id: 'txt', label: 'Markdown / TXT', icon: FileText, desc: 'LLM eğitimi ve okunabilir doküman için.' },
         { id: 'pdf', label: 'PDF Rapor', icon: FileType, desc: 'Yazdırılabilir rapor ve paylaşım için.' }

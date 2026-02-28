@@ -5,7 +5,7 @@ import { AutoFixAction } from './services/geminiService';
 import { 
   getInitialData, generateId, findNodeById, regenerateIds, cleanTreeValues, 
   analyzeHotelStats, filterHotelTree, generateOptimizedCSV, generateCleanAIJSON, 
-  generateAIText, addChildToNode, updateNodeInTree, deleteNodeFromTree
+  generateAIText, addChildToNode, updateNodeInTree, deleteNodeFromTree, generateMinifiedAIContext
 } from './utils/treeUtils';
 import TreeViewNode from './components/TreeViewNode';
 import NodeEditor from './components/NodeEditor';
@@ -279,6 +279,11 @@ const App: React.FC = () => {
           const dataToExport = filterHotelData(hotelData, config);
           dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToExport, null, 2));
           fileName = `${safeName}_FULL_${nowStr}.json`;
+      } else if (config.format === 'ai_minified') {
+          // NEW: AI Minified Export
+          const minifiedData = generateMinifiedAIContext(hotelData, config);
+          dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(minifiedData));
+          fileName = `${safeName}_AI_CONTEXT_${nowStr}.json`;
       } else if (config.format === 'csv') {
           const csv = await generateOptimizedCSV(hotelData, setExportProgress, config);
           dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
