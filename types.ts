@@ -149,6 +149,12 @@ export interface NodeTemplate {
   fields: TemplateField[];
 }
 
+export interface NodeSection {
+  id: string;
+  title: LocalizedText; // Section Header (e.g. "Working Hours")
+  attributes: NodeAttribute[];
+}
+
 export interface HotelNode {
   id: string;
   type: NodeType | string;
@@ -166,6 +172,9 @@ export interface HotelNode {
   description?: LocalizedText | string; 
   
   attributes?: NodeAttribute[];
+  attributesTitle?: LocalizedText; // Custom title for the default attributes section
+  sections?: NodeSection[]; // Additional attribute sections
+
   children?: HotelNode[];
   
   price?: string | number | null;

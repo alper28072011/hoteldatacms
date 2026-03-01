@@ -628,7 +628,7 @@ export const generateCleanAIJSON = (
 
   // Attributes (Flattened for better token usage)
   if (node.attributes && Array.isArray(node.attributes) && node.attributes.length > 0) {
-      semanticData.attributes = node.attributes.map(a => {
+      const attrs = node.attributes.map(a => {
           const attrObj: any = { 
               key: getExportValue(a.key, config), 
               value: getExportValue(a.value, config) 
@@ -641,6 +641,34 @@ export const generateCleanAIJSON = (
               }));
           }
           return attrObj;
+      });
+      
+      // If custom title exists for default attributes, wrap in section object
+      if (node.attributesTitle) {
+          if (!semanticData.sections) semanticData.sections = [];
+          semanticData.sections.push({
+              title: getExportValue(node.attributesTitle, config),
+              attributes: attrs
+          });
+      } else {
+          semanticData.attributes = attrs;
+      }
+  }
+
+  // Additional Sections
+  if (node.sections && Array.isArray(node.sections) && node.sections.length > 0) {
+      if (!semanticData.sections) semanticData.sections = [];
+      
+      node.sections.forEach(section => {
+          const sectionAttrs = section.attributes.map(a => ({
+              key: getExportValue(a.key, config),
+              value: getExportValue(a.value, config)
+          }));
+          
+          semanticData.sections.push({
+              title: getExportValue(section.title, config),
+              attributes: sectionAttrs
+          });
       });
   }
 
@@ -680,9 +708,9 @@ export const generateMinifiedAIContext = (
 
     // 3. Attributes (Compact Map)
     // a: attributes { "Key": "Value" }
-    if (node.attributes && node.attributes.length > 0) {
+    const processAttributes = (attrsList: NodeAttribute[]) => {
         const attrs: Record<string, any> = {};
-        node.attributes.forEach(attr => {
+        attrsList.forEach(attr => {
             const k = getExportValue(attr.key, config);
             const v = getExportValue(attr.value, config);
             
@@ -693,7 +721,36 @@ export const generateMinifiedAIContext = (
                 attrs[keyStr] = v;
             }
         });
-        if (Object.keys(attrs).length > 0) minified.a = attrs;
+        return attrs;
+    };
+
+    if (node.attributes && node.attributes.length > 0) {
+        const attrs = processAttributes(node.attributes);
+        if (Object.keys(attrs).length > 0) {
+             if (node.attributesTitle) {
+                 if (!minified.s) minified.s = {}; // s: sections
+                 const titleKey = typeof getExportValue(node.attributesTitle, config) === 'string' 
+                    ? getExportValue(node.attributesTitle, config) as string
+                    : JSON.stringify(getExportValue(node.attributesTitle, config));
+                 minified.s[titleKey] = attrs;
+             } else {
+                 minified.a = attrs;
+             }
+        }
+    }
+
+    // Additional Sections
+    if (node.sections && node.sections.length > 0) {
+        if (!minified.s) minified.s = {};
+        node.sections.forEach(section => {
+             const attrs = processAttributes(section.attributes);
+             if (Object.keys(attrs).length > 0) {
+                 const titleKey = typeof getExportValue(section.title, config) === 'string'
+                    ? getExportValue(section.title, config) as string
+                    : JSON.stringify(getExportValue(section.title, config));
+                 minified.s[titleKey] = attrs;
+             }
+        });
     }
 
     // 4. Context & Metadata (Optional)
