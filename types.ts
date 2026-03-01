@@ -169,7 +169,7 @@ export interface HotelNode {
   children?: HotelNode[];
   
   price?: string | number | null;
-  tags?: string[];
+  tags?: LocalizedOptions | string[];
   question?: string;
   answer?: LocalizedText | string;
   
@@ -257,8 +257,8 @@ export type IssueSeverity = 'critical' | 'warning' | 'optimization';
 
 export interface HealthFix {
   targetId: string;
-  action: 'update'; 
-  data: Partial<HotelNode>;
+  action: 'update' | 'delete'; 
+  data?: Partial<HotelNode>;
   description: string;
 }
 

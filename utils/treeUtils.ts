@@ -1,5 +1,5 @@
 
-import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute, ExportConfig, ScheduleData, TimeRange, FieldType } from "../types";
+import { HotelNode, EventData, DiningData, RoomData, NodeType, LocalizedText, NodeAttribute, ExportConfig, ScheduleData, TimeRange, FieldType, LocalizedOptions } from "../types";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -57,6 +57,24 @@ const getExportValue = (val: LocalizedText | string | undefined, config: ExportC
     const result: any = {};
     if (config.languages.includes('tr')) result.tr = localized.tr;
     if (config.languages.includes('en')) result.en = localized.en;
+    return result;
+}
+
+/**
+ * EXPORT HELPER: Gets tags based on config
+ */
+const getExportTags = (val: any | string[] | undefined, config: ExportConfig): string[] | object => {
+    if (!val) return [];
+    // Legacy support: assume string[] is TR/Global. If object, it's LocalizedOptions
+    const localized = Array.isArray(val) ? { tr: val, en: [] } : val;
+
+    if (config.languages.length === 1) {
+        return localized[config.languages[0]] || [];
+    }
+
+    const result: any = {};
+    if (config.languages.includes('tr')) result.tr = localized.tr || [];
+    if (config.languages.includes('en')) result.en = localized.en || [];
     return result;
 }
 
@@ -533,7 +551,16 @@ export const filterHotelTree = (node: HotelNode, query: string): HotelNode | nul
   const matchesQuestion = (node.question || '').toLowerCase().includes(lowerQuery);
 
   const matchesIntent = (node.intent || '').toLowerCase().includes(lowerQuery);
-  const matchesTags = node.tags?.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
+  
+  let matchesTags = false;
+  if (node.tags) {
+      if (Array.isArray(node.tags)) {
+          matchesTags = node.tags.some(tag => (tag || '').toLowerCase().includes(lowerQuery));
+      } else {
+          matchesTags = (node.tags.tr?.some(tag => (tag || '').toLowerCase().includes(lowerQuery)) || 
+                         node.tags.en?.some(tag => (tag || '').toLowerCase().includes(lowerQuery))) ?? false;
+      }
+  }
   
   const matchesAttributes = node.attributes?.some(attr => 
     getSearchable(attr.key).includes(lowerQuery) ||
@@ -592,8 +619,11 @@ export const generateCleanAIJSON = (
       semanticData.ai_context = getExportValue(node.description, config);
   }
   
-  if (config.options?.tags && node.tags && node.tags.length > 0) {
-      semanticData.tags = node.tags;
+  if (config.options?.tags && node.tags) {
+      const tags = getExportTags(node.tags, config);
+      // Check if not empty
+      const hasTags = Array.isArray(tags) ? tags.length > 0 : (Object.keys(tags).length > 0);
+      if (hasTags) semanticData.tags = tags;
   }
 
   // Attributes (Flattened for better token usage)
@@ -673,8 +703,11 @@ export const generateMinifiedAIContext = (
         if (desc) minified.d = desc;
     }
 
-    if (config.options.tags && node.tags && node.tags.length > 0) {
-        minified.tg = node.tags;
+    if (config.options.tags && node.tags) {
+        const tags = getExportTags(node.tags, config);
+        // Only add if not empty
+        const hasTags = Array.isArray(tags) ? tags.length > 0 : (Object.keys(tags).length > 0);
+        if (hasTags) minified.tg = tags;
     }
 
     // 5. Hierarchy (Short Key)
@@ -770,8 +803,21 @@ export const generateMinifiedAIText = async (
           lineContent += ` >> ${descStr}`;
       }
 
-      if (config.options?.tags && node.tags && node.tags.length > 0) {
-          lineContent += ` #${node.tags.join(',')}`;
+      if (config.options?.tags && node.tags) {
+          const tags = getExportTags(node.tags, config);
+          let tagStr = '';
+          if (Array.isArray(tags)) {
+              if (tags.length > 0) tagStr = tags.join(',');
+          } else {
+              // Object
+              const t = tags as any;
+              const parts = [];
+              if (t.tr && t.tr.length > 0) parts.push(`TR:[${t.tr.join(',')}]`);
+              if (t.en && t.en.length > 0) parts.push(`EN:[${t.en.join(',')}]`);
+              tagStr = parts.join(' ');
+          }
+          
+          if (tagStr) lineContent += ` #${tagStr}`;
       }
 
       lines.push(lineContent);
@@ -955,8 +1001,15 @@ export const generateAIText = async (
       }
 
       // Tags / Keywords (NEW: AI Semantic Indexing)
-      if (config.options?.tags && node.tags && node.tags.length > 0) {
-          lines.push(`${indent}  * Keywords: ${node.tags.map(t => `#${t}`).join(', ')}`);
+      if (config.options?.tags && node.tags) {
+          const tags = Array.isArray(node.tags) 
+              ? node.tags 
+              : [...(node.tags.tr || []), ...(node.tags.en || [])];
+          
+          if (tags.length > 0) {
+              const uniqueTags = Array.from(new Set(tags));
+              lines.push(`${indent}  * Keywords: ${uniqueTags.map(t => `#${t}`).join(', ')}`);
+          }
       }
 
       // AI Context (System Note)
@@ -1057,7 +1110,11 @@ export const generateOptimizedCSV = async (
      }
      
      if (config.options?.tags) {
-         rowData.push(safeCSV((node.tags || []).join(', ')));
+         const tags = Array.isArray(node.tags) 
+             ? node.tags 
+             : [...(node.tags?.tr || []), ...(node.tags?.en || [])];
+         const uniqueTags = Array.from(new Set(tags));
+         rowData.push(safeCSV(uniqueTags.join(', ')));
      }
 
      rows.push(rowData.join(','));
@@ -1136,8 +1193,15 @@ export const generatePDF = (
                 const descStr = typeof desc === 'string' ? desc : JSON.stringify(desc);
                 contextParts.push(`Desc: ${descStr.substring(0, 100)}${descStr.length > 100 ? '...' : ''}`);
             }
-            if (config.options?.tags && node.tags && node.tags.length > 0) {
-                contextParts.push(`Tags: ${node.tags.join(', ')}`);
+            if (config.options?.tags && node.tags) {
+                const tags = Array.isArray(node.tags) 
+                    ? node.tags 
+                    : [...(node.tags.tr || []), ...(node.tags.en || [])];
+                
+                if (tags.length > 0) {
+                    const uniqueTags = Array.from(new Set(tags));
+                    contextParts.push(`Tags: ${uniqueTags.join(', ')}`);
+                }
             }
             
             row.push(contextParts.join('\n'));

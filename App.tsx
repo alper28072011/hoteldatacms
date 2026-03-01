@@ -563,6 +563,7 @@ const App: React.FC = () => {
                 root={hotelData}
                 onUpdate={updateNode} 
                 onDelete={handleDeleteNodeWrapper}
+                onNodeSelect={setSelectedNodeId}
              />
         </div>
 

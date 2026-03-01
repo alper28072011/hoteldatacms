@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse } from "../types";
+import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 
 const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
@@ -136,6 +136,43 @@ export const optimizeMainContent = async (text: string, lang: 'tr' | 'en'): Prom
     } catch (e) {
         console.error("Content optimization failed", e);
         return text;
+    }
+};
+
+export const generateOptimizedID = async (nodeName: string, context: string): Promise<string> => {
+    if (!nodeName || !nodeName.trim()) return '';
+    try {
+        const prompt = `
+        Sen uzman bir "Veri Mimarı"sın.
+        
+        GÖREV:
+        Aşağıdaki otel verisi öğesi için benzersiz, anlamlı ve sistem dostu bir "ID" (Kimlik) değeri oluştur.
+        
+        BAĞLAM: ${context}
+        ÖĞE ADI: "${nodeName}"
+        
+        KURALLAR:
+        1. ID sadece küçük harf, rakam ve tire (-) içerebilir (kebab-case).
+        2. Türkçe karakter kullanma (ç,ğ,ı,ö,ş,ü -> c,g,i,o,s,u).
+        3. Kısa ve öz olsun (max 3-4 kelime).
+        4. Anlamsız sayılar ekleme (örn: "havuz-123" yerine "main-pool" veya "pool-kids").
+        5. Hiyerarşiyi yansıtabilir (örn: "restaurant-italian").
+        6. Sadece ID değerini döndür, başka hiçbir şey yazma.
+        
+        ÖRNEKLER:
+        - "Ana Havuz" -> "main-pool"
+        - "İtalyan Restoranı" -> "restaurant-italian"
+        - "Çocuk Kulübü Kuralları" -> "kids-club-rules"
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: modelConfig.model,
+            contents: prompt
+        });
+        return response.text?.trim() || '';
+    } catch (e) {
+        console.error("ID generation failed", e);
+        return '';
     }
 };
 
@@ -434,7 +471,7 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
   }
 };
 
-export const generateNodeContext = async (node: HotelNode, pathString: string, lang: 'tr' | 'en'): Promise<{ tags: string[], description: string }> => {
+export const generateNodeContext = async (node: HotelNode, pathString: string, lang: 'tr' | 'en'): Promise<{ tags: LocalizedOptions, description: string }> => {
     try {
         const nodeData = JSON.stringify(generateCleanAIJSON(node), null, 2);
         const prompt = `
@@ -443,13 +480,15 @@ export const generateNodeContext = async (node: HotelNode, pathString: string, l
         Data: ${nodeData}
         
         Task:
-        1. Generate MAX 5 SEO/Search tags relevant to this item (${lang}).
+        1. Generate MAX 5 SEO/Search tags relevant to this item in Turkish (tr).
            - Tags must be high-value keywords that help understand context.
            - Avoid generic words.
-        2. Write a short, hidden AI context note (${lang}) that explains what this node is for an LLM.
+        2. Generate MAX 5 SEO/Search tags relevant to this item in English (en).
+           - These should correspond to the Turkish tags or be relevant in English context.
+        3. Write a short, hidden AI context note (${lang === 'tr' ? 'Turkish' : 'English'}) that explains what this node is for an LLM.
            - Keep it concise and token-efficient.
         
-        Output JSON: { "tags": string[], "description": string }
+        Output JSON: { "tags": { "tr": string[], "en": string[] }, "description": string }
         `;
         
         const response = await ai.models.generateContent({
@@ -458,9 +497,16 @@ export const generateNodeContext = async (node: HotelNode, pathString: string, l
             config: { responseMimeType: 'application/json' }
         });
         
-        return JSON.parse(response.text || '{"tags":[], "description":""}');
+        const result = JSON.parse(response.text || '{"tags":{"tr":[], "en":[]}, "description":""}');
+        
+        // Ensure tags structure is correct
+        if (Array.isArray(result.tags)) {
+             result.tags = { tr: result.tags, en: [] };
+        }
+        
+        return result;
     } catch(e) {
-        return { tags: [], description: "" };
+        return { tags: { tr: [], en: [] }, description: "" };
     }
 }
 
