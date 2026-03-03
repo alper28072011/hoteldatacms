@@ -1032,6 +1032,14 @@ export const generateAIText = async (
 
       // Attributes
       if (node.attributes && node.attributes.length > 0) {
+          // Default Section Title
+          if (node.attributesTitle) {
+               const title = typeof getExportValue(node.attributesTitle, config) === 'string' 
+                  ? getExportValue(node.attributesTitle, config) 
+                  : JSON.stringify(getExportValue(node.attributesTitle, config));
+               lines.push(`${indent}  [Section: ${title}]`);
+          }
+
           node.attributes.forEach(attr => {
               // Only process attributes, simpler than the display function
               const k = typeof getExportValue(attr.key, config) === 'string' ? getExportValue(attr.key, config) : JSON.stringify(getExportValue(attr.key, config));
@@ -1053,6 +1061,38 @@ export const generateAIText = async (
                           if (sk && sv) lines.push(`${indent}    > ${sk}: ${sv}`);
                       });
                   }
+              }
+          });
+      }
+
+      // Custom Sections
+      if (node.sections && node.sections.length > 0) {
+          node.sections.forEach(section => {
+              const sectionTitle = typeof getExportValue(section.title, config) === 'string' 
+                  ? getExportValue(section.title, config) 
+                  : JSON.stringify(getExportValue(section.title, config));
+              
+              lines.push(`${indent}  [Section: ${sectionTitle}]`);
+              
+              if (section.attributes && section.attributes.length > 0) {
+                  section.attributes.forEach(attr => {
+                      const k = typeof getExportValue(attr.key, config) === 'string' ? getExportValue(attr.key, config) : JSON.stringify(getExportValue(attr.key, config));
+                      const vLine = formatTextLine("Value", attr.value, attr.type);
+                      const v = vLine.replace(/^Value: /, '');
+                      
+                      if (k && v) {
+                          lines.push(`${indent}    + [Feat] ${k}: ${v}`);
+                          // Sub-attributes
+                          if (config.options?.descriptions && attr.subAttributes) {
+                              attr.subAttributes.forEach(sa => {
+                                  const sk = typeof getExportValue(sa.key, config) === 'string' ? getExportValue(sa.key, config) : JSON.stringify(getExportValue(sa.key, config));
+                                  const svLine = formatTextLine("Value", sa.value, sa.type);
+                                  const sv = svLine.replace(/^Value: /, '');
+                                  if (sk && sv) lines.push(`${indent}      > ${sk}: ${sv}`);
+                              });
+                          }
+                      }
+                  });
               }
           });
       }
@@ -1155,10 +1195,35 @@ export const generateOptimizedCSV = async (
      }
 
      // Attributes: Process according to language config
-     const processedAttributes = node.attributes?.map(a => ({
+     let processedAttributes: any[] = node.attributes?.map(a => ({
          key: getExportValue(a.key, config),
          value: getExportValue(a.value, config)
      })) || [];
+
+     // Wrap default attributes if title exists
+     if (node.attributesTitle && processedAttributes.length > 0) {
+         const title = getExportValue(node.attributesTitle, config);
+         processedAttributes = [{
+             section: title,
+             attributes: processedAttributes
+         }];
+     }
+
+     // Add Sections to Attributes JSON
+     if (node.sections && node.sections.length > 0) {
+         node.sections.forEach(section => {
+             const sectionTitle = getExportValue(section.title, config);
+             const sectionAttrs = section.attributes.map(a => ({
+                 key: getExportValue(a.key, config),
+                 value: getExportValue(a.value, config)
+             }));
+             processedAttributes.push({
+                 section: sectionTitle,
+                 attributes: sectionAttrs
+             });
+         });
+     }
+
      rowData.push(safeCSV(JSON.stringify(processedAttributes)));
 
      if (config.options?.descriptions) {
@@ -1250,6 +1315,30 @@ export const generatePDF = (
                 const descStr = typeof desc === 'string' ? desc : JSON.stringify(desc);
                 contextParts.push(`Desc: ${descStr.substring(0, 100)}${descStr.length > 100 ? '...' : ''}`);
             }
+            
+            // Add Default Section Title if exists
+            if (node.attributesTitle && node.attributes && node.attributes.length > 0) {
+                const title = getExportValue(node.attributesTitle, config);
+                const titleStr = typeof title === 'string' ? title : JSON.stringify(title);
+                contextParts.push(`[${titleStr}]`);
+            }
+
+            // Add Sections to Context Column if they exist (since we don't have a dedicated column)
+            if (node.sections && node.sections.length > 0) {
+                node.sections.forEach(section => {
+                    const title = getExportValue(section.title, config);
+                    const titleStr = typeof title === 'string' ? title : JSON.stringify(title);
+                    contextParts.push(`[${titleStr}]`);
+                    section.attributes.forEach(attr => {
+                         const k = getExportValue(attr.key, config);
+                         const v = getExportValue(attr.value, config);
+                         const kStr = typeof k === 'string' ? k : JSON.stringify(k);
+                         const vStr = typeof v === 'string' ? v : JSON.stringify(v);
+                         contextParts.push(`- ${kStr}: ${vStr}`);
+                    });
+                });
+            }
+
             if (config.options?.tags && node.tags) {
                 const tags = Array.isArray(node.tags) 
                     ? node.tags 

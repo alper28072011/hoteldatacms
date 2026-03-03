@@ -610,15 +610,40 @@ const DynamicFieldInput: React.FC<{
     }
 
     if (type === 'date') {
+        // Parse existing value (e.g. "2023-01-01 - 2023-01-05" or "2023-01-01")
+        const rawVal = propVal.tr || '';
+        const parts = rawVal.split(' - ').map(s => s.trim());
+        const start = parts[0] || '';
+        const end = parts[1] || '';
+
+        const handleDateChange = (newStart: string, newEnd: string) => {
+            let finalVal = newStart;
+            if (newEnd) {
+                finalVal = `${newStart} - ${newEnd}`;
+            }
+            onChange({ tr: finalVal, en: finalVal });
+        };
+
         return (
-            <div className="relative">
-                <Calendar size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-slate-400'}`} />
-                <input 
-                    type="date" 
-                    value={propVal.tr} 
-                    onChange={(e) => handleUniversalChange(e.target.value)}
-                    className={`w-full bg-white border rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
-                />
+            <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                    <Calendar size={14} className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${hasError ? 'text-red-400' : 'text-slate-400'}`} />
+                    <input 
+                        type="date" 
+                        value={start} 
+                        onChange={(e) => handleDateChange(e.target.value, end)}
+                        className={`w-full bg-white border rounded-lg pl-8 pr-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                    />
+                </div>
+                <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">TO</span>
+                <div className="relative flex-1">
+                    <input 
+                        type="date" 
+                        value={end} 
+                        onChange={(e) => handleDateChange(start, e.target.value)}
+                        className={`w-full bg-white border rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none ${hasError ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}
+                    />
+                </div>
             </div>
         );
     }
@@ -870,11 +895,21 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
   
   const [validationError, setValidationError] = useState<string | null>(null);
   
-  // Custom Attribute State
+  // Custom Attribute State (Default Section)
   const [newAttrKey, setNewAttrKey] = useState<LocalizedText>({ tr: '', en: '' });
   const [newAttrValue, setNewAttrValue] = useState<LocalizedText>({ tr: '', en: '' });
   const [newAttrType, setNewAttrType] = useState<FieldType>('text');
-  
+
+  // Custom Attribute State (Custom Sections)
+  const [sectionNewAttributes, setSectionNewAttributes] = useState<Record<string, { key: LocalizedText, value: LocalizedText, type: FieldType }>>({});
+
+  const updateSectionNewAttribute = (sectionId: string, field: 'key' | 'value' | 'type', value: any) => {
+      setSectionNewAttributes(prev => {
+          const current = prev[sectionId] || { key: { tr: '', en: '' }, value: { tr: '', en: '' }, type: 'text' };
+          return { ...prev, [sectionId]: { ...current, [field]: value } };
+      });
+  };
+
   // Tag State
   const [tagInput, setTagInput] = useState('');
 
@@ -1093,21 +1128,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       } catch (error) { console.error(error); } finally { setIsOptimizingTitle(false); }
   };
 
-  const handleOptimizeAttributeKey = async (attrId: string) => {
-      const attr = node.attributes?.find(a => a.id === attrId);
-      if (!attr) return;
-      
-      setOptimizingAttrKeyId(attrId);
-      try {
-          const currentKey = getLocalizedValue(attr.key, activeTab);
-          if (!currentKey) return;
-
-          const optimized = await optimizeAILabel(currentKey, activeTab);
-          const keyObj = ensureLocalized(attr.key);
-          handleAttributeUpdate(attrId, undefined, attr.value as LocalizedText, { ...keyObj, [activeTab]: optimized });
-      } catch (error) { console.error(error); } finally { setOptimizingAttrKeyId(null); }
-  };
-
   const handleOptimizeNewAttributeKey = async () => {
       setOptimizingAttrKeyId('new');
       try {
@@ -1120,7 +1140,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
   };
 
   // --- CUSTOM SUB-ATTRIBUTE LOGIC ---
-  const handleAddCustomSubAttribute = (parentAttrId: string, sectionId?: string) => {
+  const handleAddCustomSubAttribute = (parentAttrId: string, sectionId?: string, conditionType: 'true' | 'false' = 'true') => {
+      const targetSubs = conditionType === 'true' ? 'subAttributes' : 'subAttributesFalse';
+
       if (sectionId) {
           const currentSections = [...(node.sections || [])];
           const secIdx = currentSections.findIndex(s => s.id === sectionId);
@@ -1132,7 +1154,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           if (parentIdx === -1) return;
 
           const parentAttr = { ...currentAttrs[parentIdx] };
-          const currentSubs = [...(parentAttr.subAttributes || [])];
+          const currentSubs = [...(parentAttr[targetSubs] || [])];
 
           currentSubs.push({
               id: generateId('subattr'),
@@ -1141,7 +1163,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
               type: 'text'
           });
 
-          parentAttr.subAttributes = currentSubs;
+          parentAttr[targetSubs] = currentSubs;
           currentAttrs[parentIdx] = parentAttr;
           section.attributes = currentAttrs;
           currentSections[secIdx] = section;
@@ -1152,7 +1174,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           if (parentIdx === -1) return;
 
           const parentAttr = { ...currentAttrs[parentIdx] };
-          const currentSubs = [...(parentAttr.subAttributes || [])];
+          const currentSubs = [...(parentAttr[targetSubs] || [])];
 
           currentSubs.push({
               id: generateId('subattr'),
@@ -1161,13 +1183,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
               type: 'text'
           });
 
-          parentAttr.subAttributes = currentSubs;
+          parentAttr[targetSubs] = currentSubs;
           currentAttrs[parentIdx] = parentAttr;
           onUpdate(node.id, { attributes: currentAttrs });
       }
   };
 
-  const handleUpdateCustomSubAttribute = (parentAttrId: string, subAttrId: string, field: 'key' | 'value' | 'type', value: any, sectionId?: string) => {
+  const handleUpdateCustomSubAttribute = (parentAttrId: string, subAttrId: string, field: 'key' | 'value' | 'type', value: any, sectionId?: string, conditionType: 'true' | 'false' = 'true') => {
+      const targetSubs = conditionType === 'true' ? 'subAttributes' : 'subAttributesFalse';
+
       if (sectionId) {
           const currentSections = [...(node.sections || [])];
           const secIdx = currentSections.findIndex(s => s.id === sectionId);
@@ -1179,12 +1203,12 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           if (parentIdx === -1) return;
 
           const parentAttr = { ...currentAttrs[parentIdx] };
-          const currentSubs = [...(parentAttr.subAttributes || [])];
+          const currentSubs = [...(parentAttr[targetSubs] || [])];
           const subIdx = currentSubs.findIndex(sa => sa.id === subAttrId);
           
           if (subIdx >= 0) {
               currentSubs[subIdx] = { ...currentSubs[subIdx], [field]: value };
-              parentAttr.subAttributes = currentSubs;
+              parentAttr[targetSubs] = currentSubs;
               currentAttrs[parentIdx] = parentAttr;
               section.attributes = currentAttrs;
               currentSections[secIdx] = section;
@@ -1196,19 +1220,21 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           if (parentIdx === -1) return;
 
           const parentAttr = { ...currentAttrs[parentIdx] };
-          const currentSubs = [...(parentAttr.subAttributes || [])];
+          const currentSubs = [...(parentAttr[targetSubs] || [])];
           const subIdx = currentSubs.findIndex(sa => sa.id === subAttrId);
           
           if (subIdx >= 0) {
               currentSubs[subIdx] = { ...currentSubs[subIdx], [field]: value };
-              parentAttr.subAttributes = currentSubs;
+              parentAttr[targetSubs] = currentSubs;
               currentAttrs[parentIdx] = parentAttr;
               onUpdate(node.id, { attributes: currentAttrs });
           }
       }
   };
 
-  const handleDeleteCustomSubAttribute = (parentAttrId: string, subAttrId: string, sectionId?: string) => {
+  const handleDeleteCustomSubAttribute = (parentAttrId: string, subAttrId: string, sectionId?: string, conditionType: 'true' | 'false' = 'true') => {
+      const targetSubs = conditionType === 'true' ? 'subAttributes' : 'subAttributesFalse';
+
       if (sectionId) {
           const currentSections = [...(node.sections || [])];
           const secIdx = currentSections.findIndex(s => s.id === sectionId);
@@ -1220,9 +1246,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           if (parentIdx === -1) return;
 
           const parentAttr = { ...currentAttrs[parentIdx] };
-          const currentSubs = (parentAttr.subAttributes || []).filter(sa => sa.id !== subAttrId);
+          const currentSubs = (parentAttr[targetSubs] || []).filter(sa => sa.id !== subAttrId);
           
-          parentAttr.subAttributes = currentSubs;
+          parentAttr[targetSubs] = currentSubs;
           currentAttrs[parentIdx] = parentAttr;
           section.attributes = currentAttrs;
           currentSections[secIdx] = section;
@@ -1233,9 +1259,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           if (parentIdx === -1) return;
 
           const parentAttr = { ...currentAttrs[parentIdx] };
-          const currentSubs = (parentAttr.subAttributes || []).filter(sa => sa.id !== subAttrId);
+          const currentSubs = (parentAttr[targetSubs] || []).filter(sa => sa.id !== subAttrId);
           
-          parentAttr.subAttributes = currentSubs;
+          parentAttr[targetSubs] = currentSubs;
           currentAttrs[parentIdx] = parentAttr;
           onUpdate(node.id, { attributes: currentAttrs });
       }
@@ -1373,8 +1399,16 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       } catch (e) { console.error(e); } finally { setIsBulkTranslating(false); }
   };
 
-  const handleSingleAttributeTranslate = async (attrId: string) => {
-      const attr = node.attributes?.find(a => a.id === attrId);
+  const handleSingleAttributeTranslate = async (attrId: string, sectionId?: string) => {
+      let attr: NodeAttribute | undefined;
+      
+      if (sectionId) {
+          const section = node.sections?.find(s => s.id === sectionId);
+          attr = section?.attributes.find(a => a.id === attrId);
+      } else {
+          attr = node.attributes?.find(a => a.id === attrId);
+      }
+
       if (!attr) return;
       
       setTranslatingFieldId(attrId);
@@ -1382,14 +1416,22 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           const valObj = ensureLocalized(attr.value);
           if (valObj.tr && !valObj.en) {
               const translated = await translateText(valObj.tr, 'en');
-              handleAttributeUpdate(attrId, undefined, { ...valObj, en: translated });
+              handleAttributeUpdate(attrId, undefined, { ...valObj, en: translated }, undefined, sectionId);
           }
       } catch (e) { console.error(e); }
       finally { setTranslatingFieldId(null); }
   };
 
-  const handleSingleAttributeKeyTranslate = async (attrId: string) => {
-      const attr = node.attributes?.find(a => a.id === attrId);
+  const handleSingleAttributeKeyTranslate = async (attrId: string, sectionId?: string) => {
+      let attr: NodeAttribute | undefined;
+      
+      if (sectionId) {
+          const section = node.sections?.find(s => s.id === sectionId);
+          attr = section?.attributes.find(a => a.id === attrId);
+      } else {
+          attr = node.attributes?.find(a => a.id === attrId);
+      }
+
       if (!attr) return;
       
       setTranslatingFieldId(attrId + '_key');
@@ -1397,17 +1439,56 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           const keyObj = ensureLocalized(attr.key);
           if (keyObj.tr && !keyObj.en) {
               const translated = await translateText(keyObj.tr, 'en');
-              handleAttributeUpdate(attrId, undefined, attr.value as LocalizedText, { ...keyObj, en: translated });
+              handleAttributeUpdate(attrId, undefined, attr.value as LocalizedText, { ...keyObj, en: translated }, sectionId);
           }
       } catch (e) { console.error(e); }
       finally { setTranslatingFieldId(null); }
   };
 
-  const handleSubAttributeTranslate = async (parentAttrId: string, subAttrId: string) => {
-      const parentAttr = node.attributes?.find(a => a.id === parentAttrId);
-      if (!parentAttr || !parentAttr.subAttributes) return;
+  const handleOptimizeAttributeKey = async (attrId: string, sectionId?: string) => {
+      let attr: NodeAttribute | undefined;
       
-      const subAttr = parentAttr.subAttributes.find(sa => sa.id === subAttrId);
+      if (sectionId) {
+          const section = node.sections?.find(s => s.id === sectionId);
+          attr = section?.attributes.find(a => a.id === attrId);
+      } else {
+          attr = node.attributes?.find(a => a.id === attrId);
+      }
+
+      if (!attr) return;
+
+      setOptimizingAttrKeyId(attrId);
+      try {
+          const keyObj = ensureLocalized(attr.key);
+          if (keyObj.tr) {
+              const optimized = await optimizeAILabel(keyObj.tr, 'tr');
+              handleAttributeUpdate(attrId, undefined, attr.value as LocalizedText, { ...keyObj, tr: optimized }, sectionId);
+          }
+      } catch (e) { console.error(e); }
+      finally { setOptimizingAttrKeyId(null); }
+  };
+
+  const handleSubAttributeTranslate = async (parentAttrId: string, subAttrId: string, sectionId?: string) => {
+      let parentAttr: NodeAttribute | undefined;
+
+      if (sectionId) {
+          const section = node.sections?.find(s => s.id === sectionId);
+          parentAttr = section?.attributes.find(a => a.id === parentAttrId);
+      } else {
+          parentAttr = node.attributes?.find(a => a.id === parentAttrId);
+      }
+
+      if (!parentAttr) return;
+      
+      // Determine which array the sub-attribute is in
+      const isTrueSub = parentAttr.subAttributes?.some(sa => sa.id === subAttrId);
+      const isFalseSub = parentAttr.subAttributesFalse?.some(sa => sa.id === subAttrId);
+      
+      if (!isTrueSub && !isFalseSub) return;
+      
+      const targetSubsKey = isTrueSub ? 'subAttributes' : 'subAttributesFalse';
+      const subAttr = parentAttr[targetSubsKey]?.find(sa => sa.id === subAttrId);
+      
       if (!subAttr) return;
 
       setTranslatingFieldId(subAttrId);
@@ -1416,18 +1497,44 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           if (valObj.tr && !valObj.en) {
               const translated = await translateText(valObj.tr, 'en');
               
-              // Manual update for sub-attribute
-              const currentAttrs = [...(node.attributes || [])];
-              const parentIdx = currentAttrs.findIndex(a => a.id === parentAttrId);
-              const updatedParent = { ...currentAttrs[parentIdx] };
-              const updatedSubs = [...(updatedParent.subAttributes || [])];
-              const subIdx = updatedSubs.findIndex(sa => sa.id === subAttrId);
-              
-              if (subIdx >= 0) {
-                  updatedSubs[subIdx] = { ...updatedSubs[subIdx], value: { ...valObj, en: translated } };
-                  updatedParent.subAttributes = updatedSubs;
-                  currentAttrs[parentIdx] = updatedParent;
-                  onUpdate(node.id, { attributes: currentAttrs });
+              if (sectionId) {
+                  // Manual update for sub-attribute in section
+                  const currentSections = [...(node.sections || [])];
+                  const secIdx = currentSections.findIndex(s => s.id === sectionId);
+                  if (secIdx !== -1) {
+                      const section = { ...currentSections[secIdx] };
+                      const currentAttrs = [...section.attributes];
+                      const parentIdx = currentAttrs.findIndex(a => a.id === parentAttrId);
+                      
+                      if (parentIdx !== -1) {
+                          const updatedParent = { ...currentAttrs[parentIdx] };
+                          const updatedSubs = [...(updatedParent[targetSubsKey] || [])];
+                          const subIdx = updatedSubs.findIndex(sa => sa.id === subAttrId);
+                          
+                          if (subIdx >= 0) {
+                              updatedSubs[subIdx] = { ...updatedSubs[subIdx], value: { ...valObj, en: translated } };
+                              updatedParent[targetSubsKey] = updatedSubs;
+                              currentAttrs[parentIdx] = updatedParent;
+                              section.attributes = currentAttrs;
+                              currentSections[secIdx] = section;
+                              onUpdate(node.id, { sections: currentSections });
+                          }
+                      }
+                  }
+              } else {
+                  // Manual update for sub-attribute in default attributes
+                  const currentAttrs = [...(node.attributes || [])];
+                  const parentIdx = currentAttrs.findIndex(a => a.id === parentAttrId);
+                  const updatedParent = { ...currentAttrs[parentIdx] };
+                  const updatedSubs = [...(updatedParent[targetSubsKey] || [])];
+                  const subIdx = updatedSubs.findIndex(sa => sa.id === subAttrId);
+                  
+                  if (subIdx >= 0) {
+                      updatedSubs[subIdx] = { ...updatedSubs[subIdx], value: { ...valObj, en: translated } };
+                      updatedParent[targetSubsKey] = updatedSubs;
+                      currentAttrs[parentIdx] = updatedParent;
+                      onUpdate(node.id, { attributes: currentAttrs });
+                  }
               }
           }
       } catch (e) { console.error(e); }
@@ -1446,14 +1553,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       onUpdate(node.id, { sections: currentSections });
   };
 
-  const handleUpdateSectionTitle = (sectionId: string, newTitle: LocalizedText) => {
-      const currentSections = [...(node.sections || [])];
-      const idx = currentSections.findIndex(s => s.id === sectionId);
-      if (idx !== -1) {
-          currentSections[idx] = { ...currentSections[idx], title: newTitle };
-          onUpdate(node.id, { sections: currentSections });
-      }
-  };
+
 
   const handleDeleteSection = (sectionId: string) => {
       if (!window.confirm('Bu bölümü ve içindeki tüm özellikleri silmek istediğinize emin misiniz?')) return;
@@ -1463,13 +1563,28 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
   // --- ATTRIBUTE MANAGEMENT (Unified for Default & Sections) ---
   const handleAddAttribute = (sectionId?: string) => {
-      if (!newAttrKey.tr) { alert("Lütfen özellik adı giriniz."); return; }
+      let key: LocalizedText;
+      let value: LocalizedText;
+      let type: FieldType;
+
+      if (sectionId) {
+          const state = sectionNewAttributes[sectionId] || { key: { tr: '', en: '' }, value: { tr: '', en: '' }, type: 'text' };
+          key = state.key;
+          value = state.value;
+          type = state.type;
+      } else {
+          key = newAttrKey;
+          value = newAttrValue;
+          type = newAttrType;
+      }
+
+      if (!key.tr) { alert("Lütfen özellik adı giriniz."); return; }
 
       const newAttr: NodeAttribute = {
           id: generateId('attr'),
-          key: { ...newAttrKey },
-          value: { ...newAttrValue },
-          type: newAttrType
+          key: { ...key },
+          value: { ...value },
+          type: type
       };
 
       if (sectionId) {
@@ -1481,18 +1596,23 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
               section.attributes = [...section.attributes, newAttr];
               currentSections[idx] = section;
               onUpdate(node.id, { sections: currentSections });
+              
+              // Reset Section Form
+              updateSectionNewAttribute(sectionId, 'key', { tr: '', en: '' });
+              updateSectionNewAttribute(sectionId, 'value', { tr: '', en: '' });
+              updateSectionNewAttribute(sectionId, 'type', 'text');
           }
       } else {
           // Add to default attributes
           const currentAttrs = [...(node.attributes || [])];
           currentAttrs.push(newAttr);
           onUpdate(node.id, { attributes: currentAttrs });
-      }
 
-      // Reset Form
-      setNewAttrKey({ tr: '', en: '' });
-      setNewAttrValue({ tr: '', en: '' });
-      setNewAttrType('text');
+          // Reset Default Form
+          setNewAttrKey({ tr: '', en: '' });
+          setNewAttrValue({ tr: '', en: '' });
+          setNewAttrType('text');
+      }
   };
 
   const handleDeleteAttribute = (attrId: string, sectionId?: string) => {
@@ -1646,7 +1766,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
   // HANDLER FOR NESTED ATTRIBUTES (Conditional Logic)
   // This updates the subAttributes array within a parent attribute
-  const handleSubAttributeUpdate = (parentAttrId: string, fieldDef: TemplateField, value: LocalizedText) => {
+  const handleSubAttributeUpdate = (parentAttrId: string, fieldDef: TemplateField, value: LocalizedText, conditionType: 'true' | 'false' = 'true') => {
+      const targetSubs = conditionType === 'true' ? 'subAttributes' : 'subAttributesFalse';
+
       const currentAttrs = [...(node.attributes || [])];
       const parentIdx = currentAttrs.findIndex(a => a.id === parentAttrId);
       
@@ -1657,7 +1779,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       }
 
       const parentAttr = { ...currentAttrs[parentIdx] };
-      const currentSubs = [...(parentAttr.subAttributes || [])];
+      const currentSubs = [...(parentAttr[targetSubs] || [])];
 
       const subIdx = currentSubs.findIndex(sa => {
           const saKey = getLocalizedValue(sa.key, 'en').toLowerCase();
@@ -1713,12 +1835,68 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
           });
       }
 
-      parentAttr.subAttributes = currentSubs;
+      parentAttr[targetSubs] = currentSubs;
       currentAttrs[parentIdx] = parentAttr;
       onUpdate(node.id, { attributes: currentAttrs, aiConfidence: undefined });
   };
 
 
+
+  const handleUpdateSectionTitle = (sectionId: string, newTitle: LocalizedText) => {
+      if (sectionId === 'default') {
+          onUpdate(node.id, { attributesTitle: newTitle, aiConfidence: undefined });
+      } else {
+          const currentSections = node.sections || [];
+          const updated = currentSections.map(s => s.id === sectionId ? { ...s, title: newTitle } : s);
+          onUpdate(node.id, { sections: updated, aiConfidence: undefined });
+      }
+  };
+
+  const handleOptimizeSectionTitle = async (sectionId: string) => {
+      let currentTitle = '';
+      if (sectionId === 'default') {
+          currentTitle = getLocalizedValue(node.attributesTitle, 'tr') || 'Özellikler & Veriler';
+      } else {
+          const section = node.sections?.find(s => s.id === sectionId);
+          currentTitle = getLocalizedValue(section?.title, 'tr') || '';
+      }
+
+      if (!currentTitle) return;
+
+      const optimized = await optimizeAILabel(currentTitle, 'tr');
+      
+      if (sectionId === 'default') {
+          handleUpdateSectionTitle('default', { ...ensureLocalized(node.attributesTitle), tr: optimized });
+      } else {
+          const section = node.sections?.find(s => s.id === sectionId);
+          if (section) {
+              handleUpdateSectionTitle(sectionId, { ...ensureLocalized(section.title), tr: optimized });
+          }
+      }
+  };
+
+  const handleTranslateSectionTitle = async (sectionId: string) => {
+      let sourceTitle = '';
+      if (sectionId === 'default') {
+          sourceTitle = getLocalizedValue(node.attributesTitle, 'tr');
+      } else {
+          const section = node.sections?.find(s => s.id === sectionId);
+          sourceTitle = getLocalizedValue(section?.title, 'tr');
+      }
+
+      if (!sourceTitle) return;
+
+      const translated = await translateText(sourceTitle, 'en');
+      
+      if (sectionId === 'default') {
+          handleUpdateSectionTitle('default', { ...ensureLocalized(node.attributesTitle), en: translated });
+      } else {
+          const section = node.sections?.find(s => s.id === sectionId);
+          if (section) {
+              handleUpdateSectionTitle(sectionId, { ...ensureLocalized(section.title), en: translated });
+          }
+      }
+  };
 
   const handleAddTag = () => {
       if (!tagInput.trim()) return;
@@ -2232,15 +2410,29 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                     <input 
                                         type="text" 
                                         value={getLocalizedValue(node.attributesTitle, activeTab)} 
-                                        onChange={(e) => {
-                                            const currentTitle = ensureLocalized(node.attributesTitle || { tr: 'Özellikler & Veriler', en: 'Attributes & Data' });
-                                            onUpdate(node.id, { attributesTitle: { ...currentTitle, [activeTab]: e.target.value } });
-                                        }}
+                                        onChange={(e) => handleUpdateSectionTitle('default', { ...ensureLocalized(node.attributesTitle), [activeTab]: e.target.value })}
                                         className="text-sm font-bold text-slate-700 bg-white border border-indigo-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-100"
                                         autoFocus
                                         onBlur={() => setIsEditingId(false)}
                                         onKeyDown={(e) => e.key === 'Enter' && setIsEditingId(false)}
                                     />
+                                    {activeTab === 'tr' ? (
+                                        <button 
+                                            onMouseDown={(e) => { e.preventDefault(); handleOptimizeSectionTitle('default'); }}
+                                            className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                                            title="AI ile Başlığı İyileştir"
+                                        >
+                                            <Sparkles size={14} />
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onMouseDown={(e) => { e.preventDefault(); handleTranslateSectionTitle('default'); }}
+                                            className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                                            title="Türkçeden Çevir"
+                                        >
+                                            <Globe size={14} />
+                                        </button>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsEditingId('default_title')}>
@@ -2311,8 +2503,11 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                     }
 
                                     // CONDITION CHECK: Should we show sub-fields?
-                                    const showSubFields = def.condition && 
+                                    const showSubFields = def.condition && def.condition.triggerValue &&
                                         getLocalizedValue(attr.value, 'tr').toLowerCase() === def.condition.triggerValue.toLowerCase();
+
+                                    const showSubFieldsFalse = def.conditionFalse && 
+                                        getLocalizedValue(attr.value, 'tr').toLowerCase() === 'false';
 
                                     const isTall = def.type === 'textarea' || def.type === 'multiselect';
                                     const alignClass = isTall ? 'items-start' : 'items-center';
@@ -2350,7 +2545,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                 </div>
                                             </div>
 
-                                            {/* NESTED SUB FIELDS RENDER */}
+                                            {/* NESTED SUB FIELDS RENDER (TRUE) */}
                                             {showSubFields && def.condition && (
                                                 <div className="pl-8 ml-4 border-l-2 border-indigo-100 pb-4 -mt-2 space-y-3 animate-in slide-in-from-left-2 fade-in">
                                                     {def.condition.fields.map(subDef => {
@@ -2388,7 +2583,66 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                                     <DynamicFieldInput 
                                                                         attribute={subMatch}
                                                                         fieldDef={subDef}
-                                                                        onChange={(val) => handleSubAttributeUpdate(attr.id, subDef, val)}
+                                                                        onChange={(val) => handleSubAttributeUpdate(attr.id, subDef, val, 'true')}
+                                                                        activeTab={activeTab}
+                                                                        onTabChange={setDisplayLanguage}
+                                                                        actionButton={activeTab === 'en' ? (
+                                                                            <button 
+                                                                                onClick={() => handleSubAttributeTranslate(attr.id, subMatch!.id)}
+                                                                                disabled={translatingFieldId === subMatch!.id}
+                                                                                className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                                                title="Translate this field"
+                                                                            >
+                                                                                {translatingFieldId === subMatch!.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                                                            </button>
+                                                                        ) : undefined}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {/* NESTED SUB FIELDS RENDER (FALSE) */}
+                                            {showSubFieldsFalse && def.conditionFalse && (
+                                                <div className="pl-8 ml-4 border-l-2 border-rose-100 pb-4 -mt-2 space-y-3 animate-in slide-in-from-left-2 fade-in">
+                                                    {def.conditionFalse.fields.map(subDef => {
+                                                        let subMatch = attr.subAttributesFalse?.find(sa => {
+                                                            const saKey = getLocalizedValue(sa.key, 'en').toLowerCase();
+                                                            return saKey === getLocalizedValue(subDef.label, 'en').toLowerCase();
+                                                        });
+
+                                                        if (!subMatch) {
+                                                            subMatch = {
+                                                                id: `temp_sub_false_${subDef.id}`,
+                                                                key: subDef.label,
+                                                                value: { tr: '', en: '' },
+                                                                type: subDef.type,
+                                                                options: subDef.options
+                                                            };
+                                                        }
+                                                        
+                                                        const isSubTall = subDef.type === 'textarea' || subDef.type === 'multiselect';
+
+                                                        return (
+                                                            <div key={subDef.id} className={`flex ${isSubTall ? 'items-start' : 'items-center'} gap-4`}>
+                                                                <div className={`w-1/3 min-w-[120px] ${isSubTall ? 'pt-2' : ''}`}>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <CornerDownRight size={12} className="text-rose-300 shrink-0" />
+                                                                        <span className="text-xs font-semibold text-slate-600">{getLocalizedValue(subDef.label, activeTab)}</span>
+                                                                    </div>
+                                                                    {subDef.aiDescription && (
+                                                                        <div className="text-[10px] text-slate-400 mt-1 ml-4 leading-tight">
+                                                                            {getLocalizedValue(subDef.aiDescription, activeTab)}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <DynamicFieldInput 
+                                                                        attribute={subMatch}
+                                                                        fieldDef={subDef}
+                                                                        onChange={(val) => handleSubAttributeUpdate(attr.id, subDef, val, 'false')}
                                                                         activeTab={activeTab}
                                                                         onTabChange={setDisplayLanguage}
                                                                         actionButton={activeTab === 'en' ? (
@@ -2433,6 +2687,11 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                     (typeof attr.value === 'object' && attr.value[activeTab] === 'true')
                                 );
 
+                                const isBooleanFalse = attr.type === 'boolean' && (
+                                    (typeof attr.value === 'string' && attr.value === 'false') || 
+                                    (typeof attr.value === 'object' && attr.value[activeTab] === 'false')
+                                );
+
                                 return (
                                     <React.Fragment key={attr.id}>
                                         <div className={`flex ${isTall ? 'items-start' : 'items-center'} gap-4 group`}>
@@ -2456,7 +2715,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                                     {translatingFieldId === attr.id + '_key' ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
                                                                 </button>
                                                             ) 
-                                                            : renderActionBtn(optimizingAttrKeyId === attr.id, () => handleOptimizeAttributeKey(attr.id), 'optimize', !!getLocalizedValue(attr.key, activeTab))
+                                                            : renderActionBtn(optimizingAttrKeyId === attr.id, () => handleOptimizeAttributeKey(attr.id, undefined), 'optimize', !!getLocalizedValue(attr.key, activeTab))
                                                         }
                                                     />
                                                 </div>
@@ -2504,7 +2763,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                             </button>
                                         </div>
 
-                                        {/* CUSTOM SUB-ATTRIBUTES */}
+                                        {/* CUSTOM SUB-ATTRIBUTES (TRUE) */}
                                         {isBooleanTrue && (
                                             <div className="pl-8 ml-4 border-l-2 border-indigo-100 pb-4 -mt-2 space-y-3 animate-in slide-in-from-left-2 fade-in">
                                                 {attr.subAttributes?.map(sub => (
@@ -2515,7 +2774,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                                 <div className="flex-1">
                                                                     <LocalizedInput 
                                                                         value={sub.key} 
-                                                                        onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'key', val)} 
+                                                                        onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'key', val, undefined, 'true')} 
                                                                         placeholder="Alt Özellik Adı" 
                                                                         activeTab={activeTab} 
                                                                         onTabChange={setDisplayLanguage}
@@ -2526,7 +2785,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                             <div className="w-[70px] shrink-0">
                                                                 <select
                                                                     value={sub.type}
-                                                                    onChange={(e) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'type', e.target.value)}
+                                                                    onChange={(e) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'type', e.target.value, undefined, 'true')}
                                                                     className="w-full bg-slate-50 border border-slate-200 text-[10px] text-slate-600 rounded px-1 py-1.5 outline-none"
                                                                 >
                                                                     <option value="text">Metin</option>
@@ -2538,13 +2797,13 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                         <div className="flex-1">
                                                             <DynamicFieldInput 
                                                                 attribute={sub}
-                                                                onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'value', val)}
+                                                                onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'value', val, undefined, 'true')}
                                                                 activeTab={activeTab}
                                                                 onTabChange={setDisplayLanguage}
                                                             />
                                                         </div>
                                                         <button 
-                                                            onClick={() => handleDeleteCustomSubAttribute(attr.id, sub.id)} 
+                                                            onClick={() => handleDeleteCustomSubAttribute(attr.id, sub.id, undefined, 'true')} 
                                                             className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover/sub:opacity-100 transition-all"
                                                         >
                                                             <X size={14} />
@@ -2553,10 +2812,67 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                 ))}
                                                 
                                                 <button 
-                                                    onClick={() => handleAddCustomSubAttribute(attr.id)}
+                                                    onClick={() => handleAddCustomSubAttribute(attr.id, undefined, 'true')}
                                                     className="ml-6 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded border border-dashed border-indigo-200 flex items-center gap-1 transition-colors"
                                                 >
-                                                    <Plus size={10} /> Alt Soru Ekle
+                                                    <Plus size={10} /> Alt Soru Ekle (EVET)
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* CUSTOM SUB-ATTRIBUTES (FALSE) */}
+                                        {isBooleanFalse && (
+                                            <div className="pl-8 ml-4 border-l-2 border-rose-100 pb-4 -mt-2 space-y-3 animate-in slide-in-from-left-2 fade-in">
+                                                {attr.subAttributesFalse?.map(sub => (
+                                                    <div key={sub.id} className="flex items-center gap-4 group/sub">
+                                                        <div className="w-1/3 min-w-[120px] flex gap-2">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <CornerDownRight size={12} className="text-rose-300 shrink-0" />
+                                                                <div className="flex-1">
+                                                                    <LocalizedInput 
+                                                                        value={sub.key} 
+                                                                        onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'key', val, undefined, 'false')} 
+                                                                        placeholder="Alt Özellik Adı" 
+                                                                        activeTab={activeTab} 
+                                                                        onTabChange={setDisplayLanguage}
+                                                                        inputClassName="h-8 text-xs"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="w-[70px] shrink-0">
+                                                                <select
+                                                                    value={sub.type}
+                                                                    onChange={(e) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'type', e.target.value, undefined, 'false')}
+                                                                    className="w-full bg-slate-50 border border-slate-200 text-[10px] text-slate-600 rounded px-1 py-1.5 outline-none"
+                                                                >
+                                                                    <option value="text">Metin</option>
+                                                                    <option value="number">Sayı</option>
+                                                                    <option value="boolean">Mantıksal</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <DynamicFieldInput 
+                                                                attribute={sub}
+                                                                onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'value', val, undefined, 'false')}
+                                                                activeTab={activeTab}
+                                                                onTabChange={setDisplayLanguage}
+                                                            />
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => handleDeleteCustomSubAttribute(attr.id, sub.id, undefined, 'false')} 
+                                                            className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover/sub:opacity-100 transition-all"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                
+                                                <button 
+                                                    onClick={() => handleAddCustomSubAttribute(attr.id, undefined, 'false')}
+                                                    className="ml-6 text-[10px] font-bold text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded border border-dashed border-rose-200 flex items-center gap-1 transition-colors"
+                                                >
+                                                    <Plus size={10} /> Alt Soru Ekle (HAYIR)
                                                 </button>
                                             </div>
                                         )}
@@ -2635,6 +2951,60 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                 />
                                             </div>
                                         </div>
+                                    ) : newAttrType === 'date' ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="relative flex-1">
+                                                <Calendar size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input 
+                                                    type="date" 
+                                                    value={newAttrValue.tr.split(' - ')[0]?.trim() || ''} 
+                                                    onChange={(e) => {
+                                                        const start = e.target.value;
+                                                        const end = newAttrValue.tr.split(' - ')[1]?.trim() || '';
+                                                        const val = end ? `${start} - ${end}` : start;
+                                                        setNewAttrValue({ tr: val, en: val });
+                                                    }}
+                                                    className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                />
+                                            </div>
+                                            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">TO</span>
+                                            <div className="relative flex-1">
+                                                <input 
+                                                    type="date" 
+                                                    value={newAttrValue.tr.split(' - ')[1]?.trim() || ''} 
+                                                    onChange={(e) => {
+                                                        const start = newAttrValue.tr.split(' - ')[0]?.trim() || '';
+                                                        const end = e.target.value;
+                                                        const val = end ? `${start} - ${end}` : start;
+                                                        setNewAttrValue({ tr: val, en: val });
+                                                    }}
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    ) : newAttrType === 'boolean' ? (
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setNewAttrValue({ tr: 'true', en: 'true' })}
+                                                className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                                                    newAttrValue.tr === 'true'
+                                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                Evet
+                                            </button>
+                                            <button
+                                                onClick={() => setNewAttrValue({ tr: 'false', en: 'false' })}
+                                                className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                                                    newAttrValue.tr === 'false'
+                                                        ? 'bg-slate-100 border-slate-300 text-slate-800'
+                                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                Hayır
+                                            </button>
+                                        </div>
                                     ) : (
                                         <LocalizedInput 
                                             value={newAttrValue} 
@@ -2675,6 +3045,23 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                             onBlur={() => setIsEditingId(false)}
                                             onKeyDown={(e) => e.key === 'Enter' && setIsEditingId(false)}
                                         />
+                                        {activeTab === 'tr' ? (
+                                            <button 
+                                                onClick={() => handleOptimizeSectionTitle(section.id)}
+                                                className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                                                title="AI ile Başlığı İyileştir"
+                                            >
+                                                <Sparkles size={14} />
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                onClick={() => handleTranslateSectionTitle(section.id)}
+                                                className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                                                title="Türkçeden Çevir"
+                                            >
+                                                <Globe size={14} />
+                                            </button>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsEditingId(section.id)}>
@@ -2703,6 +3090,11 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                         (typeof attr.value === 'object' && attr.value[activeTab] === 'true')
                                     );
 
+                                    const isBooleanFalse = attr.type === 'boolean' && (
+                                        (typeof attr.value === 'string' && attr.value === 'false') || 
+                                        (typeof attr.value === 'object' && attr.value[activeTab] === 'false')
+                                    );
+
                                     return (
                                         <React.Fragment key={attr.id}>
                                             <div className={`flex ${isTall ? 'items-start' : 'items-center'} gap-4 group`}>
@@ -2715,6 +3107,20 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                             activeTab={activeTab} 
                                                             onTabChange={setDisplayLanguage}
                                                             inputClassName="text-xs font-medium"
+                                                            actionButton={
+                                                                activeTab === 'en' 
+                                                                ? (
+                                                                    <button 
+                                                                        onClick={() => handleSingleAttributeKeyTranslate(attr.id, section.id)}
+                                                                        disabled={translatingFieldId === attr.id + '_key'}
+                                                                        className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                                        title="Translate this key"
+                                                                    >
+                                                                        {translatingFieldId === attr.id + '_key' ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                                                    </button>
+                                                                ) 
+                                                                : renderActionBtn(optimizingAttrKeyId === attr.id, () => handleOptimizeAttributeKey(attr.id, section.id), 'optimize', !!getLocalizedValue(attr.key, activeTab))
+                                                            }
                                                         />
                                                     </div>
                                                     <div className="w-[85px] shrink-0">
@@ -2741,6 +3147,15 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                         onChange={(val) => handleUpdateAttribute(attr.id, { value: val }, section.id)}
                                                         activeTab={activeTab}
                                                         onTabChange={setDisplayLanguage}
+                                                        actionButton={activeTab === 'en' ? (
+                                                            <button 
+                                                                onClick={() => handleSingleAttributeTranslate(attr.id, section.id)}
+                                                                disabled={translatingFieldId === attr.id}
+                                                                className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-100 flex items-center gap-1"
+                                                            >
+                                                                {translatingFieldId === attr.id ? <Loader2 size={10} className="animate-spin"/> : <Globe size={10} />}
+                                                            </button>
+                                                        ) : undefined}
                                                     />
                                                 </div>
                                                 <button 
@@ -2751,62 +3166,119 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                                 </button>
                                             </div>
 
-                                            {/* CUSTOM SUB-ATTRIBUTES FOR SECTIONS */}
-                                            {isBooleanTrue && (
-                                                <div className="pl-8 ml-4 border-l-2 border-indigo-100 pb-4 -mt-2 space-y-3 animate-in slide-in-from-left-2 fade-in">
-                                                    {attr.subAttributes?.map(sub => (
-                                                        <div key={sub.id} className="flex items-center gap-4 group/sub">
-                                                            <div className="w-1/3 min-w-[120px] flex gap-2">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <CornerDownRight size={12} className="text-indigo-300 shrink-0" />
-                                                                    <div className="flex-1">
-                                                                        <LocalizedInput 
-                                                                            value={sub.key} 
-                                                                            onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'key', val, section.id)} 
-                                                                            placeholder="Alt Özellik Adı" 
-                                                                            activeTab={activeTab} 
-                                                                            onTabChange={setDisplayLanguage}
-                                                                            inputClassName="h-8 text-xs"
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                                <div className="w-[70px] shrink-0">
-                                                                    <select
-                                                                        value={sub.type}
-                                                                        onChange={(e) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'type', e.target.value, section.id)}
-                                                                        className="w-full bg-slate-50 border border-slate-200 text-[10px] text-slate-600 rounded px-1 py-1.5 outline-none"
-                                                                    >
-                                                                        <option value="text">Metin</option>
-                                                                        <option value="number">Sayı</option>
-                                                                        <option value="boolean">Mantıksal</option>
-                                                                    </select>
+                                        {/* CUSTOM SUB-ATTRIBUTES FOR SECTIONS (TRUE) */}
+                                        {isBooleanTrue && (
+                                            <div className="pl-8 ml-4 border-l-2 border-indigo-100 pb-4 -mt-2 space-y-3 animate-in slide-in-from-left-2 fade-in">
+                                                {attr.subAttributes?.map(sub => (
+                                                    <div key={sub.id} className="flex items-center gap-4 group/sub">
+                                                        <div className="w-1/3 min-w-[120px] flex gap-2">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <CornerDownRight size={12} className="text-indigo-300 shrink-0" />
+                                                                <div className="flex-1">
+                                                                    <LocalizedInput 
+                                                                        value={sub.key} 
+                                                                        onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'key', val, section.id, 'true')} 
+                                                                        placeholder="Alt Özellik Adı" 
+                                                                        activeTab={activeTab} 
+                                                                        onTabChange={setDisplayLanguage}
+                                                                        inputClassName="h-8 text-xs"
+                                                                    />
                                                                 </div>
                                                             </div>
-                                                            <div className="flex-1">
-                                                                <DynamicFieldInput 
-                                                                    attribute={sub}
-                                                                    onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'value', val, section.id)}
-                                                                    activeTab={activeTab}
-                                                                    onTabChange={setDisplayLanguage}
-                                                                />
+                                                            <div className="w-[70px] shrink-0">
+                                                                <select
+                                                                    value={sub.type}
+                                                                    onChange={(e) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'type', e.target.value, section.id, 'true')}
+                                                                    className="w-full bg-slate-50 border border-slate-200 text-[10px] text-slate-600 rounded px-1 py-1.5 outline-none"
+                                                                >
+                                                                    <option value="text">Metin</option>
+                                                                    <option value="number">Sayı</option>
+                                                                    <option value="boolean">Mantıksal</option>
+                                                                </select>
                                                             </div>
-                                                            <button 
-                                                                onClick={() => handleDeleteCustomSubAttribute(attr.id, sub.id, section.id)} 
-                                                                className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover/sub:opacity-100 transition-all"
-                                                            >
-                                                                <X size={14} />
-                                                            </button>
                                                         </div>
-                                                    ))}
-                                                    
-                                                    <button 
-                                                        onClick={() => handleAddCustomSubAttribute(attr.id, section.id)}
-                                                        className="ml-6 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded border border-dashed border-indigo-200 flex items-center gap-1 transition-colors"
-                                                    >
-                                                        <Plus size={10} /> Alt Soru Ekle
-                                                    </button>
-                                                </div>
-                                            )}
+                                                        <div className="flex-1">
+                                                            <DynamicFieldInput 
+                                                                attribute={sub}
+                                                                onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'value', val, section.id, 'true')}
+                                                                activeTab={activeTab}
+                                                                onTabChange={setDisplayLanguage}
+                                                            />
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => handleDeleteCustomSubAttribute(attr.id, sub.id, section.id, 'true')} 
+                                                            className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover/sub:opacity-100 transition-all"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                
+                                                <button 
+                                                    onClick={() => handleAddCustomSubAttribute(attr.id, section.id, 'true')}
+                                                    className="ml-6 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded border border-dashed border-indigo-200 flex items-center gap-1 transition-colors"
+                                                >
+                                                    <Plus size={10} /> Alt Soru Ekle (EVET)
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* CUSTOM SUB-ATTRIBUTES FOR SECTIONS (FALSE) */}
+                                        {isBooleanFalse && (
+                                            <div className="pl-8 ml-4 border-l-2 border-rose-100 pb-4 -mt-2 space-y-3 animate-in slide-in-from-left-2 fade-in">
+                                                {attr.subAttributesFalse?.map(sub => (
+                                                    <div key={sub.id} className="flex items-center gap-4 group/sub">
+                                                        <div className="w-1/3 min-w-[120px] flex gap-2">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <CornerDownRight size={12} className="text-rose-300 shrink-0" />
+                                                                <div className="flex-1">
+                                                                    <LocalizedInput 
+                                                                        value={sub.key} 
+                                                                        onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'key', val, section.id, 'false')} 
+                                                                        placeholder="Alt Özellik Adı" 
+                                                                        activeTab={activeTab} 
+                                                                        onTabChange={setDisplayLanguage}
+                                                                        inputClassName="h-8 text-xs"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="w-[70px] shrink-0">
+                                                                <select
+                                                                    value={sub.type}
+                                                                    onChange={(e) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'type', e.target.value, section.id, 'false')}
+                                                                    className="w-full bg-slate-50 border border-slate-200 text-[10px] text-slate-600 rounded px-1 py-1.5 outline-none"
+                                                                >
+                                                                    <option value="text">Metin</option>
+                                                                    <option value="number">Sayı</option>
+                                                                    <option value="boolean">Mantıksal</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <DynamicFieldInput 
+                                                                attribute={sub}
+                                                                onChange={(val) => handleUpdateCustomSubAttribute(attr.id, sub.id, 'value', val, section.id, 'false')}
+                                                                activeTab={activeTab}
+                                                                onTabChange={setDisplayLanguage}
+                                                            />
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => handleDeleteCustomSubAttribute(attr.id, sub.id, section.id, 'false')} 
+                                                            className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover/sub:opacity-100 transition-all"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                
+                                                <button 
+                                                    onClick={() => handleAddCustomSubAttribute(attr.id, section.id, 'false')}
+                                                    className="ml-6 text-[10px] font-bold text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded border border-dashed border-rose-200 flex items-center gap-1 transition-colors"
+                                                >
+                                                    <Plus size={10} /> Alt Soru Ekle (HAYIR)
+                                                </button>
+                                            </div>
+                                        )}
                                         </React.Fragment>
                                     );
                                 })}
@@ -2814,88 +3286,150 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
 
                             {/* Add New Attribute to Section */}
                             <div className="flex items-center gap-4 pt-6 border-t border-slate-100 mt-2 bg-slate-50/30 p-4 rounded-lg border-dashed border border-slate-200">
-                                <div className="w-1/3 min-w-[140px] flex gap-2">
-                                    <div className="flex-1">
-                                        <LocalizedInput 
-                                            value={newAttrKey} 
-                                            onChange={setNewAttrKey} 
-                                            placeholder="Yeni Özellik Adı" 
-                                            activeTab={activeTab} 
-                                            onTabChange={setDisplayLanguage}
-                                        />
-                                    </div>
-                                    <div className="w-[85px] shrink-0">
-                                        <select
-                                            value={newAttrType}
-                                            onChange={(e) => setNewAttrType(e.target.value as FieldType)}
-                                            className="w-full bg-white border border-slate-200 text-xs text-slate-600 rounded-lg px-2 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer font-medium"
-                                        >
-                                            <option value="text">Metin</option>
-                                            <option value="textarea">Uzun Metin</option>
-                                            <option value="number">Sayı</option>
-                                            <option value="boolean">Mantıksal</option>
-                                            <option value="date">Tarih</option>
-                                            <option value="time">Saat</option>
-                                            <option value="currency">Para</option>
-                                            <option value="select">Seçim</option>
-                                            <option value="multiselect">Çoklu</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="flex-1 flex gap-3 items-center">
-                                    <div className="flex-1">
-                                        {newAttrType === 'time' ? (
-                                            <div className="flex items-center gap-2">
-                                                <div className="relative flex-1">
-                                                    <Clock size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                                    <input 
-                                                        type="time" 
-                                                        value={newAttrValue.tr.split('-')[0]?.trim() || ''} 
-                                                        onChange={(e) => {
-                                                            const start = e.target.value;
-                                                            const end = newAttrValue.tr.split('-')[1]?.trim() || '';
-                                                            const val = end ? `${start} - ${end}` : start;
-                                                            setNewAttrValue({ tr: val, en: val });
-                                                        }}
-                                                        className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-                                                        placeholder="Başlangıç"
+                                {(() => {
+                                    const sectionNewAttr = sectionNewAttributes[section.id] || { key: { tr: '', en: '' }, value: { tr: '', en: '' }, type: 'text' };
+                                    
+                                    return (
+                                        <>
+                                            <div className="w-1/3 min-w-[140px] flex gap-2">
+                                                <div className="flex-1">
+                                                    <LocalizedInput 
+                                                        value={sectionNewAttr.key} 
+                                                        onChange={(val) => updateSectionNewAttribute(section.id, 'key', val)} 
+                                                        placeholder="Yeni Özellik Adı" 
+                                                        activeTab={activeTab} 
+                                                        onTabChange={setDisplayLanguage}
                                                     />
                                                 </div>
-                                                <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">TO</span>
-                                                <div className="relative flex-1">
-                                                    <input 
-                                                        type="time" 
-                                                        value={newAttrValue.tr.split('-')[1]?.trim() || ''} 
-                                                        onChange={(e) => {
-                                                            const start = newAttrValue.tr.split('-')[0]?.trim() || '';
-                                                            const end = e.target.value;
-                                                            const val = end ? `${start} - ${end}` : start;
-                                                            setNewAttrValue({ tr: val, en: val });
-                                                        }}
-                                                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-                                                        placeholder="Bitiş"
-                                                    />
+                                                <div className="w-[85px] shrink-0">
+                                                    <select
+                                                        value={sectionNewAttr.type}
+                                                        onChange={(e) => updateSectionNewAttribute(section.id, 'type', e.target.value as FieldType)}
+                                                        className="w-full bg-white border border-slate-200 text-xs text-slate-600 rounded-lg px-2 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer font-medium"
+                                                    >
+                                                        <option value="text">Metin</option>
+                                                        <option value="textarea">Uzun Metin</option>
+                                                        <option value="number">Sayı</option>
+                                                        <option value="boolean">Mantıksal</option>
+                                                        <option value="date">Tarih</option>
+                                                        <option value="time">Saat</option>
+                                                        <option value="currency">Para</option>
+                                                        <option value="select">Seçim</option>
+                                                        <option value="multiselect">Çoklu</option>
+                                                    </select>
                                                 </div>
                                             </div>
-                                        ) : (
-                                            <LocalizedInput 
-                                                value={newAttrValue} 
-                                                onChange={setNewAttrValue} 
-                                                placeholder="Değer" 
-                                                activeTab={activeTab} 
-                                                onTabChange={setDisplayLanguage}
-                                                inputClassName="text-xs border-slate-200 focus:border-indigo-300 bg-slate-50/50"
-                                            />
-                                        )}
-                                    </div>
-                                    <button 
-                                        onClick={() => handleAddAttribute(section.id)} 
-                                        disabled={!newAttrKey.tr.trim()} 
-                                        className="px-4 h-[38px] bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-                                    >
-                                        <Plus size={16} /> Ekle
-                                    </button>
-                                </div>
+                                            <div className="flex-1 flex gap-3 items-center">
+                                                <div className="flex-1">
+                                                    {sectionNewAttr.type === 'time' ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="relative flex-1">
+                                                                <Clock size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                                <input 
+                                                                    type="time" 
+                                                                    value={sectionNewAttr.value.tr.split('-')[0]?.trim() || ''} 
+                                                                    onChange={(e) => {
+                                                                        const start = e.target.value;
+                                                                        const end = sectionNewAttr.value.tr.split('-')[1]?.trim() || '';
+                                                                        const val = end ? `${start} - ${end}` : start;
+                                                                        updateSectionNewAttribute(section.id, 'value', { tr: val, en: val });
+                                                                    }}
+                                                                    className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                                    placeholder="Başlangıç"
+                                                                />
+                                                            </div>
+                                                            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">TO</span>
+                                                            <div className="relative flex-1">
+                                                                <input 
+                                                                    type="time" 
+                                                                    value={sectionNewAttr.value.tr.split('-')[1]?.trim() || ''} 
+                                                                    onChange={(e) => {
+                                                                        const start = sectionNewAttr.value.tr.split('-')[0]?.trim() || '';
+                                                                        const end = e.target.value;
+                                                                        const val = end ? `${start} - ${end}` : start;
+                                                                        updateSectionNewAttribute(section.id, 'value', { tr: val, en: val });
+                                                                    }}
+                                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                                    placeholder="Bitiş"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    ) : sectionNewAttr.type === 'date' ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="relative flex-1">
+                                                                <Calendar size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                                <input 
+                                                                    type="date" 
+                                                                    value={sectionNewAttr.value.tr.split(' - ')[0]?.trim() || ''} 
+                                                                    onChange={(e) => {
+                                                                        const start = e.target.value;
+                                                                        const end = sectionNewAttr.value.tr.split(' - ')[1]?.trim() || '';
+                                                                        const val = end ? `${start} - ${end}` : start;
+                                                                        updateSectionNewAttribute(section.id, 'value', { tr: val, en: val });
+                                                                    }}
+                                                                    className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                                />
+                                                            </div>
+                                                            <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">TO</span>
+                                                            <div className="relative flex-1">
+                                                                <input 
+                                                                    type="date" 
+                                                                    value={sectionNewAttr.value.tr.split(' - ')[1]?.trim() || ''} 
+                                                                    onChange={(e) => {
+                                                                        const start = sectionNewAttr.value.tr.split(' - ')[0]?.trim() || '';
+                                                                        const end = e.target.value;
+                                                                        const val = end ? `${start} - ${end}` : start;
+                                                                        updateSectionNewAttribute(section.id, 'value', { tr: val, en: val });
+                                                                    }}
+                                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    ) : sectionNewAttr.type === 'boolean' ? (
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => updateSectionNewAttribute(section.id, 'value', { tr: 'true', en: 'true' })}
+                                                                className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                                                                    sectionNewAttr.value.tr === 'true'
+                                                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                                                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                                }`}
+                                                            >
+                                                                Evet
+                                                            </button>
+                                                            <button
+                                                                onClick={() => updateSectionNewAttribute(section.id, 'value', { tr: 'false', en: 'false' })}
+                                                                className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                                                                    sectionNewAttr.value.tr === 'false'
+                                                                        ? 'bg-slate-100 border-slate-300 text-slate-800'
+                                                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                                }`}
+                                                            >
+                                                                Hayır
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <LocalizedInput 
+                                                            value={sectionNewAttr.value} 
+                                                            onChange={(val) => updateSectionNewAttribute(section.id, 'value', val)} 
+                                                            placeholder="Değer" 
+                                                            activeTab={activeTab} 
+                                                            onTabChange={setDisplayLanguage}
+                                                            inputClassName="text-xs border-slate-200 focus:border-indigo-300 bg-slate-50/50"
+                                                        />
+                                                    )}
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleAddAttribute(section.id)} 
+                                                    disabled={!sectionNewAttr.key.tr.trim()} 
+                                                    className="px-4 h-[38px] bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                                                >
+                                                    <Plus size={16} /> Ekle
+                                                </button>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>

@@ -116,6 +116,7 @@ export interface NodeAttribute {
   options?: string[]; 
   // Nested attributes for conditional logic (e.g. Jacuzzi: Yes -> Type: Outdoor)
   subAttributes?: NodeAttribute[]; 
+  subAttributesFalse?: NodeAttribute[]; // New: "If False" for boolean
 }
 
 export interface LocalizedOptions {
@@ -139,6 +140,10 @@ export interface TemplateField {
   condition?: {
       triggerValue: string; // e.g. "true" (When parent is true...)
       fields: TemplateField[]; // ...show these fields
+  };
+  // New: For "False" condition (specifically for boolean types)
+  conditionFalse?: {
+      fields: TemplateField[];
   };
 }
 

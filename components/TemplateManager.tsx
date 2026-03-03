@@ -230,7 +230,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
   const { nodeTemplates, addNodeTemplate, updateNodeTemplate, deleteNodeTemplate } = useHotel();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [formData, setFormData] = useState<NodeTemplate>(emptyTemplate);
-  const [showTypeSelector, setShowTypeSelector] = useState<{index: number, subIndex?: number} | null>(null);
+  const [showTypeSelector, setShowTypeSelector] = useState<{index: number, subIndex?: number, conditionType?: 'true' | 'false'} | null>(null);
   
   // UI State
   const [activeTab, setActiveTab] = useState<'tr' | 'en'>('tr');
@@ -285,28 +285,39 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
   };
 
   // --- SUB FIELD HANDLERS ---
-  const handleToggleCondition = (parentId: string, enable: boolean) => {
+  const handleToggleCondition = (parentId: string, enable: boolean, type: 'true' | 'false' = 'true') => {
       setFormData(prev => ({
           ...prev,
           fields: prev.fields.map(f => {
               if (f.id !== parentId) return f;
-              if (!enable) return { ...f, condition: undefined };
-              return { 
-                  ...f, 
-                  condition: { 
-                      triggerValue: 'true', 
-                      fields: [] 
-                  } 
-              };
+              
+              if (type === 'true') {
+                  if (!enable) return { ...f, condition: undefined };
+                  return { 
+                      ...f, 
+                      condition: { 
+                          triggerValue: 'true', 
+                          fields: [] 
+                      } 
+                  };
+              } else {
+                  if (!enable) return { ...f, conditionFalse: undefined };
+                  return { 
+                      ...f, 
+                      conditionFalse: { 
+                          fields: [] 
+                      } 
+                  };
+              }
           })
       }));
   };
 
-  const handleAddSubField = (parentId: string, type: FieldType = 'text') => {
+  const handleAddSubField = (parentId: string, type: FieldType = 'text', conditionType: 'true' | 'false' = 'true') => {
       setFormData(prev => ({
           ...prev,
           fields: prev.fields.map(f => {
-              if (f.id !== parentId || !f.condition) return f;
+              if (f.id !== parentId) return f;
               
               const newSub: TemplateField = {
                   id: generateId('sub'),
@@ -317,46 +328,81 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
                   aiDescription: { tr: '', en: '' }
               };
               
-              return { 
-                  ...f, 
-                  condition: { 
-                      ...f.condition, 
-                      fields: [...f.condition.fields, newSub] 
-                  } 
-              };
+              if (conditionType === 'true' && f.condition) {
+                  return { 
+                      ...f, 
+                      condition: { 
+                          ...f.condition, 
+                          fields: [...f.condition.fields, newSub] 
+                      } 
+                  };
+              } else if (conditionType === 'false' && f.conditionFalse) {
+                  return { 
+                      ...f, 
+                      conditionFalse: { 
+                          ...f.conditionFalse, 
+                          fields: [...f.conditionFalse.fields, newSub] 
+                      } 
+                  };
+              }
+              return f;
           })
       }));
       setShowTypeSelector(null);
   };
 
-  const handleUpdateSubField = (parentId: string, subId: string, updates: Partial<TemplateField>) => {
+  const handleUpdateSubField = (parentId: string, subId: string, updates: Partial<TemplateField>, conditionType: 'true' | 'false' = 'true') => {
       setFormData(prev => ({
           ...prev,
           fields: prev.fields.map(f => {
-              if (f.id !== parentId || !f.condition) return f;
-              return {
-                  ...f,
-                  condition: {
-                      ...f.condition,
-                      fields: f.condition.fields.map(s => s.id === subId ? { ...s, ...updates } : s)
-                  }
-              };
+              if (f.id !== parentId) return f;
+
+              if (conditionType === 'true' && f.condition) {
+                  return {
+                      ...f,
+                      condition: {
+                          ...f.condition,
+                          fields: f.condition.fields.map(s => s.id === subId ? { ...s, ...updates } : s)
+                      }
+                  };
+              } else if (conditionType === 'false' && f.conditionFalse) {
+                  return {
+                      ...f,
+                      conditionFalse: {
+                          ...f.conditionFalse,
+                          fields: f.conditionFalse.fields.map(s => s.id === subId ? { ...s, ...updates } : s)
+                      }
+                  };
+              }
+              return f;
           })
       }));
   };
 
-  const handleDeleteSubField = (parentId: string, subId: string) => {
+  const handleDeleteSubField = (parentId: string, subId: string, conditionType: 'true' | 'false' = 'true') => {
       setFormData(prev => ({
           ...prev,
           fields: prev.fields.map(f => {
-              if (f.id !== parentId || !f.condition) return f;
-              return {
-                  ...f,
-                  condition: {
-                      ...f.condition,
-                      fields: f.condition.fields.filter(s => s.id !== subId)
-                  }
-              };
+              if (f.id !== parentId) return f;
+
+              if (conditionType === 'true' && f.condition) {
+                  return {
+                      ...f,
+                      condition: {
+                          ...f.condition,
+                          fields: f.condition.fields.filter(s => s.id !== subId)
+                      }
+                  };
+              } else if (conditionType === 'false' && f.conditionFalse) {
+                  return {
+                      ...f,
+                      conditionFalse: {
+                          ...f.conditionFalse,
+                          fields: f.conditionFalse.fields.filter(s => s.id !== subId)
+                      }
+                  };
+              }
+              return f;
           })
       }));
   };
@@ -374,6 +420,9 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
           condition: f.condition ? {
               triggerValue: f.condition.triggerValue,
               fields: f.condition.fields.map(sf => processField(sf)) // Recurse
+          } : undefined,
+          conditionFalse: f.conditionFalse ? {
+              fields: f.conditionFalse.fields.map(sf => processField(sf)) // Recurse
           } : undefined
       });
 
@@ -704,117 +753,221 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ isOpen, onClose }) =>
 
                                             {/* CONDITIONAL SUB FIELDS (Only for boolean) */}
                                             {field.type === 'boolean' && (
-                                                <div className="mt-2 bg-slate-50 rounded-lg border border-slate-200">
+                                                <div className="mt-4 space-y-4">
+                                                    {/* TRUE CONDITION */}
+                                                    <div className="bg-indigo-50/50 rounded-lg border border-indigo-100">
                                                     {!field.condition ? (
-                                                        <button 
-                                                            onClick={() => handleToggleCondition(field.id, true)}
-                                                            className="w-full py-2 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors rounded-lg"
-                                                        >
-                                                            <GitMerge size={14} /> Alt Soru Ekle (Koşullu Alanlar)
-                                                        </button>
+                                                            <button 
+                                                                onClick={() => handleToggleCondition(field.id, true, 'true')}
+                                                                className="w-full py-2 flex items-center justify-center gap-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50 transition-colors rounded-lg"
+                                                            >
+                                                                <GitMerge size={14} /> "EVET" Durumu İçin Alt Soru Ekle
+                                                            </button>
                                                     ) : (
                                                         <div className="p-3">
-                                                            <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
-                                                                <div className="flex items-center gap-2">
-                                                                    <GitMerge size={14} className="text-purple-500" />
-                                                                    <span className="text-xs font-bold text-slate-700">Alt Sorular</span>
-                                                                    <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">Tetikleyici: EVET (True)</span>
+                                                                <div className="flex items-center justify-between mb-3 border-b border-indigo-200 pb-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <GitMerge size={14} className="text-indigo-500" />
+                                                                        <span className="text-xs font-bold text-indigo-700">Alt Sorular (EVET)</span>
+                                                                    </div>
+                                                                    <button onClick={() => handleToggleCondition(field.id, false, 'true')} className="text-indigo-400 hover:text-red-500 p-1">
+                                                                        <Trash2 size={12} />
+                                                                    </button>
                                                                 </div>
-                                                                <button onClick={() => handleToggleCondition(field.id, false)} className="text-slate-400 hover:text-red-500 p-1">
-                                                                    <Trash2 size={12} />
-                                                                </button>
-                                                            </div>
 
-                                                            {/* Sub Fields List */}
-                                                            <div className="space-y-3 pl-2 border-l-2 border-purple-100 ml-1">
-                                                                {field.condition.fields.map((sub, subIdx) => (
-                                                                    <div key={sub.id} className="bg-white p-3 rounded border border-slate-200 flex gap-3 items-start">
-                                                                        <div className="pt-2 text-slate-300"><div className="w-2 h-2 rounded-full bg-purple-300"></div></div>
+                                                                <div className="space-y-3 pl-2 border-l-2 border-indigo-200 ml-1">
+                                                                    {field.condition.fields.map((sub, subIdx) => (
+                                                                        <div key={sub.id} className="bg-white p-3 rounded border border-indigo-100 flex gap-3 items-start relative">
+                                                                            <div className="pt-2 text-indigo-300"><div className="w-2 h-2 rounded-full bg-indigo-400"></div></div>
                                                                         
                                                                         <div className="flex-1 grid grid-cols-2 gap-3">
-                                                                            {/* Sub Label */}
-                                                                            <div>
-                                                                                <label className="block text-[9px] text-slate-400 font-bold mb-1">Soru / Etiket</label>
-                                                                                <LocalizedTextInput 
-                                                                                    value={sub.label} 
-                                                                                    onChange={(val) => handleUpdateSubField(field.id, sub.id, { label: val })} 
-                                                                                    activeTab={activeTab}
-                                                                                    placeholder="Örn: Tipi Nedir?"
-                                                                                    allowEnhance={true}
-                                                                                    enhanceType="label"
-                                                                                />
-                                                                            </div>
-                                                                            {/* Sub Type & Key */}
-                                                                            <div className="flex gap-2">
-                                                                                <div className="flex-1">
-                                                                                    <label className="block text-[9px] text-slate-400 font-bold mb-1">Tip</label>
-                                                                                    <div className="relative">
-                                                                                        <button 
-                                                                                            onClick={() => setShowTypeSelector(showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx ? null : { index, subIndex: subIdx })}
-                                                                                            className="w-full flex items-center gap-1 border border-slate-200 rounded px-2 py-1.5 text-xs font-bold text-slate-600 bg-slate-50"
-                                                                                        >
-                                                                                            {getTypeIcon(sub.type)}
-                                                                                            <span className="truncate">{getTypeLabel(sub.type)}</span>
-                                                                                        </button>
-                                                                                        {showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && (
-                                                                                            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 shadow-xl rounded-lg z-30 py-1 grid grid-cols-1 max-h-48 overflow-y-auto">
-                                                                                                {(['text', 'select', 'multiselect', 'number'] as FieldType[]).map(t => (
-                                                                                                    <button 
-                                                                                                        key={t} 
-                                                                                                        onClick={() => { handleUpdateSubField(field.id, sub.id, { type: t }); setShowTypeSelector(null); }}
-                                                                                                        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left text-slate-700"
-                                                                                                    >
-                                                                                                        {getTypeIcon(t)} {getTypeLabel(t)}
-                                                                                                    </button>
-                                                                                                ))}
-                                                                                            </div>
-                                                                                        )}
-                                                                                        {showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && <div className="fixed inset-0 z-20" onClick={() => setShowTypeSelector(null)} />}
-                                                                                    </div>
-                                                                                </div>
-                                                                                <button onClick={() => handleDeleteSubField(field.id, sub.id)} className="mt-5 text-slate-300 hover:text-red-500"><X size={14}/></button>
-                                                                            </div>
-
-                                                                            {/* Sub AI Description */}
-                                                                            <div className="col-span-2">
-                                                                                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                                                                    <BrainCircuit size={10} className="text-violet-500"/> AI Açıklaması (İpucu)
-                                                                                </label>
-                                                                                <LocalizedTextInput 
-                                                                                    value={ensureLocalized(sub.aiDescription)} 
-                                                                                    onChange={(val) => handleUpdateSubField(field.id, sub.id, { aiDescription: val })} 
-                                                                                    activeTab={activeTab}
-                                                                                    placeholder="AI için ipucu..."
-                                                                                    className="w-full"
-                                                                                    allowEnhance={true}
-                                                                                    enhanceType="description"
-                                                                                />
-                                                                            </div>
-                                                                            
-                                                                            {/* Sub Options (if select) */}
-                                                                            {(sub.type === 'select' || sub.type === 'multiselect') && (
-                                                                                <div className="col-span-2">
-                                                                                    <label className="block text-[9px] text-slate-400 font-bold mb-1">Seçenekler</label>
-                                                                                    <LocalizedOptionsInput 
-                                                                                        value={sub.options} 
-                                                                                        onChange={(opts) => handleUpdateSubField(field.id, sub.id, { options: opts })} 
+                                                                                <div>
+                                                                                    <label className="block text-[9px] text-indigo-400 font-bold mb-1">Soru / Etiket</label>
+                                                                                    <LocalizedTextInput 
+                                                                                        value={sub.label} 
+                                                                                        onChange={(val) => handleUpdateSubField(field.id, sub.id, { label: val }, 'true')} 
                                                                                         activeTab={activeTab}
+                                                                                        placeholder="Örn: Tipi Nedir?"
+                                                                                        allowEnhance={true}
+                                                                                        enhanceType="label"
                                                                                     />
                                                                                 </div>
-                                                                            )}
+                                                                                <div className="flex gap-2">
+                                                                                    <div className="flex-1">
+                                                                                        <label className="block text-[9px] text-indigo-400 font-bold mb-1">Tip</label>
+                                                                                        <div className="relative">
+                                                                                            <button 
+                                                                                                onClick={() => setShowTypeSelector(showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && showTypeSelector.conditionType === 'true' ? null : { index, subIndex: subIdx, conditionType: 'true' })}
+                                                                                                className="w-full flex items-center gap-1 border border-indigo-100 rounded px-2 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50/50"
+                                                                                            >
+                                                                                                {getTypeIcon(sub.type)}
+                                                                                                <span className="truncate">{getTypeLabel(sub.type)}</span>
+                                                                                            </button>
+                                                                                            {showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && showTypeSelector.conditionType === 'true' && (
+                                                                                                <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 shadow-xl rounded-lg z-30 py-1 grid grid-cols-1 max-h-48 overflow-y-auto">
+                                                                                                    {(['text', 'select', 'multiselect', 'number'] as FieldType[]).map(t => (
+                                                                                                        <button 
+                                                                                                            key={t} 
+                                                                                                            onClick={() => { handleUpdateSubField(field.id, sub.id, { type: t }, 'true'); setShowTypeSelector(null); }}
+                                                                                                            className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left text-slate-700"
+                                                                                                        >
+                                                                                                            {getTypeIcon(t)} {getTypeLabel(t)}
+                                                                                                        </button>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            )}
+                                                                                            {showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && showTypeSelector.conditionType === 'true' && <div className="fixed inset-0 z-20" onClick={() => setShowTypeSelector(null)} />}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <button onClick={() => handleDeleteSubField(field.id, sub.id, 'true')} className="mt-5 text-slate-300 hover:text-red-500"><X size={14}/></button>
+                                                                                </div>
+
+                                                                                <div className="col-span-2">
+                                                                                    <label className="block text-[9px] font-bold text-indigo-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                                                                        <BrainCircuit size={10} className="text-violet-500"/> AI Açıklaması
+                                                                                    </label>
+                                                                                    <LocalizedTextInput 
+                                                                                        value={ensureLocalized(sub.aiDescription)} 
+                                                                                        onChange={(val) => handleUpdateSubField(field.id, sub.id, { aiDescription: val }, 'true')} 
+                                                                                        activeTab={activeTab}
+                                                                                        placeholder="AI için ipucu..."
+                                                                                        className="w-full"
+                                                                                        allowEnhance={true}
+                                                                                        enhanceType="description"
+                                                                                    />
+                                                                                </div>
+                                                                                
+                                                                                {(sub.type === 'select' || sub.type === 'multiselect') && (
+                                                                                    <div className="col-span-2">
+                                                                                        <label className="block text-[9px] text-indigo-400 font-bold mb-1">Seçenekler</label>
+                                                                                        <LocalizedOptionsInput 
+                                                                                            value={sub.options} 
+                                                                                            onChange={(opts) => handleUpdateSubField(field.id, sub.id, { options: opts }, 'true')} 
+                                                                                            activeTab={activeTab}
+                                                                                        />
+                                                                                    </div>
+                                                                                )}
                                                                         </div>
                                                                     </div>
                                                                 ))}
                                                                 
-                                                                <button 
-                                                                    onClick={() => handleAddSubField(field.id)}
-                                                                    className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-bold px-2 py-1 rounded hover:bg-purple-50 transition-colors"
-                                                                >
-                                                                    <Plus size={12} /> Alt Alan Ekle
-                                                                </button>
+                                                                    <button 
+                                                                        onClick={() => handleAddSubField(field.id, 'text', 'true')}
+                                                                        className="w-full py-2 border border-dashed border-indigo-300 rounded text-xs font-bold text-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-1"
+                                                                    >
+                                                                        <Plus size={12} /> Yeni Alt Soru Ekle (EVET)
+                                                                    </button>
                                                             </div>
                                                         </div>
                                                     )}
+                                                    </div>
+
+                                                    {/* FALSE CONDITION */}
+                                                    <div className="bg-rose-50/50 rounded-lg border border-rose-100">
+                                                        {!field.conditionFalse ? (
+                                                            <button 
+                                                                onClick={() => handleToggleCondition(field.id, true, 'false')}
+                                                                className="w-full py-2 flex items-center justify-center gap-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors rounded-lg"
+                                                            >
+                                                                <GitMerge size={14} /> "HAYIR" Durumu İçin Alt Soru Ekle
+                                                            </button>
+                                                        ) : (
+                                                            <div className="p-3">
+                                                                <div className="flex items-center justify-between mb-3 border-b border-rose-200 pb-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <GitMerge size={14} className="text-rose-500" />
+                                                                        <span className="text-xs font-bold text-rose-700">Alt Sorular (HAYIR)</span>
+                                                                    </div>
+                                                                    <button onClick={() => handleToggleCondition(field.id, false, 'false')} className="text-rose-400 hover:text-red-500 p-1">
+                                                                        <Trash2 size={12} />
+                                                                    </button>
+                                                                </div>
+
+                                                                <div className="space-y-3 pl-2 border-l-2 border-rose-200 ml-1">
+                                                                    {field.conditionFalse.fields.map((sub, subIdx) => (
+                                                                        <div key={sub.id} className="bg-white p-3 rounded border border-rose-100 flex gap-3 items-start relative">
+                                                                            <div className="pt-2 text-rose-300"><div className="w-2 h-2 rounded-full bg-rose-400"></div></div>
+                                                                            
+                                                                            <div className="flex-1 grid grid-cols-2 gap-3">
+                                                                                <div>
+                                                                                    <label className="block text-[9px] text-rose-400 font-bold mb-1">Soru / Etiket</label>
+                                                                                    <LocalizedTextInput 
+                                                                                        value={sub.label} 
+                                                                                        onChange={(val) => handleUpdateSubField(field.id, sub.id, { label: val }, 'false')} 
+                                                                                        activeTab={activeTab}
+                                                                                        placeholder="Örn: Neden?"
+                                                                                        allowEnhance={true}
+                                                                                        enhanceType="label"
+                                                                                    />
+                                                                                </div>
+                                                                                <div className="flex gap-2">
+                                                                                    <div className="flex-1">
+                                                                                        <label className="block text-[9px] text-rose-400 font-bold mb-1">Tip</label>
+                                                                                        <div className="relative">
+                                                                                            <button 
+                                                                                                onClick={() => setShowTypeSelector(showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && showTypeSelector.conditionType === 'false' ? null : { index, subIndex: subIdx, conditionType: 'false' })}
+                                                                                                className="w-full flex items-center gap-1 border border-rose-100 rounded px-2 py-1.5 text-xs font-bold text-rose-600 bg-rose-50/50"
+                                                                                            >
+                                                                                                {getTypeIcon(sub.type)}
+                                                                                                <span className="truncate">{getTypeLabel(sub.type)}</span>
+                                                                                            </button>
+                                                                                            {showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && showTypeSelector.conditionType === 'false' && (
+                                                                                                <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 shadow-xl rounded-lg z-30 py-1 grid grid-cols-1 max-h-48 overflow-y-auto">
+                                                                                                    {(['text', 'select', 'multiselect', 'number'] as FieldType[]).map(t => (
+                                                                                                        <button 
+                                                                                                            key={t} 
+                                                                                                            onClick={() => { handleUpdateSubField(field.id, sub.id, { type: t }, 'false'); setShowTypeSelector(null); }}
+                                                                                                            className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left text-slate-700"
+                                                                                                        >
+                                                                                                            {getTypeIcon(t)} {getTypeLabel(t)}
+                                                                                                        </button>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            )}
+                                                                                            {showTypeSelector?.index === index && showTypeSelector.subIndex === subIdx && showTypeSelector.conditionType === 'false' && <div className="fixed inset-0 z-20" onClick={() => setShowTypeSelector(null)} />}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <button onClick={() => handleDeleteSubField(field.id, sub.id, 'false')} className="mt-5 text-slate-300 hover:text-red-500"><X size={14}/></button>
+                                                                                </div>
+
+                                                                                <div className="col-span-2">
+                                                                                    <label className="block text-[9px] font-bold text-rose-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                                                                        <BrainCircuit size={10} className="text-violet-500"/> AI Açıklaması
+                                                                                    </label>
+                                                                                    <LocalizedTextInput 
+                                                                                        value={ensureLocalized(sub.aiDescription)} 
+                                                                                        onChange={(val) => handleUpdateSubField(field.id, sub.id, { aiDescription: val }, 'false')} 
+                                                                                        activeTab={activeTab}
+                                                                                        placeholder="AI için ipucu..."
+                                                                                        className="w-full"
+                                                                                        allowEnhance={true}
+                                                                                        enhanceType="description"
+                                                                                    />
+                                                                                </div>
+                                                                                
+                                                                                {(sub.type === 'select' || sub.type === 'multiselect') && (
+                                                                                    <div className="col-span-2">
+                                                                                        <label className="block text-[9px] text-rose-400 font-bold mb-1">Seçenekler</label>
+                                                                                        <LocalizedOptionsInput 
+                                                                                            value={sub.options} 
+                                                                                            onChange={(opts) => handleUpdateSubField(field.id, sub.id, { options: opts }, 'false')} 
+                                                                                            activeTab={activeTab}
+                                                                                        />
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                    <button 
+                                                                        onClick={() => handleAddSubField(field.id, 'text', 'false')}
+                                                                        className="w-full py-2 border border-dashed border-rose-300 rounded text-xs font-bold text-rose-500 hover:bg-rose-50 transition-colors flex items-center justify-center gap-1"
+                                                                    >
+                                                                        <Plus size={12} /> Yeni Alt Soru Ekle (HAYIR)
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

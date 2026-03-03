@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { HotelNode, LocalizedText } from '../types';
+import { HotelNode, LocalizedText, NodeAttribute } from '../types';
 import { getLocalizedValue } from '../utils/treeUtils';
 import { Printer, FileText, Globe, Download } from 'lucide-react';
 
@@ -51,36 +51,24 @@ const ContentNodeRenderer: React.FC<{ node: HotelNode; level: number; language: 
                     </div>
                 )}
 
-                {/* Attributes Table */}
+                {/* Default Attributes */}
                 {node.attributes && node.attributes.length > 0 && (
-                    <div className="mb-4 overflow-x-auto">
-                        <table className="min-w-full text-sm text-left border-collapse">
-                            <tbody>
-                                {node.attributes.map((attr, index) => (
-                                    <tr key={attr.id || index} className="border-b border-slate-100 print:border-slate-200">
-                                        <td className="py-1.5 pr-4 font-semibold text-slate-600 w-1/3 align-top">
-                                            {getLocalizedValue(attr.key, language)}
-                                        </td>
-                                        <td className="py-1.5 text-slate-800 align-top">
-                                            {getLocalizedValue(attr.value, language)}
-                                            {/* Sub Attributes */}
-                                            {attr.subAttributes && attr.subAttributes.length > 0 && (
-                                                <div className="mt-1 pl-4 border-l-2 border-slate-200">
-                                                    {attr.subAttributes.map((sub, subIndex) => (
-                                                        <div key={sub.id || subIndex} className="flex gap-2 text-xs mt-1">
-                                                            <span className="font-medium text-slate-500">{getLocalizedValue(sub.key, language)}:</span>
-                                                            <span>{getLocalizedValue(sub.value, language)}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                    <AttributesTable 
+                        title={getLocalizedValue(node.attributesTitle, language)} 
+                        attributes={node.attributes} 
+                        language={language} 
+                    />
                 )}
+
+                {/* Custom Sections */}
+                {node.sections && node.sections.map(section => (
+                    <AttributesTable 
+                        key={section.id}
+                        title={getLocalizedValue(section.title, language)} 
+                        attributes={section.attributes} 
+                        language={language} 
+                    />
+                ))}
 
                 {/* Tags */}
                 {node.tags && node.tags.length > 0 && (
@@ -100,6 +88,79 @@ const ContentNodeRenderer: React.FC<{ node: HotelNode; level: number; language: 
                     ))}
                 </div>
             )}
+        </div>
+    );
+};
+
+const AttributesTable: React.FC<{ 
+    title?: string; 
+    attributes: NodeAttribute[]; 
+    language: 'tr' | 'en'; 
+}> = ({ title, attributes, language }) => {
+    if (!attributes || attributes.length === 0) return null;
+
+    return (
+        <div className="mb-4">
+            {title && (
+                <h4 className="text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide border-b border-slate-100 pb-1">
+                    {title}
+                </h4>
+            )}
+            <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-left border-collapse">
+                    <tbody>
+                        {attributes.map((attr, index) => (
+                            <tr key={attr.id || index} className="border-b border-slate-100 print:border-slate-200">
+                                <td className="py-1.5 pr-4 font-semibold text-slate-600 w-1/3 align-top">
+                                    {getLocalizedValue(attr.key, language)}
+                                </td>
+                                <td className="py-1.5 text-slate-800 align-top">
+                                    {getLocalizedValue(attr.value, language)}
+                                    {/* Sub Attributes */}
+                                    {attr.type === 'boolean' ? (
+                                        <>
+                                            {/* True Condition Sub Attributes */}
+                                            {String(getLocalizedValue(attr.value, language)).toLowerCase() === 'true' && attr.subAttributes && attr.subAttributes.length > 0 && (
+                                                <div className="mt-1 pl-4 border-l-2 border-indigo-200">
+                                                    {attr.subAttributes.map((sub, subIndex) => (
+                                                        <div key={sub.id || subIndex} className="flex gap-2 text-xs mt-1">
+                                                            <span className="font-medium text-slate-500">{getLocalizedValue(sub.key, language)}:</span>
+                                                            <span>{getLocalizedValue(sub.value, language)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {/* False Condition Sub Attributes */}
+                                            {String(getLocalizedValue(attr.value, language)).toLowerCase() === 'false' && attr.subAttributesFalse && attr.subAttributesFalse.length > 0 && (
+                                                <div className="mt-1 pl-4 border-l-2 border-rose-200">
+                                                    {attr.subAttributesFalse.map((sub, subIndex) => (
+                                                        <div key={sub.id || subIndex} className="flex gap-2 text-xs mt-1">
+                                                            <span className="font-medium text-slate-500">{getLocalizedValue(sub.key, language)}:</span>
+                                                            <span>{getLocalizedValue(sub.value, language)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        /* Default behavior for non-boolean types */
+                                        attr.subAttributes && attr.subAttributes.length > 0 && (
+                                            <div className="mt-1 pl-4 border-l-2 border-slate-200">
+                                                {attr.subAttributes.map((sub, subIndex) => (
+                                                    <div key={sub.id || subIndex} className="flex gap-2 text-xs mt-1">
+                                                        <span className="font-medium text-slate-500">{getLocalizedValue(sub.key, language)}:</span>
+                                                        <span>{getLocalizedValue(sub.value, language)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };
