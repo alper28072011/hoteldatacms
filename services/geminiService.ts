@@ -2,13 +2,33 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 
-const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+const getApiKey = async (): Promise<string> => {
+  // If in dev mode, we might still have it from Vite define
+  let key = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+  
+  if (!key) {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const data = await res.json();
+        key = data.apiKey;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch API key from server", e);
+    }
+  }
+  return key;
+};
 
-if (!apiKey) {
-  console.warn("Gemini API Key is missing. AI features will not work.");
-}
+let aiInstance: GoogleGenAI | null = null;
 
-const ai = new GoogleGenAI({ apiKey });
+const getAI = async () => {
+  if (aiInstance) return aiInstance;
+  const key = await getApiKey();
+  if (!key) console.warn("Gemini API Key is missing!");
+  aiInstance = new GoogleGenAI({ apiKey: key });
+  return aiInstance;
+};
 
 const modelConfig = {
   model: 'gemini-3-flash-preview', 
@@ -33,6 +53,7 @@ export const translateText = async (text: string, targetLang: string): Promise<s
         
         Text: "${text}"`;
         
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -66,6 +87,7 @@ export const optimizeAILabel = async (text: string, lang: 'tr' | 'en'): Promise<
         Sadece optimize edilmiş etiketi döndür.
         `;
         
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -99,6 +121,7 @@ export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Pr
         ÖRNEK ÇIKTI (TR): "Odanın manzara bilgisini içerir. Misafir sorduğunda kullan."
         `;
         
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -133,6 +156,7 @@ export const optimizeMainContent = async (text: string, lang: 'tr' | 'en'): Prom
         KULLANICI GİRDİSİ: "${text}"
         `;
         
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -170,6 +194,7 @@ export const generateOptimizedID = async (nodeName: string, context: string): Pr
         - "Çocuk Kulübü Kuralları" -> "kids-club-rules"
         `;
         
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -212,6 +237,7 @@ export const evaluateNodeHealth = async (node: HotelNode, parentPath: string): P
         Eğer her şey mükemmelse issues boş dizi olsun ve score 100 olsun.
         `;
 
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt,
@@ -240,6 +266,7 @@ export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
     ÇIKTIYI TÜRKÇE OLARAK VER.
     `;
 
+    const ai = await getAI();
     const response = await ai.models.generateContent({
       model: modelConfig.model,
       contents: prompt
@@ -304,6 +331,7 @@ export const chatWithData = async (
     }
     `;
 
+    const ai = await getAI();
     const chat = ai.chats.create({
       model: modelConfig.model,
       config: { 
@@ -401,6 +429,7 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     }
     `;
 
+    const ai = await getAI();
     const response = await ai.models.generateContent({
       model: modelConfig.model,
       contents: prompt,
@@ -444,6 +473,7 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
     Özet ve veriler TÜRKÇE olmalı.
     `;
 
+    const ai = await getAI();
     const response = await ai.models.generateContent({
       model: modelConfig.model,
       contents: {
@@ -496,6 +526,7 @@ export const generateNodeContext = async (node: HotelNode, pathString: string, l
         Output JSON: { "tags": { "tr": string[], "en": string[] }, "description": string }
         `;
         
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt,
@@ -522,6 +553,7 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
         Create a natural language summary sentence (${lang}) for an item named "${name}" with these attributes: ${attrs}.
         Keep it concise.
         `;
+        const ai = await getAI();
         const response = await ai.models.generateContent({
              model: modelConfig.model,
              contents: prompt
@@ -576,6 +608,7 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
         }
         `;
         
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt,
@@ -606,21 +639,22 @@ export const autoFixDatabase = async (data: HotelNode): Promise<AutoFixAction[]>
                 "id": "fix_1",
                 "type": "move" | "update" | "changeType",
                 "targetId": "node_id",
-                "destinationId": "parent_id_if_move",
-                "payload": {}, 
-                "reasoning": "Turkish explanation",
-                "severity": "critical" | "structural" | "content"
+                "destinationId": "new_parent_id",
+                "reasoning": "Reason in Turkish",
+                "severity": "critical" | "structural"
             }
          ]
          `;
          
+         const ai = await getAI();
          const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt,
             config: { responseMimeType: 'application/json' }
         });
         
-        return JSON.parse(response.text || '[]');
+        const rawText = response.text || "[]";
+        return JSON.parse(rawText);
     } catch(e) { return []; }
 }
 
@@ -670,6 +704,7 @@ export const runDataCheck = async (data: HotelNode, sourceType: 'url' | 'text' |
         }
         `;
 
+        const ai = await getAI();
         const response = await ai.models.generateContent({
              model: modelConfig.model,
              contents: contents,
@@ -715,6 +750,7 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         Sadece tavsiye ve yönlendirme yap. Kod yazma, sadece mantığı ve yapıyı anlat.
         `;
 
+        const ai = await getAI();
         const chat = ai.chats.create({
             model: modelConfig.model,
             config: {
@@ -772,6 +808,7 @@ export const fillStandardStructure = async (
     RETURN ONLY THE VALID JSON.
     `;
 
+    const ai = await getAI();
     const response = await ai.models.generateContent({
       model: modelConfig.model,
       contents: prompt,
