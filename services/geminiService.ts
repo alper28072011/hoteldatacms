@@ -460,22 +460,57 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2);
     
-    const prompt = `Bu yüklenen dosyayı (Resim/PDF) analiz et ve otel verilerini çıkararak mevcut yapıya entegre et.
-    Verileri çıkarırken her biri için doğru 'intent' (informational, policy, request, safety, complaint) değerini ata.
-    Ayrıca isim ve açıklamaları hem Türkçe (tr) hem İngilizce (en) olarak çıkar.
+    const prompt = `
+    ACT AS AN EXPERT DATA ARCHITECT AND HOTEL CONTENT SPECIALIST.
     
-    Mevcut Veri:
+    YOUR TASK:
+    Deeply analyze the uploaded file content (PDF, Image, or Text) to extract structured hotel data.
+    Map this data intelligently to the provided "EXISTING DATA STRUCTURE".
+    
+    PROCESS:
+    1. **READ EVERYTHING**: Scan the entire file content from start to finish. Do not miss details like hours, prices, rules, or small notes.
+    2. **COMPARE & MATCH**: Check if the extracted data already exists in the "EXISTING DATA STRUCTURE".
+       - If a node exists (e.g., "Main Pool"), check if the file has new info (e.g., "Open 08:00-22:00"). If so, create an **UPDATE** action.
+       - If a node is missing (e.g., "Vegan Menu"), create an **ADD** action to insert it under the most logical parent (e.g., "Restaurant").
+    3. **INTELLIGENT PLACEMENT**: 
+       - Place "Gym Rules" under "Gym" -> "Rules".
+       - Place "Burger" under "Restaurant" -> "Menu".
+       - Use your knowledge to categorize correctly.
+    4. **DETECT LANGUAGE**: Extract names/descriptions in both Turkish (tr) and English (en). Translate if necessary.
+    
+    IMPORTANT RULES FOR IDs:
+    - For **UPDATE**: Use the EXACT \`id\` from the "EXISTING DATA STRUCTURE".
+    - For **ADD**: Use the EXACT \`id\` of the **PARENT** node where the new item should be added.
+    - Do NOT invent IDs for existing nodes.
+    
+    EXISTING DATA STRUCTURE:
     \`\`\`json
     ${jsonContext}
     \`\`\`
     
-    Çıktı JSON formatında olmalı (ArchitectResponse: summary, actions).
-    Özet ve veriler TÜRKÇE olmalı.
+    OUTPUT FORMAT (JSON):
+    {
+      "summary": "Detailed Turkish summary. Explicitly state what exists and what is new. E.g., 'Havuz saatleri mevcut veride güncellendi. Spa menüsü yeni olarak eklendi.'",
+      "actions": [
+        {
+          "type": "add" | "update",
+          "targetId": "Target Node ID (Parent ID for 'add', Node ID for 'update')",
+          "data": { 
+             "name": { "tr": "...", "en": "..." }, 
+             "type": "item" | "category" | "policy" | "menu_item", 
+             "value": { "tr": "...", "en": "..." }, 
+             "intent": "informational" | "request" | "policy" | "safety",
+             "description": { "tr": "...", "en": "..." }
+          },
+          "reason": "Explanation in Turkish (e.g., 'Dosyada yeni bulunan Spa menüsü eklendi.')"
+        }
+      ]
+    }
     `;
 
     const ai = await getAI();
     const response = await ai.models.generateContent({
-      model: modelConfig.model,
+      model: 'gemini-3.1-pro-preview',
       contents: {
         parts: [
             { text: prompt },
@@ -498,7 +533,8 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
         }
         return parsed as ArchitectResponse;
     } catch (e) {
-        return { summary: "Dosya işlenirken hata oluştu.", actions: [] };
+        console.error("JSON Parse Error:", e);
+        return { summary: "Dosya analiz edildi ancak yapısal bir yanıt oluşturulamadı.", actions: [] };
     }
   } catch (error) {
     console.error(error);
