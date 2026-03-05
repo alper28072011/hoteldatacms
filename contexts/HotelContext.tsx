@@ -9,7 +9,8 @@ import {
   deletePersona as deletePersonaFromDb, 
   getNodeTemplates, 
   saveNodeTemplate as saveNodeTemplateToDb, // Aliased to prevent collision
-  deleteNodeTemplate as deleteNodeTemplateFromDb // Aliased to prevent collision
+  deleteNodeTemplate as deleteNodeTemplateFromDb, // Aliased to prevent collision
+  migrateLegacyTemplates // NEW: Migration helper
 } from '../services/firestoreService';
 
 interface HotelContextType {
@@ -75,22 +76,34 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Node Templates State
   const [nodeTemplates, setNodeTemplates] = useState<NodeTemplate[]>([]);
 
-  // Load Personas & Templates when Hotel ID changes
+  // Load Personas when Hotel ID changes
   useEffect(() => {
     const loadSubCollections = async () => {
         if (hotelId) {
             const pList = await getPersonas(hotelId);
             setPersonas(pList);
-            const tList = await getNodeTemplates(hotelId);
+            
+            // Migrate legacy templates if any
+            await migrateLegacyTemplates(hotelId);
+            // Refresh global templates to include migrated ones
+            const tList = await getNodeTemplates();
             setNodeTemplates(tList);
         } else {
             setPersonas([]);
-            setNodeTemplates([]);
         }
         setActivePersonaId('default');
     };
     loadSubCollections();
   }, [hotelId]);
+
+  // Load Global Templates on Mount
+  useEffect(() => {
+      const loadGlobalTemplates = async () => {
+          const tList = await getNodeTemplates();
+          setNodeTemplates(tList);
+      };
+      loadGlobalTemplates();
+  }, []);
 
   // --- ACTIONS (Wrapped in useCallback to prevent re-renders) ---
 
@@ -229,24 +242,21 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await deletePersonaFromDb(hotelId, id);
   }, [hotelId, activePersonaId]);
 
-  // Template Actions
+  // Template Actions (GLOBAL)
   const addNodeTemplate = useCallback(async (template: NodeTemplate) => {
-      if (!hotelId) return;
       setNodeTemplates(prev => [...prev, template]);
-      await saveNodeTemplateToDb(hotelId, template); // Fixed call
-  }, [hotelId]);
+      await saveNodeTemplateToDb(template);
+  }, []);
 
   const updateNodeTemplate = useCallback(async (template: NodeTemplate) => {
-      if (!hotelId) return;
       setNodeTemplates(prev => prev.map(t => t.id === template.id ? template : t));
-      await saveNodeTemplateToDb(hotelId, template); // Fixed call
-  }, [hotelId]);
+      await saveNodeTemplateToDb(template);
+  }, []);
 
   const deleteNodeTemplate = useCallback(async (id: string) => {
-      if (!hotelId) return;
       setNodeTemplates(prev => prev.filter(t => t.id !== id));
-      await deleteNodeTemplateFromDb(hotelId, id); // Fixed call
-  }, [hotelId]);
+      await deleteNodeTemplateFromDb(id);
+  }, []);
 
   return (
     <HotelContext.Provider value={{
