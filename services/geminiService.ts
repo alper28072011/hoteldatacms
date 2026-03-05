@@ -2,33 +2,13 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 
-const getApiKey = async (): Promise<string> => {
-  // If in dev mode, we might still have it from Vite define
-  let key = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
-  
-  if (!key) {
-    try {
-      const res = await fetch('/api/config');
-      if (res.ok) {
-        const data = await res.json();
-        key = data.apiKey;
-      }
-    } catch (e) {
-      console.warn("Failed to fetch API key from server", e);
-    }
-  }
-  return key;
-};
+const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
 
-let aiInstance: GoogleGenAI | null = null;
+if (!apiKey) {
+  console.warn("Gemini API Key is missing! Please set VITE_GEMINI_API_KEY in your environment variables.");
+}
 
-const getAI = async () => {
-  if (aiInstance) return aiInstance;
-  const key = await getApiKey();
-  if (!key) console.warn("Gemini API Key is missing!");
-  aiInstance = new GoogleGenAI({ apiKey: key });
-  return aiInstance;
-};
+const ai = new GoogleGenAI({ apiKey });
 
 const modelConfig = {
   model: 'gemini-3-flash-preview', 
@@ -53,7 +33,6 @@ export const translateText = async (text: string, targetLang: string): Promise<s
         
         Text: "${text}"`;
         
-        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -87,7 +66,6 @@ export const optimizeAILabel = async (text: string, lang: 'tr' | 'en'): Promise<
         Sadece optimize edilmiş etiketi döndür.
         `;
         
-        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -121,7 +99,6 @@ export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Pr
         ÖRNEK ÇIKTI (TR): "Odanın manzara bilgisini içerir. Misafir sorduğunda kullan."
         `;
         
-        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -156,7 +133,6 @@ export const optimizeMainContent = async (text: string, lang: 'tr' | 'en'): Prom
         KULLANICI GİRDİSİ: "${text}"
         `;
         
-        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -194,7 +170,6 @@ export const generateOptimizedID = async (nodeName: string, context: string): Pr
         - "Çocuk Kulübü Kuralları" -> "kids-club-rules"
         `;
         
-        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt
@@ -237,7 +212,6 @@ export const evaluateNodeHealth = async (node: HotelNode, parentPath: string): P
         Eğer her şey mükemmelse issues boş dizi olsun ve score 100 olsun.
         `;
 
-        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt,
@@ -266,7 +240,6 @@ export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
     ÇIKTIYI TÜRKÇE OLARAK VER.
     `;
 
-    const ai = await getAI();
     const response = await ai.models.generateContent({
       model: modelConfig.model,
       contents: prompt
@@ -331,7 +304,6 @@ export const chatWithData = async (
     }
     `;
 
-    const ai = await getAI();
     const chat = ai.chats.create({
       model: modelConfig.model,
       config: { 
@@ -429,7 +401,6 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     }
     `;
 
-    const ai = await getAI();
     const response = await ai.models.generateContent({
       model: modelConfig.model,
       contents: prompt,
@@ -460,57 +431,21 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
   try {
     const jsonContext = JSON.stringify(generateCleanAIJSON(data), null, 2);
     
-    const prompt = `
-    ACT AS AN EXPERT DATA ARCHITECT AND HOTEL CONTENT SPECIALIST.
+    const prompt = `Bu yüklenen dosyayı (Resim/PDF) analiz et ve otel verilerini çıkararak mevcut yapıya entegre et.
+    Verileri çıkarırken her biri için doğru 'intent' (informational, policy, request, safety, complaint) değerini ata.
+    Ayrıca isim ve açıklamaları hem Türkçe (tr) hem İngilizce (en) olarak çıkar.
     
-    YOUR TASK:
-    Deeply analyze the uploaded file content (PDF, Image, or Text) to extract structured hotel data.
-    Map this data intelligently to the provided "EXISTING DATA STRUCTURE".
-    
-    PROCESS:
-    1. **READ EVERYTHING**: Scan the entire file content from start to finish. Do not miss details like hours, prices, rules, or small notes.
-    2. **COMPARE & MATCH**: Check if the extracted data already exists in the "EXISTING DATA STRUCTURE".
-       - If a node exists (e.g., "Main Pool"), check if the file has new info (e.g., "Open 08:00-22:00"). If so, create an **UPDATE** action.
-       - If a node is missing (e.g., "Vegan Menu"), create an **ADD** action to insert it under the most logical parent (e.g., "Restaurant").
-    3. **INTELLIGENT PLACEMENT**: 
-       - Place "Gym Rules" under "Gym" -> "Rules".
-       - Place "Burger" under "Restaurant" -> "Menu".
-       - Use your knowledge to categorize correctly.
-    4. **DETECT LANGUAGE**: Extract names/descriptions in both Turkish (tr) and English (en). Translate if necessary.
-    
-    IMPORTANT RULES FOR IDs:
-    - For **UPDATE**: Use the EXACT \`id\` from the "EXISTING DATA STRUCTURE".
-    - For **ADD**: Use the EXACT \`id\` of the **PARENT** node where the new item should be added.
-    - Do NOT invent IDs for existing nodes.
-    
-    EXISTING DATA STRUCTURE:
+    Mevcut Veri:
     \`\`\`json
     ${jsonContext}
     \`\`\`
     
-    OUTPUT FORMAT (JSON):
-    {
-      "summary": "Detailed Turkish summary. Explicitly state what exists and what is new. E.g., 'Havuz saatleri mevcut veride güncellendi. Spa menüsü yeni olarak eklendi.'",
-      "actions": [
-        {
-          "type": "add" | "update",
-          "targetId": "Target Node ID (Parent ID for 'add', Node ID for 'update')",
-          "data": { 
-             "name": { "tr": "...", "en": "..." }, 
-             "type": "item" | "category" | "policy" | "menu_item", 
-             "value": { "tr": "...", "en": "..." }, 
-             "intent": "informational" | "request" | "policy" | "safety",
-             "description": { "tr": "...", "en": "..." }
-          },
-          "reason": "Explanation in Turkish (e.g., 'Dosyada yeni bulunan Spa menüsü eklendi.')"
-        }
-      ]
-    }
+    Çıktı JSON formatında olmalı (ArchitectResponse: summary, actions).
+    Özet ve veriler TÜRKÇE olmalı.
     `;
 
-    const ai = await getAI();
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-pro-preview',
+      model: modelConfig.model,
       contents: {
         parts: [
             { text: prompt },
@@ -533,8 +468,7 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
         }
         return parsed as ArchitectResponse;
     } catch (e) {
-        console.error("JSON Parse Error:", e);
-        return { summary: "Dosya analiz edildi ancak yapısal bir yanıt oluşturulamadı.", actions: [] };
+        return { summary: "Dosya işlenirken hata oluştu.", actions: [] };
     }
   } catch (error) {
     console.error(error);
@@ -562,7 +496,6 @@ export const generateNodeContext = async (node: HotelNode, pathString: string, l
         Output JSON: { "tags": { "tr": string[], "en": string[] }, "description": string }
         `;
         
-        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt,
@@ -589,7 +522,6 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
         Create a natural language summary sentence (${lang}) for an item named "${name}" with these attributes: ${attrs}.
         Keep it concise.
         `;
-        const ai = await getAI();
         const response = await ai.models.generateContent({
              model: modelConfig.model,
              contents: prompt
@@ -644,7 +576,6 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
         }
         `;
         
-        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt,
@@ -675,22 +606,21 @@ export const autoFixDatabase = async (data: HotelNode): Promise<AutoFixAction[]>
                 "id": "fix_1",
                 "type": "move" | "update" | "changeType",
                 "targetId": "node_id",
-                "destinationId": "new_parent_id",
-                "reasoning": "Reason in Turkish",
-                "severity": "critical" | "structural"
+                "destinationId": "parent_id_if_move",
+                "payload": {}, 
+                "reasoning": "Turkish explanation",
+                "severity": "critical" | "structural" | "content"
             }
          ]
          `;
          
-         const ai = await getAI();
          const response = await ai.models.generateContent({
             model: modelConfig.model,
             contents: prompt,
             config: { responseMimeType: 'application/json' }
         });
         
-        const rawText = response.text || "[]";
-        return JSON.parse(rawText);
+        return JSON.parse(response.text || '[]');
     } catch(e) { return []; }
 }
 
@@ -740,7 +670,6 @@ export const runDataCheck = async (data: HotelNode, sourceType: 'url' | 'text' |
         }
         `;
 
-        const ai = await getAI();
         const response = await ai.models.generateContent({
              model: modelConfig.model,
              contents: contents,
@@ -786,7 +715,6 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         Sadece tavsiye ve yönlendirme yap. Kod yazma, sadece mantığı ve yapıyı anlat.
         `;
 
-        const ai = await getAI();
         const chat = ai.chats.create({
             model: modelConfig.model,
             config: {
@@ -806,57 +734,4 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         console.error("Data Coach Error:", error);
         return "Veri koçu şu an müsait değil. Lütfen biraz sonra tekrar deneyin.";
     }
-};
-
-export const fillStandardStructure = async (
-  currentTree: HotelNode[],
-  rawText: string
-): Promise<HotelNode[]> => {
-  if (!rawText || !rawText.trim()) return currentTree;
-
-  try {
-    const prompt = `
-    ACT AS A SENIOR DATA ARCHITECT AND HOTEL DOMAIN EXPERT.
-    
-    YOUR TASK:
-    Map the unstructured "SOURCE DATA" below into the provided "TARGET STRUCTURE" (JSON).
-    
-    STRICT RULES:
-    1. **PRESERVE STRUCTURE**: Do NOT add, remove, or reorder nodes. Do NOT change IDs or Keys.
-    2. **FILL VALUES**: Only populate the 'value' field for items, and 'value' field inside 'attributes'.
-    3. **LANGUAGE**: Detect the language of the source data. If it's Turkish, fill the 'tr' fields. If English, fill 'en'. If both are present, fill both.
-    4. **INTELLIGENT MAPPING**: 
-       - If a node is "Pool Hours", look for times like "08:00-20:00".
-       - If a node is "Restaurant Cuisine", look for keywords like "Italian", "Mexican".
-       - If a node is a boolean (checkbox), look for "Yes", "Available", "Free".
-    5. **OUTPUT**: Return the COMPLETE JSON structure with the filled values.
-    
-    SOURCE DATA:
-    """
-    ${rawText}
-    """
-    
-    TARGET STRUCTURE (JSON SKELETON):
-    """
-    ${JSON.stringify(currentTree)}
-    """
-    
-    RETURN ONLY THE VALID JSON.
-    `;
-
-    const ai = await getAI();
-    const response = await ai.models.generateContent({
-      model: modelConfig.model,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json"
-      }
-    });
-    
-    const jsonText = response.text || "[]";
-    return JSON.parse(jsonText);
-  } catch (error) {
-    console.error("AI Mapping Failed:", error);
-    throw new Error("Failed to map data to structure.");
-  }
 };
