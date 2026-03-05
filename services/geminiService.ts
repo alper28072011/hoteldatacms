@@ -730,3 +730,55 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         return "Veri koçu şu an müsait değil. Lütfen biraz sonra tekrar deneyin.";
     }
 };
+
+export const fillStandardStructure = async (
+  currentTree: HotelNode[],
+  rawText: string
+): Promise<HotelNode[]> => {
+  if (!rawText || !rawText.trim()) return currentTree;
+
+  try {
+    const prompt = `
+    ACT AS A SENIOR DATA ARCHITECT AND HOTEL DOMAIN EXPERT.
+    
+    YOUR TASK:
+    Map the unstructured "SOURCE DATA" below into the provided "TARGET STRUCTURE" (JSON).
+    
+    STRICT RULES:
+    1. **PRESERVE STRUCTURE**: Do NOT add, remove, or reorder nodes. Do NOT change IDs or Keys.
+    2. **FILL VALUES**: Only populate the 'value' field for items, and 'value' field inside 'attributes'.
+    3. **LANGUAGE**: Detect the language of the source data. If it's Turkish, fill the 'tr' fields. If English, fill 'en'. If both are present, fill both.
+    4. **INTELLIGENT MAPPING**: 
+       - If a node is "Pool Hours", look for times like "08:00-20:00".
+       - If a node is "Restaurant Cuisine", look for keywords like "Italian", "Mexican".
+       - If a node is a boolean (checkbox), look for "Yes", "Available", "Free".
+    5. **OUTPUT**: Return the COMPLETE JSON structure with the filled values.
+    
+    SOURCE DATA:
+    """
+    ${rawText}
+    """
+    
+    TARGET STRUCTURE (JSON SKELETON):
+    """
+    ${JSON.stringify(currentTree)}
+    """
+    
+    RETURN ONLY THE VALID JSON.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: modelConfig.model,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+    
+    const jsonText = response.text || "[]";
+    return JSON.parse(jsonText);
+  } catch (error) {
+    console.error("AI Mapping Failed:", error);
+    throw new Error("Failed to map data to structure.");
+  }
+};
