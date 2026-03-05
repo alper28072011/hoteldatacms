@@ -74,7 +74,7 @@ const NodeHealthBanner: React.FC<{ node: HotelNode, issues: HealthIssue[] }> = (
 
                         {/* Local Issues */}
                         {issues.map((issue, idx) => (
-                            <div key={idx} className={`text-xs flex items-start gap-1.5 ${
+                            <div key={`${issue.message}-${idx}`} className={`text-xs flex items-start gap-1.5 ${
                                 status === 'critical' ? 'text-red-700' : 'text-amber-700'
                             }`}>
                                 <TriangleAlert size={12} className="mt-0.5 shrink-0" />
@@ -383,7 +383,7 @@ const ScheduleInput: React.FC<{
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Oturumlar</div>
                     
                     {(currentData.sessions || []).map((session, idx) => (
-                        <div key={idx} className="flex items-center gap-2 bg-slate-50 p-2 rounded border border-slate-100">
+                        <div key={`session-${idx}`} className="flex items-center gap-2 bg-slate-50 p-2 rounded border border-slate-100">
                             {/* Day Select */}
                             <select 
                                 value={session.day}
@@ -476,7 +476,7 @@ const ScheduleInput: React.FC<{
                         </div>
 
                         {(currentData.timeRanges || []).map((range, idx) => (
-                            <div key={idx} className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                            <div key={`range-${idx}`} className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
                                 <Clock size={14} className="text-slate-400" />
                                 <div className="flex items-center gap-2 flex-1">
                                     <input 
@@ -718,7 +718,7 @@ const DynamicFieldInput: React.FC<{
                 >
                     <option value="">Seçiniz...</option>
                     {options.map((opt, i) => (
-                        <option key={i} value={opt}>{opt}</option>
+                        <option key={`${opt}-${i}`} value={opt}>{opt}</option>
                     ))}
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -763,7 +763,7 @@ const DynamicFieldInput: React.FC<{
                         const isSelected = currentSelected.includes(opt);
                         return (
                             <button
-                                key={i}
+                                key={`${opt}-${i}`}
                                 onClick={() => toggleOption(opt)}
                                 className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${isSelected ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
                             >
@@ -2055,8 +2055,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                       className={selectStyle('text-violet-800')}
                   >
                       <option value="">-- Yok --</option>
-                      {nodeTemplates.map(t => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
+                      {nodeTemplates.map((t, i) => (
+                          <option key={t.id || `tpl-${i}`} value={t.id}>{t.name}</option>
                       ))}
                   </select>
               </div>
@@ -2264,7 +2264,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
             {breadcrumbs.map((crumb, i) => {
                  const isLast = i === breadcrumbs.length - 1;
                  return (
-                    <React.Fragment key={crumb.id}>
+                    <React.Fragment key={crumb.id || `crumb-${i}`}>
                         {i > 0 && <ChevronRight size={14} className="text-slate-300 shrink-0" />}
                         <button 
                             onClick={() => !isLast && onNodeSelect?.(crumb.id)}
@@ -3468,7 +3468,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                             }
                             
                             return tags.map((tag, idx) => (
-                                <span key={idx} className="bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-1 rounded-full border border-slate-200 flex items-center gap-1.5">
+                                <span key={`${tag}-${idx}`} className="bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-1 rounded-full border border-slate-200 flex items-center gap-1.5">
                                     #{tag}
                                     <button onClick={() => handleRemoveTag(tag)} className="text-slate-400 hover:text-red-500 rounded-full">
                                         <X size={12} />
