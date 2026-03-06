@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { HotelNode, HotelTemplate, HotelSummary } from '../types';
-import { getTemplatesList, getHotelsList, fetchHotelById } from '../services/firestoreService';
-import { cleanTreeValues } from '../utils/treeUtils';
-import { X, Copy, LayoutTemplate, FilePlus, Check, Loader2, ArrowRight, Building2 } from 'lucide-react';
+import { HotelNode, HotelTemplate } from '../types';
+import { getTemplatesList } from '../services/firestoreService';
+import { X, Copy, LayoutTemplate, FilePlus, Check, Loader2, ArrowRight } from 'lucide-react';
 
 interface CreateHotelModalProps {
   isOpen: boolean;
@@ -13,16 +12,9 @@ interface CreateHotelModalProps {
 const CreateHotelModal: React.FC<CreateHotelModalProps> = ({ isOpen, onClose, onCreate }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [hotelName, setHotelName] = useState('');
-  
-  // Template Selection State
   const [selectedTemplate, setSelectedTemplate] = useState<HotelTemplate | null>(null);
-  const [selectedExistingHotelId, setSelectedExistingHotelId] = useState<string | null>(null);
-  
-  // Data Lists
   const [templates, setTemplates] = useState<HotelTemplate[]>([]);
-  const [existingHotels, setExistingHotels] = useState<HotelSummary[]>([]);
-  
-  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isStructureOnly, setIsStructureOnly] = useState(false);
 
   useEffect(() => {
@@ -30,51 +22,26 @@ const CreateHotelModal: React.FC<CreateHotelModalProps> = ({ isOpen, onClose, on
       setStep(1);
       setHotelName('');
       setSelectedTemplate(null);
-      setSelectedExistingHotelId(null);
       setIsStructureOnly(false);
-      loadData();
+      loadTemplates();
     }
   }, [isOpen]);
 
-  const loadData = async () => {
-    setIsLoadingData(true);
+  const loadTemplates = async () => {
+    setIsLoadingTemplates(true);
     try {
-      const [tplList, hotelList] = await Promise.all([
-          getTemplatesList(),
-          getHotelsList()
-      ]);
-      setTemplates(tplList);
-      setExistingHotels(hotelList);
+      const list = await getTemplatesList();
+      setTemplates(list);
     } catch (e) {
-      console.error("Failed to load data", e);
+      console.error("Failed to load templates", e);
     } finally {
-      setIsLoadingData(false);
+      setIsLoadingTemplates(false);
     }
   };
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     if (!hotelName.trim()) return;
-
-    let baseData: HotelNode | undefined = undefined;
-
-    // Case 1: Template Selected
-    if (selectedTemplate) {
-        baseData = selectedTemplate.data;
-    } 
-    // Case 2: Existing Hotel Selected (Gold Standard)
-    else if (selectedExistingHotelId) {
-        try {
-            const hotelData = await fetchHotelById(selectedExistingHotelId);
-            if (hotelData) {
-                // Always clean values when cloning a live hotel to avoid data leakage
-                baseData = cleanTreeValues(hotelData);
-            }
-        } catch (e) {
-            console.error("Failed to fetch hotel for cloning", e);
-        }
-    }
-
-    onCreate(hotelName, baseData, isStructureOnly);
+    onCreate(hotelName, selectedTemplate?.data, isStructureOnly);
     onClose();
   };
 
@@ -113,74 +80,41 @@ const CreateHotelModal: React.FC<CreateHotelModalProps> = ({ isOpen, onClose, on
              
              {/* Option 1: Scratch */}
              <button 
-                onClick={() => { setSelectedTemplate(null); setSelectedExistingHotelId(null); }}
+                onClick={() => setSelectedTemplate(null)}
                 className={`w-full flex items-center p-4 border rounded-xl text-left transition-all ${
-                  selectedTemplate === null && selectedExistingHotelId === null
+                  selectedTemplate === null 
                     ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' 
                     : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
                 }`}
              >
-                <div className={`p-3 rounded-full mr-4 ${selectedTemplate === null && selectedExistingHotelId === null ? 'bg-blue-200 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                <div className={`p-3 rounded-full mr-4 ${selectedTemplate === null ? 'bg-blue-200 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                    <FilePlus size={20} />
                 </div>
                 <div>
                    <div className="font-semibold text-slate-800">Start from Scratch</div>
                    <div className="text-xs text-slate-500 mt-1">Empty project with basic structure</div>
                 </div>
-                {selectedTemplate === null && selectedExistingHotelId === null && <Check size={18} className="ml-auto text-blue-600" />}
+                {selectedTemplate === null && <Check size={18} className="ml-auto text-blue-600" />}
              </button>
 
-             {/* Option 2: Existing Hotel (Gold Standard) */}
-             <div className="relative">
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 mt-4">
-                    Use Existing Hotel as Gold Standard
-                </label>
-                <select 
-                    value={selectedExistingHotelId || ''}
-                    onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedExistingHotelId(val || null);
-                        if (val) setSelectedTemplate(null);
-                    }}
-                    className={`w-full p-3 border rounded-xl text-sm outline-none transition-all appearance-none ${
-                        selectedExistingHotelId 
-                        ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-500 text-amber-900 font-semibold' 
-                        : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
-                >
-                    <option value="">-- Select a Gold Standard Hotel --</option>
-                    {existingHotels.map(h => (
-                        <option key={h.id} value={h.id}>{h.name}</option>
-                    ))}
-                </select>
-                <div className="absolute right-4 top-[38px] pointer-events-none text-slate-400">
-                    <Building2 size={16} />
-                </div>
-                {selectedExistingHotelId && (
-                    <div className="mt-2 text-xs text-amber-600 flex items-center gap-1">
-                        <Check size={12} /> Structure will be cloned, values will be cleared.
-                    </div>
-                )}
-             </div>
-
-             {/* Option 3: Templates */}
-             <div className="mt-4">
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Or Choose a Template</div>
+             {/* Option 2: Templates */}
+             <div>
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Available Templates</div>
                 
-                {isLoadingData ? (
+                {isLoadingTemplates ? (
                    <div className="flex justify-center py-4 text-slate-400">
                       <Loader2 size={24} className="animate-spin" />
                    </div>
                 ) : templates.length === 0 ? (
                    <div className="text-sm text-slate-400 italic px-4 py-2 bg-slate-50 rounded border border-dashed border-slate-200">
-                     No templates saved yet.
+                     No templates saved yet. Save a hotel as a template to see it here.
                    </div>
                 ) : (
                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                       {templates.map(tpl => (
                          <button 
                             key={tpl.id}
-                            onClick={() => { setSelectedTemplate(tpl); setSelectedExistingHotelId(null); }}
+                            onClick={() => setSelectedTemplate(tpl)}
                             className={`w-full flex items-center p-3 border rounded-lg text-left transition-all ${
                               selectedTemplate?.id === tpl.id
                                 ? 'border-violet-500 bg-violet-50 ring-1 ring-violet-500' 
@@ -201,7 +135,7 @@ const CreateHotelModal: React.FC<CreateHotelModalProps> = ({ isOpen, onClose, on
                 )}
              </div>
 
-             {/* Structure Only Option (For Templates) */}
+             {/* Template Options */}
              {selectedTemplate && (
                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 animate-in slide-in-from-top-2">
                    <label className="flex items-start cursor-pointer">
@@ -214,7 +148,7 @@ const CreateHotelModal: React.FC<CreateHotelModalProps> = ({ isOpen, onClose, on
                       <div className="ml-3">
                          <span className="block text-sm font-medium text-slate-800">Import Structure Only</span>
                          <span className="block text-xs text-slate-500 mt-0.5">
-                            Keeps categories and fields, but removes specific values.
+                            Keeps categories and fields, but removes specific values (prices, hours, descriptions). Perfect for reusing a schema.
                          </span>
                       </div>
                    </label>

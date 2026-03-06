@@ -3,11 +3,6 @@ import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPer
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 
 const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
-
-if (!apiKey) {
-  console.warn("Gemini API Key is missing! Please set VITE_GEMINI_API_KEY in your environment variables.");
-}
-
 const ai = new GoogleGenAI({ apiKey });
 
 const modelConfig = {
