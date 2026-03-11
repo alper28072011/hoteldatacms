@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { processArchitectCommand, processArchitectFile, fillStandardStructure } from '../services/geminiService';
+import { processArchitectCommand, processArchitectFile } from '../services/geminiService';
 import { HotelNode, ArchitectResponse, ArchitectAction, NodeTemplate, NodeType } from '../types';
-import { Sparkles, X, Check, TriangleAlert, ArrowRight, Loader2, FileText, UploadCloud, MessageSquare, Info, Table, Download, FileSpreadsheet, Database, Wand2 } from 'lucide-react';
+import { Sparkles, X, Check, TriangleAlert, ArrowRight, Loader2, FileText, UploadCloud, MessageSquare, Info, Table, Download, FileSpreadsheet } from 'lucide-react';
 import { useHotel } from '../contexts/HotelContext';
 import * as XLSX from 'xlsx';
 import { generateId } from '../utils/treeUtils';
@@ -16,7 +16,7 @@ interface AIArchitectModalProps {
 
 const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, data, onApplyActions }) => {
   const { nodeTemplates } = useHotel();
-  const [activeTab, setActiveTab] = useState<'chat' | 'file' | 'csv' | 'mapper'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'file' | 'csv'>('chat');
   
   // Chat State
   const [command, setCommand] = useState('');
@@ -24,9 +24,6 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
   // File State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Mapper State
-  const [mapperText, setMapperText] = useState('');
 
   // CSV State
   const [targetNodeId, setTargetNodeId] = useState<string>('root');
@@ -65,83 +62,8 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
     setSelectedFile(null);
     setCsvFile(null);
     setCsvPreview([]);
-    setMapperText('');
     setProposal(null);
     setError(null);
-  };
-
-  const handleMapper = async () => {
-    if (!mapperText.trim()) return;
-    setIsAnalyzing(true);
-    setError(null);
-    setProposal(null);
-
-    try {
-      // Pass the whole tree (data is the root node usually, or I wrap it in array)
-      const currentTree = [data]; 
-      const filledTree = await fillStandardStructure(currentTree, mapperText);
-      
-      // Generate actions by traversing the filled tree
-      const actions: ArchitectAction[] = [];
-      
-      const traverse = (node: HotelNode) => {
-          let hasUpdate = false;
-          const updateData: Partial<HotelNode> = {};
-
-          // Check value
-          if (node.value) {
-             const val = node.value;
-             const hasContent = typeof val === 'string' ? val.trim() !== '' : (val.tr?.trim() !== '' || val.en?.trim() !== '');
-             if (hasContent) {
-                 updateData.value = val;
-                 hasUpdate = true;
-             }
-          }
-          
-          // Check attributes
-          if (node.attributes) {
-              const attrsWithValues = node.attributes.filter(a => {
-                  const val = a.value;
-                  return typeof val === 'string' ? val.trim() !== '' : (val.tr?.trim() !== '' || val.en?.trim() !== '');
-              });
-              
-              if (attrsWithValues.length > 0) {
-                  updateData.attributes = node.attributes;
-                  hasUpdate = true;
-              }
-          }
-
-          if (hasUpdate) {
-              actions.push({
-                  type: 'update',
-                  targetId: node.id,
-                  data: updateData,
-                  reason: 'AI Data Mapping'
-              });
-          }
-
-          if (node.children) {
-              node.children.forEach(traverse);
-          }
-      };
-      
-      filledTree.forEach(traverse);
-      
-      if (actions.length === 0) {
-          setError("AI couldn't find any matching data to map.");
-      } else {
-          setProposal({
-              summary: `Successfully mapped ${actions.length} items from the provided text.`,
-              actions: actions
-          });
-      }
-
-    } catch (err) {
-      console.error(err);
-      setError("Failed to map data. Please check your input.");
-    } finally {
-      setIsAnalyzing(false);
-    }
   };
 
   const handleAnalyzeChat = async () => {
@@ -620,54 +542,6 @@ const AIArchitectModal: React.FC<AIArchitectModalProps> = ({ isOpen, onClose, da
                             )}
                           </button>
                       </div>
-                  </div>
-              )}
-              
-              {activeTab === 'mapper' && (
-                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex gap-3">
-                      <div className="bg-blue-100 p-2 rounded-full h-fit text-blue-600">
-                        <Wand2 size={20} />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-blue-900 text-sm">AI Data Mapper</h4>
-                        <p className="text-xs text-blue-700 mt-1">
-                          Paste unstructured text (e.g. from a PDF, website, or brochure) below. 
-                          The AI will intelligently map the information to your existing hotel structure 
-                          without changing the hierarchy.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Raw Data Source
-                      </label>
-                      <textarea
-                        value={mapperText}
-                        onChange={(e) => setMapperText(e.target.value)}
-                        placeholder="Paste your hotel info here... (e.g. 'Breakfast is served from 07:00 to 10:00. The main pool is open until sunset...')"
-                        className="w-full h-48 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none text-sm"
-                      />
-                    </div>
-
-                    <button
-                      onClick={handleMapper}
-                      disabled={!mapperText.trim() || isAnalyzing}
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isAnalyzing ? (
-                        <>
-                          <Loader2 size={18} className="animate-spin" />
-                          Mapping Data...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={18} />
-                          Fill Structure
-                        </>
-                      )}
-                    </button>
                   </div>
               )}
               

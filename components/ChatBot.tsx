@@ -172,14 +172,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
     setInput('');
     setIsTyping(true);
 
-    // Gemini API requires history to start with a 'user' message and alternate.
-    // We'll filter out the initial welcome message or any leading 'model' messages.
-    let validHistory = [...messages];
-    while (validHistory.length > 0 && validHistory[0].sender !== 'user') {
-        validHistory.shift();
-    }
-
-    const history = validHistory.map(m => ({
+    const history = messages.map(m => ({
         role: m.sender === 'user' ? 'user' : 'model',
         parts: [m.text]
     }));

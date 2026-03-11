@@ -16,7 +16,6 @@ import {
   ToggleLeft, AlignLeft, Hash, CheckSquare, History, Sliders, Plus, CornerDownRight, Copy, Activity, Repeat, Download, Upload, Layout
 } from 'lucide-react';
 import FullContentPreview from './FullContentPreview';
-import CopyToHotelModal from './CopyToHotelModal';
 import { HealthIssue } from '../types';
 
 // --- HELPER COMPONENT: NODE HEALTH BANNER ---
@@ -918,8 +917,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
   const [tempId, setTempId] = useState('');
   const [idError, setIdError] = useState<string | null>(null);
   const [isGeneratingID, setIsGeneratingID] = useState(false);
-  
-  const [isCopyToHotelModalOpen, setIsCopyToHotelModalOpen] = useState(false);
 
   useEffect(() => {
     setNewAttrKey({ tr: '', en: '' });
@@ -2247,23 +2244,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
            <div className="h-8 w-px bg-slate-200 mx-1"></div>
            
            {/* COPY BUTTON */}
-           {['item', 'menu_item', 'field', 'category', 'menu_category', 'section'].includes(node.type) && (
-               <>
-                   <button 
-                        onClick={handleDuplicateClick} 
-                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" 
-                        title="Kopyala / Çoğalt"
-                   >
-                       <Copy size={18} />
-                   </button>
-                   <button 
-                        onClick={() => setIsCopyToHotelModalOpen(true)} 
-                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" 
-                        title="Başka Otele Kopyala"
-                   >
-                       <Upload size={18} />
-                   </button>
-               </>
+           {['item', 'menu_item', 'field'].includes(node.type) && (
+               <button 
+                    onClick={handleDuplicateClick} 
+                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" 
+                    title="Kopyala / Çoğalt"
+               >
+                   <Copy size={18} />
+               </button>
            )}
 
            <button onClick={handleDeleteClick} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Sil"><Trash2 size={18} /></button>
@@ -3549,13 +3537,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
             </div>
         </div>
       </div>
-      
-      {/* COPY TO HOTEL MODAL */}
-      <CopyToHotelModal 
-        isOpen={isCopyToHotelModalOpen} 
-        onClose={() => setIsCopyToHotelModalOpen(false)} 
-        nodeToCopy={node} 
-      />
     </div>
   );
 };

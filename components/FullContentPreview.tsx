@@ -84,7 +84,7 @@ const ContentNodeRenderer: React.FC<{ node: HotelNode; level: number; language: 
             {node.children && node.children.length > 0 && (
                 <div className="ml-4 border-l border-slate-100 pl-4 print:border-l-0 print:pl-0 print:ml-0">
                     {node.children.map((child, index) => (
-                        <ContentNodeRenderer key={child.id || `child-${index}`} node={child} level={level + 1} language={language} />
+                        <ContentNodeRenderer key={child.id || index} node={child} level={level + 1} language={language} />
                     ))}
                 </div>
             )}
@@ -110,7 +110,7 @@ const AttributesTable: React.FC<{
                 <table className="min-w-full text-sm text-left border-collapse">
                     <tbody>
                         {attributes.map((attr, index) => (
-                            <tr key={attr.id || `attr-${index}`} className="border-b border-slate-100 print:border-slate-200">
+                            <tr key={attr.id || index} className="border-b border-slate-100 print:border-slate-200">
                                 <td className="py-1.5 pr-4 font-semibold text-slate-600 w-1/3 align-top">
                                     {getLocalizedValue(attr.key, language)}
                                 </td>
@@ -123,7 +123,7 @@ const AttributesTable: React.FC<{
                                             {String(getLocalizedValue(attr.value, language)).toLowerCase() === 'true' && attr.subAttributes && attr.subAttributes.length > 0 && (
                                                 <div className="mt-1 pl-4 border-l-2 border-indigo-200">
                                                     {attr.subAttributes.map((sub, subIndex) => (
-                                                        <div key={sub.id || `sub-${subIndex}`} className="flex gap-2 text-xs mt-1">
+                                                        <div key={sub.id || subIndex} className="flex gap-2 text-xs mt-1">
                                                             <span className="font-medium text-slate-500">{getLocalizedValue(sub.key, language)}:</span>
                                                             <span>{getLocalizedValue(sub.value, language)}</span>
                                                         </div>
@@ -134,7 +134,7 @@ const AttributesTable: React.FC<{
                                             {String(getLocalizedValue(attr.value, language)).toLowerCase() === 'false' && attr.subAttributesFalse && attr.subAttributesFalse.length > 0 && (
                                                 <div className="mt-1 pl-4 border-l-2 border-rose-200">
                                                     {attr.subAttributesFalse.map((sub, subIndex) => (
-                                                        <div key={sub.id || `sub-false-${subIndex}`} className="flex gap-2 text-xs mt-1">
+                                                        <div key={sub.id || subIndex} className="flex gap-2 text-xs mt-1">
                                                             <span className="font-medium text-slate-500">{getLocalizedValue(sub.key, language)}:</span>
                                                             <span>{getLocalizedValue(sub.value, language)}</span>
                                                         </div>
@@ -147,7 +147,7 @@ const AttributesTable: React.FC<{
                                         attr.subAttributes && attr.subAttributes.length > 0 && (
                                             <div className="mt-1 pl-4 border-l-2 border-slate-200">
                                                 {attr.subAttributes.map((sub, subIndex) => (
-                                                    <div key={sub.id || `sub-${subIndex}`} className="flex gap-2 text-xs mt-1">
+                                                    <div key={sub.id || subIndex} className="flex gap-2 text-xs mt-1">
                                                         <span className="font-medium text-slate-500">{getLocalizedValue(sub.key, language)}:</span>
                                                         <span>{getLocalizedValue(sub.value, language)}</span>
                                                     </div>
@@ -218,7 +218,7 @@ const FullContentPreview: React.FC<FullContentPreviewProps> = ({ node, language 
                     {/* Content Tree */}
                     <div className="content-tree space-y-8 print:pb-12">
                         {node.children && node.children.map((child, index) => (
-                            <ContentNodeRenderer key={child.id || `child-${index}`} node={child} level={0} language={language} />
+                            <ContentNodeRenderer key={child.id || index} node={child} level={0} language={language} />
                         ))}
                     </div>
                 </div>
