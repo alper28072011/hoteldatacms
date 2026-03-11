@@ -431,23 +431,58 @@ export const regenerateIds = (node: HotelNode): HotelNode => {
 
 export const cleanTreeValues = (node: HotelNode): HotelNode => {
   const newNode = { ...node };
-  delete newNode.value;
-  delete newNode.price;
-  delete newNode.answer;
-  delete newNode.data;
-  delete newNode.description;
+  
+  // Clear localized values but keep structure
+  if (newNode.value) newNode.value = { tr: '', en: '' };
+  if (newNode.answer) newNode.answer = { tr: '', en: '' };
+  if (newNode.description) newNode.description = { tr: '', en: '' };
+  
+  // Clear tags (SEO Keywords)
+  if (newNode.tags) {
+      if (Array.isArray(newNode.tags)) {
+          newNode.tags = [];
+      } else {
+          newNode.tags = { tr: [], en: [] };
+      }
+  }
+  
+  // Clear primitives
+  if (newNode.price) newNode.price = '';
+  if (newNode.data) delete newNode.data; // Data is usually specific
+  
+  // Clear attributes values but keep keys
   if (newNode.attributes) {
-      // Clean sub-attributes too if they exist
       newNode.attributes = newNode.attributes.map(attr => ({
           ...attr,
           value: { tr: '', en: '' },
-          subAttributes: attr.subAttributes ? attr.subAttributes.map(sa => ({ ...sa, value: { tr: '', en: '' } })) : undefined
+          subAttributes: attr.subAttributes ? attr.subAttributes.map(sa => ({ 
+              ...sa, 
+              value: { tr: '', en: '' } 
+          })) : undefined
       }));
   }
 
-  if (node.children) {
-    newNode.children = node.children.map(child => cleanTreeValues(child));
+  // Clear sections attributes
+  if (newNode.sections) {
+      newNode.sections = newNode.sections.map(section => ({
+          ...section,
+          attributes: section.attributes.map(attr => ({
+              ...attr,
+              value: { tr: '', en: '' }
+          }))
+      }));
   }
+
+  if (newNode.children) {
+    newNode.children = newNode.children.map(child => cleanTreeValues(child));
+  }
+  
+  // Reset metadata
+  newNode.lastModified = Date.now();
+  delete newNode.aiConfidence;
+  delete newNode.aiIssues;
+  delete newNode.aiAnalysis;
+  
   return newNode;
 };
 

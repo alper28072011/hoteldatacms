@@ -139,7 +139,11 @@ const DataHealthModal: React.FC<DataHealthModalProps> = ({ isOpen, onClose, data
 
       try {
           // Convert history format for API
-          const historyForApi = coachMessages.map(m => ({ role: m.role, parts: [m.text] }));
+          let validHistory = [...coachMessages];
+          while (validHistory.length > 0 && validHistory[0].role !== 'user') {
+              validHistory.shift();
+          }
+          const historyForApi = validHistory.map(m => ({ role: m.role, parts: [m.text] }));
           const response = await askDataCoach(data, userMsg, historyForApi);
           setCoachMessages(prev => [...prev, { role: 'model', text: response }]);
       } catch (error) {

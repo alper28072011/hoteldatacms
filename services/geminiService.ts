@@ -2,8 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 
-const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const modelConfig = {
   model: 'gemini-3-flash-preview', 
