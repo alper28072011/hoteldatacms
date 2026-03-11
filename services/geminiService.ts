@@ -470,6 +470,46 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
   }
 };
 
+export const fillStandardStructure = async (currentTree: HotelNode[], mapperText: string): Promise<HotelNode[]> => {
+  try {
+    const jsonContext = JSON.stringify(currentTree, null, 2);
+    
+    const prompt = `Sen bir otel veri uzmanısın. Kullanıcı, otelinin özelliklerini veya bir metni (mapperText) veriyor.
+    Görev: Mevcut ağaç yapısını (currentTree) incele ve kullanıcının verdiği metne göre, ağaçtaki eksik 'value' alanlarını doldur.
+    Eğer metinde ağaçtaki bir düğüme (node) karşılık gelen bir bilgi varsa, o düğümün 'value' alanını (tr ve en olarak) doldur.
+    Ağacın yapısını (id, type, name, children vb.) KESİNLİKLE değiştirme, sadece 'value' alanlarını güncelle.
+    
+    Mevcut Ağaç:
+    \`\`\`json
+    ${jsonContext}
+    \`\`\`
+    
+    Kullanıcı Metni:
+    "${mapperText}"
+    
+    Çıktı olarak sadece güncellenmiş ağacı (HotelNode[]) JSON formatında döndür.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: modelConfig.model,
+      contents: prompt,
+      config: { responseMimeType: 'application/json' }
+    });
+
+    const rawText = response.text || "[]";
+    try {
+        const parsed = JSON.parse(rawText);
+        return parsed as HotelNode[];
+    } catch (e) {
+        console.error("JSON parse error in fillStandardStructure:", e);
+        return currentTree;
+    }
+  } catch (error) {
+    console.error("fillStandardStructure error:", error);
+    throw new Error("Veri doldurma hatası.");
+  }
+};
+
 export const generateNodeContext = async (node: HotelNode, pathString: string, lang: 'tr' | 'en'): Promise<{ tags: LocalizedOptions, description: string }> => {
     try {
         const nodeData = JSON.stringify(generateCleanAIJSON(node), null, 2);
