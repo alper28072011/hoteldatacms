@@ -9,8 +9,7 @@ import {
   deletePersona as deletePersonaFromDb, 
   getNodeTemplates, 
   saveNodeTemplate as saveNodeTemplateToDb, // Aliased to prevent collision
-  deleteNodeTemplate as deleteNodeTemplateFromDb, // Aliased to prevent collision
-  migrateLegacyTemplates // NEW: Migration helper
+  deleteNodeTemplate as deleteNodeTemplateFromDb // Aliased to prevent collision
 } from '../services/firestoreService';
 
 interface HotelContextType {
@@ -83,9 +82,7 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const pList = await getPersonas(hotelId);
             setPersonas(pList);
             
-            // Migrate legacy templates if any
-            await migrateLegacyTemplates(hotelId);
-            // Refresh global templates to include migrated ones
+            // Refresh global templates
             const tList = await getNodeTemplates();
             setNodeTemplates(tList);
         } else {
