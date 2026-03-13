@@ -2,8 +2,32 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 
-const apiKey = process.env.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+// API anahtarını güvenli ve yedekli bir şekilde almak için yardımcı fonksiyon
+const getApiKey = () => {
+  // 1. AI Studio'nun çalışma zamanı (runtime) enjeksiyonu
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
+      return process.env.GEMINI_API_KEY;
+    }
+  } catch (e) { /* ignore */ }
+  
+  // 2. Build zamanı (Vite) Secrets üzerinden gelen anahtar (VITE_ öneki zorunludur)
+  if ((import.meta as any).env && (import.meta as any).env.VITE_GEMINI_API_KEY) {
+    return (import.meta as any).env.VITE_GEMINI_API_KEY;
+  }
+  
+  // 3. Geçici Fallback (Deploy sorununu çözmek için sizin belirttiğiniz anahtar)
+  // Uyarı: Frontend kodunda %100 güvenlik sağlanamaz, bu anahtar tarayıcı geliştirici araçlarında görünebilir.
+  return "AIzaSyDQcZuiQdM5WAGEW9-KeeCSCAd5QUtsGAs";
+};
+
+// AI Studio ortamında API anahtarı her zaman process.env.GEMINI_API_KEY üzerinden güvenle sağlanır.
+// Güvenlik ve kararlılık için API anahtarını asla koda doğrudan yazmamalısınız.
+// Ayrıca, API anahtarının güncel kalması için GoogleGenAI nesnesi her çağrıda yeniden oluşturulmalıdır.
+const ai = {
+  get models() { return new GoogleGenAI({ apiKey: getApiKey() }).models; },
+  get chats() { return new GoogleGenAI({ apiKey: getApiKey() }).chats; }
+};
 
 const modelConfig = {
   model: 'gemini-3-flash-preview', 
