@@ -893,9 +893,10 @@ export interface NodeEditorProps {
   onIdChanged?: (newId: string) => void; // New prop for syncing parent state
   onNodeSelect?: (nodeId: string) => void; // New prop for navigation
   canEdit?: boolean;
+  isAiAllowed?: boolean;
 }
 
-const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete, onIdChanged, onNodeSelect, canEdit = true }) => {
+const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete, onIdChanged, onNodeSelect, canEdit = true, isAiAllowed = true }) => {
   const { changeNodeId, displayLanguage, setDisplayLanguage, nodeTemplates, duplicateNode } = useHotel(); 
   
   const activeTab = displayLanguage; 
@@ -2089,13 +2090,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
       });
   };
 
-  // Helper for action buttons
+   // Helper for action buttons
   const renderActionBtn = (
       isLoading: boolean, 
       action: () => void, 
       type: 'translate' | 'generate' | 'context' | 'optimize',
       hasContent: boolean = false
   ) => {
+      if (!isAiAllowed) return null;
       const isTranslate = (type === 'translate' || type === 'context') && activeTab === 'en';
       
       let tooltip = isTranslate ? "Çevir" : (type === 'generate' ? "AI ile Yaz" : (type === 'optimize' ? "Başlık Öner" : "Otomatik Doldur"));
@@ -2487,7 +2489,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                                 </label>
                             </div>
 
-                            {activeTab === 'en' && (templateRenderList.length > 0 || customRenderList.length > 0) && (
+                            {isAiAllowed && activeTab === 'en' && (templateRenderList.length > 0 || customRenderList.length > 0) && (
                                 <button 
                                     onClick={handleBulkTranslateAttributes} 
                                     disabled={isBulkTranslating} 

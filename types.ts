@@ -327,3 +327,16 @@ export interface ExportConfig {
         tags: boolean;         // Keywords
     };
 }
+
+export interface GeminiConfig {
+  apiKey?: string;
+  allowedRoles: string[]; // ['superadmin', 'editor']
+  models: {
+    translation: string;
+    optimization: string;
+    architect: string;
+    health: string;
+    chat: string;
+  };
+}
+

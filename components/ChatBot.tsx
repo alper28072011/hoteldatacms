@@ -4,11 +4,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { HotelNode, ChatMessage, SimulationResponse } from '../types';
 import { chatWithData } from '../services/geminiService';
 import { useHotel } from '../contexts/HotelContext';
-import { Send, Bot, User, Sparkles, Settings2, UserCog, ChevronDown, Activity, AlertTriangle, Eye, EyeOff, Brain } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Settings2, UserCog, ChevronDown, Activity, AlertTriangle, Eye, EyeOff, Brain, Lock } from 'lucide-react';
 
 interface ChatBotProps {
   data: HotelNode;
   onOpenPersonaModal?: () => void; // Callback to open modal
+  isAiAllowed?: boolean;
 }
 
 // --- NEW COMPONENT: AI Analysis Card ---
@@ -102,7 +103,7 @@ const AIAnalysisCard: React.FC<{ analysis: SimulationResponse }> = ({ analysis }
     )
 }
 
-const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
+const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal, isAiAllowed = true }) => {
   const { personas, activePersonaId, setActivePersonaId } = useHotel();
   
   const activePersona = personas.find(p => p.id === activePersonaId) || null;
@@ -191,6 +192,20 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal }) => {
     setMessages(prev => [...prev, aiMsg]);
     setIsTyping(false);
   };
+
+  if (!isAiAllowed) {
+    return (
+      <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200 items-center justify-center p-6 text-center">
+        <div className="w-12 h-12 bg-slate-100 border border-slate-200 text-slate-400 rounded-2xl flex items-center justify-center mb-4">
+          <Lock size={20} />
+        </div>
+        <h4 className="text-sm font-bold text-slate-800 mb-1">Yapay Zeka Yetkisi Yok</h4>
+        <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+          Yapay zeka asistanı özellikleri yöneticiniz tarafından bu rol için devre dışı bırakılmıştır.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200">

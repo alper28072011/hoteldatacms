@@ -12,7 +12,7 @@ import {
   query,
   increment
 } from 'firebase/firestore';
-import { HotelNode, HotelSummary, HotelTemplate, AIPersona, NodeTemplate } from '../types';
+import { HotelNode, HotelSummary, HotelTemplate, AIPersona, NodeTemplate, GeminiConfig } from '../types';
 import { getLocalizedValue } from '../utils/treeUtils';
 
 const HOTELS_COLLECTION = 'hotels';
@@ -580,3 +580,28 @@ export const saveUserRole = async (email: string, role: 'superadmin' | 'editor',
     throw error;
   }
 };
+
+// --- SYSTEM SETTINGS (GEMINI API KEY & MODEL SHARDING) ---
+export const getGeminiConfig = async (): Promise<GeminiConfig | null> => {
+  try {
+    const docRef = doc(db, 'system_settings', 'gemini');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as GeminiConfig;
+    }
+  } catch (error) {
+    console.error("getGeminiConfig error", error);
+  }
+  return null;
+};
+
+export const saveGeminiConfig = async (config: GeminiConfig) => {
+  try {
+    const docRef = doc(db, 'system_settings', 'gemini');
+    await setDoc(docRef, sanitizeForFirestore(config), { merge: true });
+  } catch (error) {
+    console.error("saveGeminiConfig error", error);
+    throw error;
+  }
+};
+

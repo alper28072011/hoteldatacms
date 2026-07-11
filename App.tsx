@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { ExportConfig } from './types';
 import { generatePDF, filterHotelData } from './utils/treeUtils';
-import { currentModel, totalTokensUsed, subscribeToTokens, subscribeToModelChange, availableModels } from './services/geminiService';
+import { currentModel, totalTokensUsed, subscribeToTokens, subscribeToModelChange, availableModels, isUserAllowedGemini, subscribeToConfigChange } from './services/geminiService';
 
 const Toast = ({ message, type }: { message: string, type: 'success' | 'error' | 'loading' }) => (
   <div className={`
@@ -105,12 +105,20 @@ const App: React.FC = () => {
 
   const [modelTracker, setModelTracker] = useState(currentModel);
   const [tokensTracker, setTokensTracker] = useState(totalTokensUsed);
+  const [canUseGemini, setCanUseGemini] = useState(() => isUserAllowedGemini(userRole));
+
+  useEffect(() => {
+    setCanUseGemini(isUserAllowedGemini(userRole));
+  }, [userRole]);
 
   useEffect(() => {
     const unsubT = subscribeToTokens(setTokensTracker);
     const unsubM = subscribeToModelChange(setModelTracker);
-    return () => { unsubT(); unsubM(); };
-  }, []);
+    const unsubC = subscribeToConfigChange((newConfig) => {
+      setCanUseGemini(isUserAllowedGemini(userRole));
+    });
+    return () => { unsubT(); unsubM(); unsubC(); };
+  }, [userRole]);
 
   const getModelNameFast = (id: string) => availableModels.find(m => m.id === id)?.name || id;
 
@@ -136,6 +144,15 @@ const App: React.FC = () => {
       minute: '2-digit'
     });
   };
+
+  const checkGeminiPermissionAndRun = useCallback((action: () => void) => {
+    if (!canUseGemini) {
+      setNotification({ message: "Yapay zeka özellikleri yetkiniz dışındadır.", type: 'error' });
+      setTimeout(() => setNotification(null), 3000);
+      return;
+    }
+    action();
+  }, [canUseGemini]);
 
   useEffect(() => {
     const initApp = async () => {
@@ -569,9 +586,9 @@ const App: React.FC = () => {
                 </button>
               )}
               <button onClick={() => setIsTemplateManagerOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-100 rounded hover:bg-indigo-200 mr-2"><LayoutTemplate size={14} className="mr-1.5" /> Şablonlar</button>
-              <button onClick={() => setIsHealthModalOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
+              <button onClick={() => checkGeminiPermissionAndRun(() => setIsHealthModalOpen(true))} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
               {canEdit && (
-                <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded hover:shadow-md mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
+                <button onClick={() => checkGeminiPermissionAndRun(() => setIsArchitectOpen(true))} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded hover:shadow-md mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
               )}
               
               <div className="w-px h-6 bg-slate-200 mx-2"></div>
@@ -614,7 +631,7 @@ const App: React.FC = () => {
                       <button onClick={() => { setIsUserManagementOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-slate-700 hover:bg-slate-50 font-medium"><Users size={16} /> Kullanıcılar</button>
                     )}
                     <button onClick={() => { setIsTemplateManagerOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><LayoutTemplate size={16} /> Şablonlar</button>
-                    {canEdit && <button onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>}
+                    {canEdit && <button onClick={() => { checkGeminiPermissionAndRun(() => setIsArchitectOpen(true)); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>}
                     {canEdit && <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>}
                  </div>
                )}
@@ -657,6 +674,7 @@ const App: React.FC = () => {
                 onDelete={handleDeleteNodeWrapper}
                 onNodeSelect={setSelectedNodeId}
                 canEdit={canEdit}
+                isAiAllowed={canUseGemini}
              />
         </div>
 
@@ -665,6 +683,7 @@ const App: React.FC = () => {
                 key={hotelId || 'default'} 
                 data={hotelData} 
                 onOpenPersonaModal={handleOpenPersonaModal}
+                isAiAllowed={canUseGemini}
              />
         </div>
       </div>

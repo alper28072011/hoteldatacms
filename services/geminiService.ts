@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions } from "../types";
+import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions, GeminiConfig } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 import { logTokenUsage } from "./firestoreService";
 
@@ -24,7 +24,69 @@ const apiKey = (() => {
 // TAMAMEN STANDART BAŞLATMA:
 // Kullanıcının belirttiği gibi ek bir proxy veya base_url YAPILANDIRMASI YOKTUR.
 // Yalnızca apiKey parametresi gönderilmektedir.
-const ai = new GoogleGenAI({ apiKey: apiKey });
+let activeApiKey = apiKey;
+export let ai = new GoogleGenAI({ apiKey: activeApiKey });
+
+// Load initial config from localStorage cache if available
+const getCachedConfig = (): GeminiConfig => {
+  try {
+    const cached = localStorage.getItem('gemini_custom_config');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.models) {
+        return parsed;
+      }
+    }
+  } catch (e) { /* ignore */ }
+  return {
+    allowedRoles: ['superadmin', 'editor'], // default allowed
+    models: {
+      translation: 'gemini-2.5-flash',
+      optimization: 'gemini-2.5-flash',
+      architect: 'gemini-2.5-pro',
+      health: 'gemini-2.5-flash',
+      chat: 'gemini-2.5-flash'
+    }
+  };
+};
+
+export let activeConfig: GeminiConfig = getCachedConfig();
+
+const configListeners: ((config: GeminiConfig) => void)[] = [];
+export const subscribeToConfigChange = (fn: (config: GeminiConfig) => void) => {
+  configListeners.push(fn);
+  return () => {
+    const index = configListeners.indexOf(fn);
+    if (index > -1) configListeners.splice(index, 1);
+  };
+};
+const notifyConfigChange = (config: GeminiConfig) => {
+  configListeners.forEach(fn => fn(config));
+};
+
+export const updateActiveGeminiConfig = (config: GeminiConfig) => {
+  activeConfig = config;
+  localStorage.setItem('gemini_custom_config', JSON.stringify(config));
+  
+  const resolvedKey = config.apiKey || apiKey;
+  if (resolvedKey !== activeApiKey) {
+    activeApiKey = resolvedKey;
+    ai = new GoogleGenAI({ apiKey: resolvedKey });
+  }
+  notifyConfigChange(config);
+};
+
+// Initialize with custom key if already cached
+if (activeConfig.apiKey) {
+  activeApiKey = activeConfig.apiKey;
+  ai = new GoogleGenAI({ apiKey: activeApiKey });
+}
+
+export const isUserAllowedGemini = (role: 'superadmin' | 'editor' | null): boolean => {
+  if (!role) return false;
+  if (role === 'superadmin') return true;
+  return activeConfig.allowedRoles.includes(role);
+};
 
 export const availableModels = [
   { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (Preview)' },
@@ -47,13 +109,14 @@ export const setModel = (modelName: string) => {
 // Token tracking
 export let totalTokensUsed = parseInt(localStorage.getItem('gemini_token_usage') || '0', 10);
 
-export const trackTokenUsage = (usageMetadata: any) => {
+export const trackTokenUsage = (usageMetadata: any, modelUsed?: string) => {
   if (usageMetadata && usageMetadata.totalTokenCount) {
     const tokens = usageMetadata.totalTokenCount;
     totalTokensUsed += tokens;
     localStorage.setItem('gemini_token_usage', totalTokensUsed.toString());
     notifyTokenUpdate(totalTokensUsed);
-    logTokenUsage(currentModel, tokens).catch(e => console.error(e));
+    const loggedModel = modelUsed || currentModel;
+    logTokenUsage(loggedModel, tokens).catch(e => console.error(e));
   }
 };
 
@@ -93,9 +156,13 @@ export interface AutoFixAction {
 }
 
 
-const wrappedGenerateContent = async (req: any) => {
-  const result = await ai.models.generateContent(req);
-  if (result.usageMetadata) trackTokenUsage(result.usageMetadata);
+const wrappedGenerateContent = async (req: any, category: keyof GeminiConfig['models'] = 'optimization') => {
+  const modelToUse = activeConfig.models[category] || currentModel;
+  const result = await ai.models.generateContent({
+    ...req,
+    model: modelToUse
+  });
+  if (result.usageMetadata) trackTokenUsage(result.usageMetadata, modelToUse);
   return result;
 };
 
@@ -110,7 +177,7 @@ export const translateText = async (text: string, targetLang: string): Promise<s
         const response = await wrappedGenerateContent({
             model: currentModel,
             contents: prompt
-        });
+        }, 'translation');
         return response.text?.trim() || '';
     } catch (e) {
         console.error("Translation failed", e);
@@ -143,7 +210,7 @@ export const optimizeAILabel = async (text: string, lang: 'tr' | 'en'): Promise<
         const response = await wrappedGenerateContent({
             model: currentModel,
             contents: prompt
-        });
+        }, 'optimization');
         return response.text?.trim() || text;
     } catch (e) {
         console.error("Label optimization failed", e);
@@ -176,7 +243,7 @@ export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Pr
         const response = await wrappedGenerateContent({
             model: currentModel,
             contents: prompt
-        });
+        }, 'optimization');
         return response.text?.trim() || text;
     } catch (e) {
         console.error("Optimization failed", e);
@@ -210,7 +277,7 @@ export const optimizeMainContent = async (text: string, lang: 'tr' | 'en'): Prom
         const response = await wrappedGenerateContent({
             model: currentModel,
             contents: prompt
-        });
+        }, 'optimization');
         return response.text?.trim() || text;
     } catch (e) {
         console.error("Content optimization failed", e);
@@ -247,7 +314,7 @@ export const generateOptimizedID = async (nodeName: string, context: string): Pr
         const response = await wrappedGenerateContent({
             model: currentModel,
             contents: prompt
-        });
+        }, 'translation');
         return response.text?.trim() || '';
     } catch (e) {
         console.error("ID generation failed", e);
@@ -290,7 +357,7 @@ export const evaluateNodeHealth = async (node: HotelNode, parentPath: string): P
             model: currentModel,
             contents: prompt,
             config: { responseMimeType: 'application/json' }
-        });
+        }, 'health');
 
         const result = JSON.parse(response.text || "{}");
         return result;
@@ -317,7 +384,7 @@ export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
     const response = await wrappedGenerateContent({
       model: currentModel,
       contents: prompt
-    });
+    }, 'health');
 
     return response.text || "Yanıt oluşturulamadı.";
   } catch (error) {
@@ -379,7 +446,7 @@ export const chatWithData = async (
     `;
 
     const chat = ai.chats.create({
-      model: currentModel,
+      model: activeConfig.models.chat || currentModel,
       config: { 
           systemInstruction,
           temperature: activePersona ? activePersona.creativity : 0.3, // Lower temperature for accuracy
@@ -480,7 +547,7 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
       model: currentModel,
       contents: prompt,
       config: { responseMimeType: 'application/json' }
-    });
+    }, 'architect');
 
     const rawText = response.text || "{}";
     let parsed: any = {};
@@ -575,7 +642,7 @@ export const generateNodeContext = async (node: HotelNode, pathString: string, l
             model: currentModel,
             contents: prompt,
             config: { responseMimeType: 'application/json' }
-        });
+        }, 'health');
         
         const result = JSON.parse(response.text || '{"tags":{"tr":[], "en":[]}, "description":""}');
         
@@ -655,7 +722,7 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
             model: currentModel,
             contents: prompt,
             config: { responseMimeType: 'application/json' }
-        });
+        }, 'health');
         
         return JSON.parse(response.text || '{"score": 0, "summary": "Error", "issues": []}');
     } catch(e) {
@@ -725,7 +792,7 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         `;
 
         const chat = ai.chats.create({
-            model: currentModel,
+            model: activeConfig.models.chat || currentModel,
             config: {
                 systemInstruction,
                 temperature: 0.7 // Slightly creative for coaching
