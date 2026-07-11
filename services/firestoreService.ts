@@ -530,3 +530,53 @@ export const getTokenUsageLogs = async () => {
       return [];
   }
 };
+
+// --- USER & ROLE MANAGEMENT (RBAC) ---
+export const getUserRole = async (email: string): Promise<{ role: 'superadmin' | 'editor'; allowedHotels: string[] }> => {
+  if (!email) return { role: 'editor', allowedHotels: [] };
+  if (email.toLowerCase() === 'alper28072011@gmail.com') {
+    return { role: 'superadmin', allowedHotels: [] };
+  }
+  try {
+    const docRef = doc(db, 'user_roles', email.toLowerCase().trim());
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        role: data.role || 'editor',
+        allowedHotels: data.allowedHotels || []
+      };
+    }
+  } catch (error) {
+    console.error("getUserRole error", error);
+  }
+  return { role: 'editor', allowedHotels: [] };
+};
+
+export const getAllUserRoles = async (): Promise<{ email: string; role: 'superadmin' | 'editor'; allowedHotels: string[] }[]> => {
+  try {
+    const snapshot = await getDocs(collection(db, 'user_roles'));
+    return snapshot.docs.map(doc => ({
+      email: doc.id,
+      role: doc.data().role || 'editor',
+      allowedHotels: doc.data().allowedHotels || []
+    }));
+  } catch (error) {
+    console.error("getAllUserRoles error", error);
+    return [];
+  }
+};
+
+export const saveUserRole = async (email: string, role: 'superadmin' | 'editor', allowedHotels: string[]) => {
+  try {
+    const docRef = doc(db, 'user_roles', email.toLowerCase().trim());
+    await setDoc(docRef, {
+      role,
+      allowedHotels,
+      updatedAt: new Date()
+    }, { merge: true });
+  } catch (error) {
+    console.error("saveUserRole error", error);
+    throw error;
+  }
+};

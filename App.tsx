@@ -20,11 +20,15 @@ import ExportModal from './components/ExportModal'; // NEW
 import SettingsModal from './components/SettingsModal'; // NEW
 import { fetchHotelById, getHotelsList, createNewHotel } from './services/firestoreService';
 import { useHotel } from './contexts/HotelContext'; 
+import { useAuth } from './contexts/AuthContext';
+import Login from './components/Login';
+import UserManagementModal from './components/UserManagementModal';
+import TokenStatsModal from './components/TokenStatsModal';
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
   ChevronDown, LayoutTemplate, Activity, Database, Clock, Save, 
-  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages, Settings, Cpu
+  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages, Settings, Cpu, LogOut, Users
 } from 'lucide-react';
 import { ExportConfig } from './types';
 import { generatePDF, filterHotelData } from './utils/treeUtils';
@@ -60,6 +64,16 @@ const App: React.FC = () => {
     displayLanguage,
     setDisplayLanguage
   } = useHotel();
+
+  const { currentUser, userRole, allowedHotels, loading: authLoading, logout } = useAuth();
+  const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
+  const [isTokenStatsOpen, setIsTokenStatsOpen] = useState(false);
+
+  const canEdit = useMemo(() => {
+    if (userRole === 'superadmin') return true;
+    if (userRole === 'editor' && hotelId && allowedHotels.includes(hotelId)) return true;
+    return false;
+  }, [userRole, hotelId, allowedHotels]);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string>('root');
   const [hotelsList, setHotelsList] = useState<HotelSummary[]>([]);
@@ -373,13 +387,17 @@ const App: React.FC = () => {
     setIsPersonaModalOpen(true);
   }, []);
 
-  if (isInitializing) {
+  if (isInitializing || authLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-50 text-slate-500">
         <Loader2 className="animate-spin text-blue-600 mb-4" size={40} />
         <h2 className="text-lg font-semibold text-slate-700">Sistem Yükleniyor...</h2>
       </div>
     );
+  }
+
+  if (!currentUser) {
+    return <Login />;
   }
 
   return (
@@ -421,6 +439,9 @@ const App: React.FC = () => {
           progress={exportProgress || 0}
       />
 
+      <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setIsUserManagementOpen(false)} hotelsList={hotelsList} />
+      <TokenStatsModal isOpen={isTokenStatsOpen} onClose={() => setIsTokenStatsOpen(false)} />
+
       <header className="h-20 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-30 shrink-0 shadow-sm relative">
         <div className="flex items-center gap-3">
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden text-slate-600"><Menu size={20} /></button>
@@ -451,7 +472,9 @@ const App: React.FC = () => {
                          ))}
                        </div>
                        <div className="border-t border-slate-100 mt-2 pt-2 px-2 space-y-1">
-                          <button onClick={() => { setIsHotelSelectorOpen(false); setIsCreateModalOpen(true); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg font-medium"><CirclePlus size={16} /> Yeni Otel Ekle</button>
+                          {userRole === 'superadmin' && (
+                            <button onClick={() => { setIsHotelSelectorOpen(false); setIsCreateModalOpen(true); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg font-medium"><CirclePlus size={16} /> Yeni Otel Ekle</button>
+                          )}
                        </div>
                     </div>
                   </>
@@ -475,19 +498,34 @@ const App: React.FC = () => {
                 </button>
              </div>
 
-             {/* TOKEN AND SETTINGS TOGGLE */}
-             <div 
-                onClick={() => setIsSettingsModalOpen(true)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg cursor-pointer transition-colors border border-indigo-100"
-                title="Model ve Token Ayarları"
-             >
-                <Cpu size={14} />
-                <div className="flex flex-col text-left leading-none">
-                  <span className="text-[10px] font-bold opacity-80">{getModelNameFast(modelTracker)}</span>
-                  <span className="text-[10px] font-medium font-mono">{tokensTracker.toLocaleString('tr-TR')} tkn</span>
-                </div>
-                <div className="w-px h-6 bg-indigo-200 mx-1"></div>
-                <Settings size={16} />
+             {/* READ-ONLY BADGE */}
+             {!canEdit && (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold animate-pulse shadow-sm">
+                   <TriangleAlert size={12} className="text-amber-500" />
+                   Sadece Görüntüleme Modu
+                </span>
+             )}
+
+             {/* TOKEN AND STATS TOGGLE */}
+             <div className="flex items-center bg-indigo-50 rounded-lg border border-indigo-100 divide-x divide-indigo-200 shadow-sm">
+                <button 
+                   onClick={() => setIsTokenStatsOpen(true)}
+                   className="flex items-center gap-2 px-3 py-1.5 hover:bg-indigo-100 text-indigo-700 rounded-l-lg transition-colors leading-none"
+                   title="Model ve Token İstatistikleri"
+                >
+                   <Cpu size={14} className="text-indigo-500" />
+                   <div className="flex flex-col text-left">
+                     <span className="text-[10px] font-bold opacity-80">{getModelNameFast(modelTracker)}</span>
+                     <span className="text-[10px] font-medium font-mono">{tokensTracker.toLocaleString('tr-TR')} tkn</span>
+                   </div>
+                </button>
+                <button 
+                   onClick={() => setIsSettingsModalOpen(true)}
+                   className="p-2 hover:bg-indigo-100 text-indigo-700 rounded-r-lg transition-colors"
+                   title="Model Değiştir"
+                >
+                   <Settings size={16} />
+                </button>
              </div>
 
              <div className="hidden md:flex items-center gap-3">
@@ -520,28 +558,64 @@ const App: React.FC = () => {
 
         <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center">
+              {userRole === 'superadmin' && (
+                <button 
+                  onClick={() => setIsUserManagementOpen(true)} 
+                  className="flex items-center px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200 mr-2"
+                  title="Kullanıcı Rol ve Yetki Yönetimi"
+                >
+                  <Users size={14} className="mr-1.5 text-slate-500" />
+                  Kullanıcılar
+                </button>
+              )}
               <button onClick={() => setIsTemplateManagerOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-100 rounded hover:bg-indigo-200 mr-2"><LayoutTemplate size={14} className="mr-1.5" /> Şablonlar</button>
               <button onClick={() => setIsHealthModalOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
-              <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded hover:shadow-md mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
+              {canEdit && (
+                <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded hover:shadow-md mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
+              )}
               
               <div className="w-px h-6 bg-slate-200 mx-2"></div>
               
-              <button onClick={handleManualSave} className={`p-2 rounded transition-colors ${hasUnsavedChanges ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100'}`} title="Kaydet">
-                  <Save size={18} />
-              </button>
+              {canEdit && (
+                <button onClick={handleManualSave} className={`p-2 rounded transition-colors ${hasUnsavedChanges ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100'}`} title="Kaydet">
+                    <Save size={18} />
+                </button>
+              )}
 
-              <button onClick={handleImportClick} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="İçe Aktar"><Upload size={18} /></button>
+              {canEdit && (
+                <button onClick={handleImportClick} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="İçe Aktar"><Upload size={18} /></button>
+              )}
               <button onClick={() => setIsExportModalOpen(true)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="Dışa Aktar"><Download size={18} /></button>
             </div>
+
+            {/* USER PROFILE INFO */}
+            {currentUser && (
+              <div className="flex items-center gap-2 pl-3 border-l border-slate-200 ml-1">
+                <span className="text-xs text-slate-500 font-semibold hidden xl:inline truncate max-w-[150px]" title={currentUser.email || ''}>
+                  {currentUser.email}
+                </span>
+                <button 
+                  onClick={logout} 
+                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Oturumu Kapat"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
+            )}
+
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json"/>
             
             <div className="relative md:hidden">
                <button onClick={() => setMobileToolsOpen(!mobileToolsOpen)} className="p-2 text-slate-600"><Wrench size={20} /></button>
                {mobileToolsOpen && (
                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-2">
+                    {userRole === 'superadmin' && (
+                      <button onClick={() => { setIsUserManagementOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-slate-700 hover:bg-slate-50 font-medium"><Users size={16} /> Kullanıcılar</button>
+                    )}
                     <button onClick={() => { setIsTemplateManagerOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><LayoutTemplate size={16} /> Şablonlar</button>
-                    <button onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>
-                    <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>
+                    {canEdit && <button onClick={() => { setIsArchitectOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>}
+                    {canEdit && <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>}
                  </div>
                )}
             </div>
@@ -569,6 +643,7 @@ const App: React.FC = () => {
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
                         onDrop={handleDrop}
+                        canEdit={canEdit}
                     />
                 </div>
             </div>
@@ -581,6 +656,7 @@ const App: React.FC = () => {
                 onUpdate={updateNode} 
                 onDelete={handleDeleteNodeWrapper}
                 onNodeSelect={setSelectedNodeId}
+                canEdit={canEdit}
              />
         </div>
 

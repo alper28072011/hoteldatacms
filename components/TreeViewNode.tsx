@@ -16,6 +16,7 @@ interface TreeViewNodeProps {
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragOver: (e: React.DragEvent, id: string) => void;
   onDrop: (e: React.DragEvent, targetId: string, position: 'inside' | 'before' | 'after') => void;
+  canEdit?: boolean;
 }
 
 const getNodeIcon = (type: string) => {
@@ -43,7 +44,8 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   level = 0,
   forceExpand = false,
   onDragStart,
-  onDrop
+  onDrop,
+  canEdit = true
 }) => {
   const [isExpanded, setIsExpanded] = useState(level === 0);
   const [hasRenderedChildren, setHasRenderedChildren] = useState(level === 0 || forceExpand);
@@ -148,11 +150,11 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
         `}
         style={{ paddingLeft: `${(level * 12) + 8}px` }}
         onClick={handleSelect}
-        draggable
-        onDragStart={handleDragStartInternal}
-        onDragOver={handleDragOverInternal}
-        onDragLeave={handleDragLeaveInternal}
-        onDrop={handleDropInternal}
+        draggable={canEdit}
+        onDragStart={canEdit ? handleDragStartInternal : undefined}
+        onDragOver={canEdit ? handleDragOverInternal : undefined}
+        onDragLeave={canEdit ? handleDragLeaveInternal : undefined}
+        onDrop={canEdit ? handleDropInternal : undefined}
       >
         {dragOverPosition === 'top' && (
             <div className="absolute top-0 left-0 w-full h-[2px] bg-blue-500 z-50 pointer-events-none shadow-sm" />
@@ -189,7 +191,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
             title={`AI Confidence: ${node.aiConfidence !== undefined ? node.aiConfidence + '%' : 'Not Scanned'}`}
         />
 
-        {!isLeaf && (
+        {!isLeaf && canEdit && (
             <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/80 backdrop-blur-[2px] rounded p-0.5 z-10 shadow-sm ml-6">
             <button 
                 type="button"
@@ -231,6 +233,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
                   onDragStart={onDragStart}
                   onDragOver={(e) => {}} 
                   onDrop={onDrop}
+                  canEdit={canEdit}
                 />
             ))}
         </div>

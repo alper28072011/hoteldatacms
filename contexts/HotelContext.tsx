@@ -59,7 +59,18 @@ const HotelContext = createContext<HotelContextType | undefined>(undefined);
 export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // --- STATE ---
   const [hotelData, setHotelDataState] = useState<HotelNode>(getInitialData());
-  const [hotelId, setHotelId] = useState<string | null>(null);
+  const [hotelId, setHotelIdState] = useState<string | null>(() => {
+    return localStorage.getItem('lastActiveHotelId');
+  });
+
+  const setHotelId = useCallback((id: string | null) => {
+    setHotelIdState(id);
+    if (id) {
+      localStorage.setItem('lastActiveHotelId', id);
+    } else {
+      localStorage.removeItem('lastActiveHotelId');
+    }
+  }, []);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   

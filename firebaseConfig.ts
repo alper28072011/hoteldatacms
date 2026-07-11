@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
 // LÜTFEN BU ALANI KENDİ FIREBASE PROJE BİLGİLERİNİZLE GÜNCELLEYİN
 // PLEASE UPDATE THIS AREA WITH YOUR FIREBASE PROJECT CONFIGURATION
@@ -17,3 +18,6 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore
 export const db = getFirestore(app);
+
+// Initialize Auth
+export const auth = getAuth(app);
