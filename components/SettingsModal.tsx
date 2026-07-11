@@ -38,7 +38,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     optimization: 'gemini-2.5-flash',
     architect: 'gemini-2.5-pro',
     health: 'gemini-2.5-flash',
-    chat: 'gemini-2.5-flash'
+    chat: 'gemini-2.5-flash',
+    coach: 'gemini-2.5-flash',
+    simulator: 'gemini-2.5-flash'
   });
   const [configLoading, setConfigLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -79,7 +81,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                  optimization: config.models.optimization || 'gemini-2.5-flash',
                  architect: config.models.architect || 'gemini-2.5-pro',
                  health: config.models.health || 'gemini-2.5-flash',
-                 chat: config.models.chat || 'gemini-2.5-flash'
+                 chat: config.models.chat || 'gemini-2.5-flash',
+                 coach: config.models.coach || config.models.chat || 'gemini-2.5-flash',
+                 simulator: config.models.simulator || config.models.chat || 'gemini-2.5-flash'
                });
              }
            }
@@ -376,20 +380,36 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                       </span>
                     </div>
 
-                    {/* Data Coach & Simulation Model */}
-                    <div className="p-4 bg-white border border-slate-200/80 rounded-xl shadow-sm space-y-2 md:col-span-2">
-                      <span className="block text-xs font-bold text-slate-500 tracking-wider uppercase">Veri Koçu & Simülasyon Sohbeti</span>
+                    {/* Data Coach & Simulation Model Separated */}
+                    <div className="p-4 bg-white border border-slate-200/80 rounded-xl shadow-sm space-y-2">
+                      <span className="block text-xs font-bold text-slate-500 tracking-wider uppercase">Veri Koçu</span>
                       <select
                         className="w-full form-select rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-sm py-1.5 px-2"
-                        value={modularModels.chat}
-                        onChange={(e) => handleModularModelChange('chat', e.target.value)}
+                        value={modularModels.coach}
+                        onChange={(e) => handleModularModelChange('coach', e.target.value)}
                       >
                         {availableModels.map(m => (
                           <option key={m.id} value={m.id}>{m.name}</option>
                         ))}
                       </select>
                       <span className="text-[10px] text-slate-400 block leading-normal">
-                        ChatBot simülatörü ve sistem danışmanı ile kullanıcı sohbetlerinde kullanılır.
+                        Veri koçu asistanının veri yapılandırma tavsiyelerinde kullandığı model.
+                      </span>
+                    </div>
+
+                    <div className="p-4 bg-white border border-slate-200/80 rounded-xl shadow-sm space-y-2">
+                      <span className="block text-xs font-bold text-slate-500 tracking-wider uppercase">Simülasyon Sohbeti</span>
+                      <select
+                        className="w-full form-select rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-sm py-1.5 px-2"
+                        value={modularModels.simulator}
+                        onChange={(e) => handleModularModelChange('simulator', e.target.value)}
+                      >
+                        {availableModels.map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                      <span className="text-[10px] text-slate-400 block leading-normal">
+                        ChatBot simülatörü ve müşteri personası sohbetlerinde kullanılan model.
                       </span>
                     </div>
                   </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { HotelNode, ChatMessage, SimulationResponse } from '../types';
-import { chatWithData } from '../services/geminiService';
+import { chatWithData, activeConfig, availableModels, subscribeToConfigChange } from '../services/geminiService';
 import { useHotel } from '../contexts/HotelContext';
 import { Send, Bot, User, Sparkles, Settings2, UserCog, ChevronDown, Activity, AlertTriangle, Eye, EyeOff, Brain, Lock } from 'lucide-react';
 
@@ -105,6 +105,19 @@ const AIAnalysisCard: React.FC<{ analysis: SimulationResponse }> = ({ analysis }
 
 const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal, isAiAllowed = true }) => {
   const { personas, activePersonaId, setActivePersonaId } = useHotel();
+  
+  const [simulatorModel, setSimulatorModel] = useState(activeConfig.models.simulator || 'gemini-2.5-flash');
+
+  useEffect(() => {
+    const unsub = subscribeToConfigChange((newConfig) => {
+      setSimulatorModel(newConfig.models.simulator || 'gemini-2.5-flash');
+    });
+    return () => unsub();
+  }, []);
+
+  const getModelName = (id: string) => {
+    return availableModels.find(m => m.id === id)?.name || id;
+  };
   
   const activePersona = personas.find(p => p.id === activePersonaId) || null;
 
@@ -247,7 +260,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ data, onOpenPersonaModal, isAiAllowed
              </div>
          </div>
          <div className="flex items-center text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-            <Sparkles size={10} className="mr-1" /> Gemini 3 Flash
+            <Sparkles size={10} className="mr-1" /> {getModelName(simulatorModel)}
          </div>
       </div>
 

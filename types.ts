@@ -336,7 +336,9 @@ export interface GeminiConfig {
     optimization: string;
     architect: string;
     health: string;
-    chat: string;
+    chat?: string;
+    coach: string;
+    simulator: string;
   };
 }
 

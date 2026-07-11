@@ -34,6 +34,8 @@ const getCachedConfig = (): GeminiConfig => {
     if (cached) {
       const parsed = JSON.parse(cached);
       if (parsed && parsed.models) {
+        if (!parsed.models.coach) parsed.models.coach = parsed.models.chat || 'gemini-2.5-flash';
+        if (!parsed.models.simulator) parsed.models.simulator = parsed.models.chat || 'gemini-2.5-flash';
         return parsed;
       }
     }
@@ -45,7 +47,9 @@ const getCachedConfig = (): GeminiConfig => {
       optimization: 'gemini-2.5-flash',
       architect: 'gemini-2.5-pro',
       health: 'gemini-2.5-flash',
-      chat: 'gemini-2.5-flash'
+      chat: 'gemini-2.5-flash',
+      coach: 'gemini-2.5-flash',
+      simulator: 'gemini-2.5-flash'
     }
   };
 };
@@ -446,7 +450,7 @@ export const chatWithData = async (
     `;
 
     const chat = ai.chats.create({
-      model: activeConfig.models.chat || currentModel,
+      model: activeConfig.models.simulator || activeConfig.models.chat || currentModel,
       config: { 
           systemInstruction,
           temperature: activePersona ? activePersona.creativity : 0.3, // Lower temperature for accuracy
@@ -792,7 +796,7 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         `;
 
         const chat = ai.chats.create({
-            model: activeConfig.models.chat || currentModel,
+            model: activeConfig.models.coach || activeConfig.models.chat || currentModel,
             config: {
                 systemInstruction,
                 temperature: 0.7 // Slightly creative for coaching
