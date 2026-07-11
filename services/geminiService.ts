@@ -1,9 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
+import { logTokenUsage } from "./firestoreService";
 
-// API anahtarını güvenli ve yedekli bir şekilde almak için yardımcı fonksiyon
-const getApiKey = () => {
+// API anahtarını güvenli ve yedekli bir şekilde almak için
+const apiKey = (() => {
   // 1. AI Studio'nun çalışma zamanı (runtime) enjeksiyonu
   try {
     if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
@@ -16,21 +17,68 @@ const getApiKey = () => {
     return (import.meta as any).env.VITE_GEMINI_API_KEY;
   }
   
-  // 3. Geçici Fallback (Deploy sorununu çözmek için sizin belirttiğiniz anahtar)
-  // Uyarı: Frontend kodunda %100 güvenlik sağlanamaz, bu anahtar tarayıcı geliştirici araçlarında görünebilir.
+  // 3. Geçici Fallback
   return "AIzaSyDQcZuiQdM5WAGEW9-KeeCSCAd5QUtsGAs";
+})();
+
+// TAMAMEN STANDART BAŞLATMA:
+// Kullanıcının belirttiği gibi ek bir proxy veya base_url YAPILANDIRMASI YOKTUR.
+// Yalnızca apiKey parametresi gönderilmektedir.
+const ai = new GoogleGenAI({ apiKey: apiKey });
+
+export const availableModels = [
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (Preview)' },
+  { id: 'gemini-3.0-flash', name: 'Gemini 3.0 Flash' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+  { id: 'gemini-2.0-pro-exp-02-05', name: 'Gemini 2.0 Pro Experimental' },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3.0 Flash Preview Legacy' }
+];
+
+export let currentModel = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
+
+export const setModel = (modelName: string) => {
+  currentModel = modelName;
+  localStorage.setItem('gemini_model', modelName);
+  notifyModelChange(modelName);
 };
 
-// AI Studio ortamında API anahtarı her zaman process.env.GEMINI_API_KEY üzerinden güvenle sağlanır.
-// Güvenlik ve kararlılık için API anahtarını asla koda doğrudan yazmamalısınız.
-// Ayrıca, API anahtarının güncel kalması için GoogleGenAI nesnesi her çağrıda yeniden oluşturulmalıdır.
-const ai = {
-  get models() { return new GoogleGenAI({ apiKey: getApiKey() }).models; },
-  get chats() { return new GoogleGenAI({ apiKey: getApiKey() }).chats; }
+// Token tracking
+export let totalTokensUsed = parseInt(localStorage.getItem('gemini_token_usage') || '0', 10);
+
+export const trackTokenUsage = (usageMetadata: any) => {
+  if (usageMetadata && usageMetadata.totalTokenCount) {
+    const tokens = usageMetadata.totalTokenCount;
+    totalTokensUsed += tokens;
+    localStorage.setItem('gemini_token_usage', totalTokensUsed.toString());
+    notifyTokenUpdate(totalTokensUsed);
+    logTokenUsage(currentModel, tokens).catch(e => console.error(e));
+  }
 };
 
-const modelConfig = {
-  model: 'gemini-3-flash-preview', 
+const tokenListeners: ((tokens: number) => void)[] = [];
+export const subscribeToTokens = (fn: (tokens: number) => void) => {
+  tokenListeners.push(fn);
+  return () => {
+    const index = tokenListeners.indexOf(fn);
+    if (index > -1) tokenListeners.splice(index, 1);
+  };
+};
+const notifyTokenUpdate = (tokens: number) => {
+  tokenListeners.forEach(fn => fn(tokens));
+};
+
+const modelListeners: ((model: string) => void)[] = [];
+export const subscribeToModelChange = (fn: (model: string) => void) => {
+  modelListeners.push(fn);
+  return () => {
+    const index = modelListeners.indexOf(fn);
+    if (index > -1) modelListeners.splice(index, 1);
+  };
+};
+const notifyModelChange = (model: string) => {
+  modelListeners.forEach(fn => fn(model));
 };
 
 // --- TYPES FOR AUTO-FIX ---
@@ -44,6 +92,13 @@ export interface AutoFixAction {
   severity: 'critical' | 'structural' | 'content';
 }
 
+
+const wrappedGenerateContent = async (req: any) => {
+  const result = await ai.models.generateContent(req);
+  if (result.usageMetadata) trackTokenUsage(result.usageMetadata);
+  return result;
+};
+
 export const translateText = async (text: string, targetLang: string): Promise<string> => {
     if (!text || !text.trim()) return '';
     try {
@@ -52,8 +107,8 @@ export const translateText = async (text: string, targetLang: string): Promise<s
         
         Text: "${text}"`;
         
-        const response = await ai.models.generateContent({
-            model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+            model: currentModel,
             contents: prompt
         });
         return response.text?.trim() || '';
@@ -85,8 +140,8 @@ export const optimizeAILabel = async (text: string, lang: 'tr' | 'en'): Promise<
         Sadece optimize edilmiş etiketi döndür.
         `;
         
-        const response = await ai.models.generateContent({
-            model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+            model: currentModel,
             contents: prompt
         });
         return response.text?.trim() || text;
@@ -118,8 +173,8 @@ export const optimizeAIDescription = async (text: string, lang: 'tr' | 'en'): Pr
         ÖRNEK ÇIKTI (TR): "Odanın manzara bilgisini içerir. Misafir sorduğunda kullan."
         `;
         
-        const response = await ai.models.generateContent({
-            model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+            model: currentModel,
             contents: prompt
         });
         return response.text?.trim() || text;
@@ -152,8 +207,8 @@ export const optimizeMainContent = async (text: string, lang: 'tr' | 'en'): Prom
         KULLANICI GİRDİSİ: "${text}"
         `;
         
-        const response = await ai.models.generateContent({
-            model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+            model: currentModel,
             contents: prompt
         });
         return response.text?.trim() || text;
@@ -189,8 +244,8 @@ export const generateOptimizedID = async (nodeName: string, context: string): Pr
         - "Çocuk Kulübü Kuralları" -> "kids-club-rules"
         `;
         
-        const response = await ai.models.generateContent({
-            model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+            model: currentModel,
             contents: prompt
         });
         return response.text?.trim() || '';
@@ -231,8 +286,8 @@ export const evaluateNodeHealth = async (node: HotelNode, parentPath: string): P
         Eğer her şey mükemmelse issues boş dizi olsun ve score 100 olsun.
         `;
 
-        const response = await ai.models.generateContent({
-            model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+            model: currentModel,
             contents: prompt,
             config: { responseMimeType: 'application/json' }
         });
@@ -259,8 +314,8 @@ export const analyzeHotelData = async (data: HotelNode): Promise<string> => {
     ÇIKTIYI TÜRKÇE OLARAK VER.
     `;
 
-    const response = await ai.models.generateContent({
-      model: modelConfig.model,
+    const response = await wrappedGenerateContent({
+      model: currentModel,
       contents: prompt
     });
 
@@ -324,7 +379,7 @@ export const chatWithData = async (
     `;
 
     const chat = ai.chats.create({
-      model: modelConfig.model,
+      model: currentModel,
       config: { 
           systemInstruction,
           temperature: activePersona ? activePersona.creativity : 0.3, // Lower temperature for accuracy
@@ -337,6 +392,7 @@ export const chatWithData = async (
     });
 
     const result = await chat.sendMessage({ message: userMessage });
+    if (result.usageMetadata) trackTokenUsage(result.usageMetadata);
     
     try {
         return JSON.parse(result.text || "{}") as SimulationResponse;
@@ -420,8 +476,8 @@ export const processArchitectCommand = async (data: HotelNode, userCommand: stri
     }
     `;
 
-    const response = await ai.models.generateContent({
-      model: modelConfig.model,
+    const response = await wrappedGenerateContent({
+      model: currentModel,
       contents: prompt,
       config: { responseMimeType: 'application/json' }
     });
@@ -463,8 +519,8 @@ export const processArchitectFile = async (data: HotelNode, fileBase64: string, 
     Özet ve veriler TÜRKÇE olmalı.
     `;
 
-    const response = await ai.models.generateContent({
-      model: modelConfig.model,
+    const response = await wrappedGenerateContent({
+      model: currentModel,
       contents: {
         parts: [
             { text: prompt },
@@ -515,8 +571,8 @@ export const generateNodeContext = async (node: HotelNode, pathString: string, l
         Output JSON: { "tags": { "tr": string[], "en": string[] }, "description": string }
         `;
         
-        const response = await ai.models.generateContent({
-            model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+            model: currentModel,
             contents: prompt,
             config: { responseMimeType: 'application/json' }
         });
@@ -541,8 +597,8 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
         Create a natural language summary sentence (${lang}) for an item named "${name}" with these attributes: ${attrs}.
         Keep it concise.
         `;
-        const response = await ai.models.generateContent({
-             model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+             model: currentModel,
              contents: prompt
         });
         return response.text?.trim() || "";
@@ -595,8 +651,8 @@ export const generateValueFromAttributes = async (name: string, attributes: Node
         }
         `;
         
-        const response = await ai.models.generateContent({
-            model: modelConfig.model,
+        const response = await wrappedGenerateContent({
+            model: currentModel,
             contents: prompt,
             config: { responseMimeType: 'application/json' }
         });
@@ -623,87 +679,21 @@ export const autoFixDatabase = async (data: HotelNode): Promise<AutoFixAction[]>
          [
             {
                 "id": "fix_1",
-                "type": "move" | "update" | "changeType",
-                "targetId": "node_id",
-                "destinationId": "parent_id_if_move",
-                "payload": {}, 
-                "reasoning": "Turkish explanation",
-                "severity": "critical" | "structural" | "content"
-            }
-         ]
-         `;
-         
-         const response = await ai.models.generateContent({
-            model: modelConfig.model,
-            contents: prompt,
-            config: { responseMimeType: 'application/json' }
-        });
-        
-        return JSON.parse(response.text || '[]');
-    } catch(e) { return []; }
-}
+                "type": "move" | "update" | "ch        `;
 
-export const runDataCheck = async (data: HotelNode, sourceType: 'url' | 'text' | 'file', inputValue: string, mimeType?: string): Promise<DataComparisonReport> => {
-     try {
-        const textContext = await generateAIText(data, () => {});
-        
-        let contents: any[] = [];
-        let prompt = `
-        Compare the Internal Hotel Data below with the provided External Source.
-        Find discrepancies (mismatched prices, hours, missing amenities).
-        
-        Internal Data:
-        ${textContext}
-        `;
-
-        if (sourceType === 'url') {
-            prompt += `\nExternal Source URL: ${inputValue}\n(Use your knowledge or search tools to verify if possible, otherwise infer from URL context)`;
-            contents = [{ text: prompt }];
-        } else if (sourceType === 'text') {
-            prompt += `\nExternal Source Text:\n"${inputValue}"`;
-            contents = [{ text: prompt }];
-        } else if (sourceType === 'file') {
-            prompt += `\nExternal Source File: (See attachment)`;
-            contents = [
-                { text: prompt },
-                { inlineData: { mimeType: mimeType || 'application/pdf', data: inputValue } }
-            ];
-        }
-
-        const systemInstruction = `
-        Output JSON (DataComparisonReport):
-        {
-            "summary": "Turkish summary of comparison.",
-            "sourceUrl": "${sourceType === 'url' ? inputValue : ''}",
-            "items": [
-                {
-                    "id": "comp_1",
-                    "category": "match" | "conflict" | "missing_internal" | "missing_external",
-                    "field": "Field Name (e.g. Pool Hours)",
-                    "internalValue": "Value in DB",
-                    "externalValue": "Value in Source",
-                    "description": "Explanation in Turkish",
-                    "suggestedAction": { "type": "update" | "add", "targetId": "relevant_node_id", "data": {} } (Optional)
-                }
-            ]
-        }
-        `;
-
-        const response = await ai.models.generateContent({
-             model: modelConfig.model,
-             contents: contents,
+        const response = await wrappedGenerateContent({
+             model: currentModel,
+             contents: prompt,
              config: { 
-                 responseMimeType: 'application/json',
-                 systemInstruction: systemInstruction,
-                 tools: sourceType === 'url' ? [{ googleSearch: {} }] : undefined
+                 responseMimeType: 'application/json'
              }
         });
         
-        return JSON.parse(response.text || '{"summary": "Error", "items": []}');
+        return JSON.parse(response.text || '[]');
 
      } catch(e) {
          console.error(e);
-         return { summary: "Comparison failed.", items: [] };
+         return [];
      }
 }
 
@@ -735,7 +725,7 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         `;
 
         const chat = ai.chats.create({
-            model: modelConfig.model,
+            model: currentModel,
             config: {
                 systemInstruction,
                 temperature: 0.7 // Slightly creative for coaching
@@ -747,6 +737,7 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         });
 
         const result = await chat.sendMessage({ message: userQuestion });
+    if (result.usageMetadata) trackTokenUsage(result.usageMetadata);
         return result.text || "Üzgünüm, şu an cevap veremiyorum.";
 
     } catch (error) {

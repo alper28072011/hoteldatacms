@@ -9,7 +9,8 @@ import {
   addDoc, 
   deleteDoc, 
   writeBatch,
-  query
+  query,
+  increment
 } from 'firebase/firestore';
 import { HotelNode, HotelSummary, HotelTemplate, AIPersona, NodeTemplate } from '../types';
 import { getLocalizedValue } from '../utils/treeUtils';
@@ -498,5 +499,34 @@ export const deleteTemplate = async (templateId: string): Promise<void> => {
     const list = getLocalTemplates();
     const filtered = list.filter(t => t.id !== templateId);
     saveLocalTemplates(filtered);
+  }
+};
+
+// --- TOKEN TRACKING ---
+export const logTokenUsage = async (model: string, tokens: number) => {
+  try {
+     const dateStr = new Date().toISOString().split('T')[0];
+     const docId = `${dateStr}_${model}`;
+     const docRef = doc(db, 'token_usage', docId);
+     
+     await setDoc(docRef, {
+        date: dateStr,
+        model: model,
+        tokens: increment(tokens),
+        updatedAt: new Date()
+     }, { merge: true });
+  } catch (e) {
+     console.error("Token log failed", e);
+  }
+};
+
+export const getTokenUsageLogs = async () => {
+  try {
+      const q = query(collection(db, 'token_usage'));
+      const snapshot = await getDocs(q);
+      const logs = snapshot.docs.map(doc => doc.data() as { date: string, model: string, tokens: number });
+      return logs.sort((a, b) => b.date.localeCompare(a.date));
+  } catch(e) {
+      return [];
   }
 };

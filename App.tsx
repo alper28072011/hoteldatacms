@@ -14,20 +14,21 @@ import AIArchitectModal from './components/AIArchitectModal';
 import DataHealthModal from './components/DataHealthModal';
 import CreateHotelModal from './components/CreateHotelModal';
 import TemplateModal from './components/TemplateModal';
-import DataCheckModal from './components/DataCheckModal'; 
 import AIPersonaModal from './components/AIPersonaModal';
 import TemplateManager from './components/TemplateManager'; // NEW
 import ExportModal from './components/ExportModal'; // NEW
+import SettingsModal from './components/SettingsModal'; // NEW
 import { fetchHotelById, getHotelsList, createNewHotel } from './services/firestoreService';
 import { useHotel } from './contexts/HotelContext'; 
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
   ChevronDown, LayoutTemplate, Activity, Database, Clock, Save, 
-  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages
+  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages, Settings, Cpu
 } from 'lucide-react';
 import { ExportConfig } from './types';
 import { generatePDF, filterHotelData } from './utils/treeUtils';
+import { currentModel, totalTokensUsed, subscribeToTokens, subscribeToModelChange, availableModels } from './services/geminiService';
 
 const Toast = ({ message, type }: { message: string, type: 'success' | 'error' | 'loading' }) => (
   <div className={`
@@ -74,10 +75,10 @@ const App: React.FC = () => {
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-  const [isDataCheckOpen, setIsDataCheckOpen] = useState(false);
   const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
   const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false); // NEW
   const [isExportModalOpen, setIsExportModalOpen] = useState(false); // NEW
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false); // NEW
   
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false); // Deprecated but kept to avoid break if referenced elsewhere, though we will remove usage
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,6 +88,17 @@ const App: React.FC = () => {
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'loading'} | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const [modelTracker, setModelTracker] = useState(currentModel);
+  const [tokensTracker, setTokensTracker] = useState(totalTokensUsed);
+
+  useEffect(() => {
+    const unsubT = subscribeToTokens(setTokensTracker);
+    const unsubM = subscribeToModelChange(setModelTracker);
+    return () => { unsubT(); unsubM(); };
+  }, []);
+
+  const getModelNameFast = (id: string) => availableModels.find(m => m.id === id)?.name || id;
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -118,8 +130,9 @@ const App: React.FC = () => {
         setHotelsList(list);
         
         if (list.length > 0) {
-          const firstHotelId = list[0].id;
-          await loadHotelData(firstHotelId);
+          const storedHotelId = localStorage.getItem('last_active_hotel_id');
+          const hotelToLoad = (storedHotelId && list.some(h => h.id === storedHotelId)) ? storedHotelId : list[0].id;
+          await loadHotelData(hotelToLoad);
         }
       } catch (error) {
         console.warn("Cloud connection issue.", error);
@@ -136,6 +149,7 @@ const App: React.FC = () => {
       if (data) {
         setHotelData(data); 
         setHotelId(id);
+        localStorage.setItem('last_active_hotel_id', id);
         setSelectedNodeId(data.id || 'root');
       }
     } catch (e) {
@@ -175,6 +189,7 @@ const App: React.FC = () => {
       setHotelsList(prev => [...prev, { id: newId, name: name }]);
       
       setHotelId(newId);
+      localStorage.setItem('last_active_hotel_id', newId);
       setHotelData(newHotelData);
       setSelectedNodeId('root');
 
@@ -394,18 +409,6 @@ const App: React.FC = () => {
         onAutoFixApply={handleAutoFixAction}
       />
       
-      <DataCheckModal isOpen={isDataCheckOpen} onClose={() => setIsDataCheckOpen(false)} data={hotelData} onApplyAction={(action) => {
-            if (action.type === 'add') {
-                setHotelData(prev => {
-                     const newNode = { ...action.data, id: action.data.id || generateId('import') } as HotelNode;
-                     // Ensure localization for new nodes
-                     if(typeof newNode.name === 'string') newNode.name = { tr: newNode.name, en: '' };
-                     const targetId = action.targetId === 'root' ? prev.id : action.targetId;
-                     return addChildToNode(prev, targetId, newNode);
-                });
-            } else if (action.type === 'update') updateNode(action.targetId, action.data);
-            setNotification({ message: "Uygulandı.", type: 'success' });
-      }} />
       <CreateHotelModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onCreate={handleCreateNewHotel} />
       <TemplateModal isOpen={isTemplateModalOpen} onClose={() => setIsTemplateModalOpen(false)} data={hotelData} />
       <AIPersonaModal isOpen={isPersonaModalOpen} onClose={() => setIsPersonaModalOpen(false)} />
@@ -472,6 +475,21 @@ const App: React.FC = () => {
                 </button>
              </div>
 
+             {/* TOKEN AND SETTINGS TOGGLE */}
+             <div 
+                onClick={() => setIsSettingsModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg cursor-pointer transition-colors border border-indigo-100"
+                title="Model ve Token Ayarları"
+             >
+                <Cpu size={14} />
+                <div className="flex flex-col text-left leading-none">
+                  <span className="text-[10px] font-bold opacity-80">{getModelNameFast(modelTracker)}</span>
+                  <span className="text-[10px] font-medium font-mono">{tokensTracker.toLocaleString('tr-TR')} tkn</span>
+                </div>
+                <div className="w-px h-6 bg-indigo-200 mx-1"></div>
+                <Settings size={16} />
+             </div>
+
              <div className="hidden md:flex items-center gap-3">
                  <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${hotelId ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                     {hotelId ? <Wifi size={10} /> : <WifiOff size={10} />} {hotelId ? 'Online' : 'Offline'}
@@ -503,7 +521,6 @@ const App: React.FC = () => {
         <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center">
               <button onClick={() => setIsTemplateManagerOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-100 rounded hover:bg-indigo-200 mr-2"><LayoutTemplate size={14} className="mr-1.5" /> Şablonlar</button>
-              <button onClick={() => setIsDataCheckOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-cyan-700 bg-cyan-100 rounded hover:bg-cyan-200 mr-2"><Scale size={14} className="mr-1.5" /> Veri Kontrol</button>
               <button onClick={() => setIsHealthModalOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
               <button onClick={() => setIsArchitectOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded hover:shadow-md mr-2"><Sparkles size={14} className="mr-1.5" /> AI Mimar</button>
               
@@ -575,6 +592,8 @@ const App: React.FC = () => {
              />
         </div>
       </div>
+
+      <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
 
       <footer className="bg-slate-50 border-t border-slate-200 text-xs text-slate-600 relative z-30 shrink-0">
         {/* Footer content same as before */}
