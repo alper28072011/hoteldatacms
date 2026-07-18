@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { HotelNode } from '../types';
-import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield, Tag, Box } from 'lucide-react';
+import { ChevronRight, Folder, FileText, Plus, List, Calendar, CircleHelp, Shield, Tag, Box, Globe } from 'lucide-react';
 import { isLeafNode, getLocalizedValue } from '../utils/treeUtils';
 import { useHotel } from '../contexts/HotelContext';
 
@@ -17,6 +17,7 @@ interface TreeViewNodeProps {
   onDragOver: (e: React.DragEvent, id: string) => void;
   onDrop: (e: React.DragEvent, targetId: string, position: 'inside' | 'before' | 'after') => void;
   canEdit?: boolean;
+  isAncestorShared?: boolean;
 }
 
 const getNodeIcon = (type: string) => {
@@ -45,7 +46,8 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   forceExpand = false,
   onDragStart,
   onDrop,
-  canEdit = true
+  canEdit = true,
+  isAncestorShared = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(level === 0);
   const [hasRenderedChildren, setHasRenderedChildren] = useState(level === 0 || forceExpand);
@@ -58,6 +60,9 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === node.id;
   const isLeaf = isLeafNode(String(node.type));
+  
+  // Determine if this node is shared (either explicitly or via inheritance)
+  const isThisShared = !!(node.isShared || isAncestorShared);
   
   // Get localized name based on context
   const displayName = getLocalizedValue(node.name, displayLanguage);
@@ -183,6 +188,11 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
           <span className={`text-sm truncate transition-colors duration-200 ${isSelected ? 'font-medium text-blue-700' : 'text-slate-600'}`}>
             {displayName || <span className="italic opacity-50">Untitled</span>}
           </span>
+          {isThisShared && (
+            <span className="ml-1.5 p-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 shrink-0" title="Ortak Bilgi (Tüm Tesislerde Ortak)">
+              <Globe size={10} />
+            </span>
+          )}
         </div>
 
         {/* AI Health Dot - Positioned absolutely to the right */}
@@ -234,6 +244,7 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
                   onDragOver={(e) => {}} 
                   onDrop={onDrop}
                   canEdit={canEdit}
+                  isAncestorShared={isThisShared}
                 />
             ))}
         </div>
@@ -245,7 +256,8 @@ const TreeViewNode: React.FC<TreeViewNodeProps> = React.memo(({
   return prev.node === next.node && 
          prev.node.aiConfidence === next.node.aiConfidence &&
          prev.selectedId === next.selectedId && 
-         prev.forceExpand === next.forceExpand;
+         prev.forceExpand === next.forceExpand &&
+         prev.isAncestorShared === next.isAncestorShared;
 });
 
 export default TreeViewNode;

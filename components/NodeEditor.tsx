@@ -2358,6 +2358,53 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ node, root, onUpdate, onDelete,
                 </div>
             )}
 
+            {/* SHARED NODE CONTROL PANEL */}
+            {breadcrumbs.length === 2 && (
+              <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-6 flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2">
+                <div className="flex gap-4 items-start mr-4">
+                  <div className="p-2.5 bg-blue-100 text-blue-600 rounded-lg shrink-0">
+                    <Globe size={22} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">Tüm Tesisler İçin Ortak Bilgi ("Tümüne Uygula")</h4>
+                    <p className="text-xs text-slate-600 mt-1 max-w-xl">
+                      Bu seçeneği aktif ettiğinizde, bu kategori altındaki tüm içerik, özellik ve alt öğelerle birlikte tüm konaklama tesislerinde ortak hale gelir. Bir tesiste yapacağınız herhangi bir değişiklik anında diğer tüm otellere de uygulanır.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className={`text-xs font-extrabold tracking-wider ${node.isShared ? 'text-blue-600' : 'text-slate-400'}`}>
+                    {node.isShared ? 'ORTAK' : 'KİŞİSEL'}
+                  </span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={!!node.isShared} 
+                      onChange={(e) => handleChange('isShared', e.target.checked)}
+                      disabled={!canEdit}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* SHARED DESCENDANT NOTIFICATION BANNER */}
+            {breadcrumbs.length > 2 && breadcrumbs[1]?.isShared && (
+              <div className="bg-indigo-50/50 border border-indigo-200 rounded-xl p-5 flex items-start gap-3.5 shadow-sm animate-in fade-in slide-in-from-top-2">
+                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg shrink-0 mt-0.5">
+                  <Globe size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wide">Ortak Bilgi Yapısı</h4>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                    Bu öğe, tüm otellerde paylaşılan ortak bir üst kategori olan <strong className="text-indigo-900 font-semibold">"{getLocalizedValue(breadcrumbs[1].name, activeTab) || 'Ortak Bölüm'}"</strong> altındadır. Bu düğümde veya alt dallarında yapacağınız tüm değişiklikler (ekleme, çıkarma, silme veya içerik güncellemeleri) <strong>tüm tesislerde</strong> eşzamanlı olarak gerçekleşecektir.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* 1. NAME SECTION */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">

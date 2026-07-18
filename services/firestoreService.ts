@@ -200,8 +200,31 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
     // We save the IDs of the children in order, so we can reconstruct the sort later.
     const categoryOrder = childrenToSave.map(child => child.id);
 
-    // 3. BATCH INIT
+    // Fetch all other hotels in the system to support global shared node updates
+    let otherHotels: { id: string; categoryOrder: string[] }[] = [];
+    try {
+      const hotelsSnapshot = await getDocs(collection(db, HOTELS_COLLECTION));
+      hotelsSnapshot.forEach((doc) => {
+        if (doc.id !== hotelId) {
+          otherHotels.push({
+            id: doc.id,
+            categoryOrder: doc.data().categoryOrder || []
+          });
+        }
+      });
+    } catch (e) {
+      console.warn("Failed to fetch other hotels for shared propagation", e);
+    }
+
+    // 3. BATCH INIT & PROPAGATION PREPARATION
     const batch = writeBatch(db);
+    const otherHotelOrders = new Map<string, string[]>();
+    const otherHotelUpdated = new Map<string, boolean>();
+
+    otherHotels.forEach(oh => {
+      otherHotelOrders.set(oh.id, [...oh.categoryOrder]);
+      otherHotelUpdated.set(oh.id, false);
+    });
 
     // 4. ROOT UPDATE
     // Save metadata + order to the main document
@@ -222,22 +245,64 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
         // Add to batch with sanitation
         batch.set(childRef, sanitizeForFirestore(child));
         currentChildIds.add(childId);
-    });
 
-    // 6. CLEANUP ORPHANS
-    // Fetch existing docs to identify what to delete.
-    const existingDocsSnapshot = await getDocs(structureRef);
-    
-    existingDocsSnapshot.forEach((doc) => {
-        if (!currentChildIds.has(doc.id)) {
-            // This doc exists in DB but not in our new data -> Delete it
-            batch.delete(doc.ref);
+        // PROPAGATION: If child is shared, write it to all other hotels as well
+        if (child.isShared === true) {
+          otherHotels.forEach(oh => {
+            const otherChildRef = doc(db, HOTELS_COLLECTION, oh.id, STRUCTURE_SUBCOLLECTION, childId);
+            batch.set(otherChildRef, sanitizeForFirestore(child));
+            
+            // Ensure this child ID is in the other hotel's category order
+            const order = otherHotelOrders.get(oh.id) || [];
+            if (!order.includes(childId)) {
+              order.push(childId);
+              otherHotelOrders.set(oh.id, order);
+              otherHotelUpdated.set(oh.id, true);
+            }
+          });
         }
     });
 
-    // 7. COMMIT
+    // 6. CLEANUP ORPHANS & DELETION PROPAGATION
+    // Fetch existing docs to identify what to delete.
+    const existingDocsSnapshot = await getDocs(structureRef);
+    
+    existingDocsSnapshot.forEach((existingDoc) => {
+        if (!currentChildIds.has(existingDoc.id)) {
+            // This doc exists in DB but not in our new data -> Delete it
+            batch.delete(existingDoc.ref);
+
+            // PROPAGATION: If the deleted node was shared, delete it from other hotels too!
+            const wasShared = existingDoc.data()?.isShared === true;
+            if (wasShared) {
+              otherHotels.forEach(oh => {
+                const otherChildRef = doc(db, HOTELS_COLLECTION, oh.id, STRUCTURE_SUBCOLLECTION, existingDoc.id);
+                batch.delete(otherChildRef);
+
+                // Remove from the other hotel's category order
+                const order = otherHotelOrders.get(oh.id) || [];
+                const idx = order.indexOf(existingDoc.id);
+                if (idx !== -1) {
+                  order.splice(idx, 1);
+                  otherHotelOrders.set(oh.id, order);
+                  otherHotelUpdated.set(oh.id, true);
+                }
+              });
+            }
+        }
+    });
+
+    // 7. WRITE THE UPDATED CATEGORY ORDERS FOR OTHER HOTELS
+    otherHotels.forEach(oh => {
+      if (otherHotelUpdated.get(oh.id)) {
+        const otherRootRef = doc(db, HOTELS_COLLECTION, oh.id);
+        batch.set(otherRootRef, { categoryOrder: otherHotelOrders.get(oh.id) }, { merge: true });
+      }
+    });
+
+    // 8. COMMIT
     await batch.commit();
-    console.log("Hotel data successfully sharded and saved via Batch Write!");
+    console.log("Hotel data and shared nodes successfully sharded and saved via Batch Write!");
 
   } catch (error) {
     console.warn("Firestore save failed. Falling back to LocalStorage.", error);
@@ -245,6 +310,68 @@ export const updateHotelData = async (hotelId: string, data: HotelNode): Promise
     
     // Fallback: Save the entire Monolithic JSON to LocalStorage
     saveLocalHotelData(hotelId, data);
+
+    // PROPAGATION FOR OFFLINE LOCALSTORAGE: Sync shared nodes to other local hotels too
+    try {
+      const otherHotelsList = getLocalHotelsList();
+      otherHotelsList.forEach(oh => {
+        if (oh.id === hotelId) return;
+        const otherData = getLocalHotelData(oh.id);
+        if (otherData) {
+          let updated = false;
+          const otherChildren = otherData.children || [];
+          const otherChildrenMap = new Map<string, HotelNode>();
+          otherChildren.forEach(c => otherChildrenMap.set(c.id, c));
+
+          // Sync shared nodes (add/update)
+          const childrenList = data.children || [];
+          childrenList.forEach(child => {
+            if (child.isShared === true) {
+              otherChildrenMap.set(child.id, child);
+              updated = true;
+            }
+          });
+
+          // Sync deleted shared nodes
+          if (data && data.children) {
+            const currentChildIdsLocal = new Set(data.children.map(c => c.id));
+            // Check if any shared node in otherData is missing in data.children (meaning it was deleted)
+            otherChildren.forEach(child => {
+              if (child.isShared === true && !currentChildIdsLocal.has(child.id)) {
+                otherChildrenMap.delete(child.id);
+                updated = true;
+              }
+            });
+          }
+
+          if (updated) {
+            const reassembledChildren: HotelNode[] = [];
+            // Keep original order, but filter out deleted, and add new ones at the end
+            const originalOrder = otherData.categoryOrder || otherChildren.map(c => c.id);
+            const newOrder: string[] = [];
+
+            originalOrder.forEach(id => {
+              if (otherChildrenMap.has(id)) {
+                reassembledChildren.push(otherChildrenMap.get(id)!);
+                newOrder.push(id);
+                otherChildrenMap.delete(id);
+              }
+            });
+
+            otherChildrenMap.forEach(child => {
+              reassembledChildren.push(child);
+              newOrder.push(child.id);
+            });
+
+            otherData.children = reassembledChildren;
+            otherData.categoryOrder = newOrder;
+            saveLocalHotelData(oh.id, otherData);
+          }
+        }
+      });
+    } catch (e) {
+      console.warn("Offline shared node propagation failed", e);
+    }
     
     // Update Local Index if name changed
     const list = getLocalHotelsList();

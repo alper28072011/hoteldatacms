@@ -205,6 +205,7 @@ export interface HotelNode {
 
   lastSaved?: number;
   lastModified?: number; // Granular update tracking per node
+  isShared?: boolean; // New: indicates whether this node is shared/common across all hotels
   [key: string]: any;
 }
 
