@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Cpu, Database, Save, RotateCcw, CalendarClock, Key, Eye, EyeOff, ShieldCheck, Layers, Settings, Loader2 } from 'lucide-react';
+import { X, Cpu, Database, Save, RotateCcw, CalendarClock, Key, Eye, EyeOff, ShieldCheck, Layers, Settings, Loader2, Users, Shield } from 'lucide-react';
 import { 
   availableModels, 
   currentModel, 
@@ -10,16 +10,29 @@ import {
   activeConfig,
   updateActiveGeminiConfig
 } from '../services/geminiService';
-import { getTokenUsageLogs, getGeminiConfig, saveGeminiConfig } from '../services/firestoreService';
+import { getTokenUsageLogs, getGeminiConfig, saveGeminiConfig, getAllUserRoles, saveUserRole } from '../services/firestoreService';
 import { useAuth } from '../contexts/AuthContext';
 import { GeminiConfig } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  hotelsList?: { id: string; name: string }[];
+  initialTab?: 'general' | 'users' | 'modular' | 'logs';
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+interface UserRoleItem {
+  email: string;
+  role: 'superadmin' | 'editor';
+  allowedHotels: string[];
+}
+
+const SettingsModal: React.FC<SettingsModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  hotelsList = [], 
+  initialTab = 'general' 
+}) => {
   const { userRole } = useAuth();
   const isSuperAdmin = userRole === 'superadmin';
 
@@ -44,7 +57,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   });
   const [configLoading, setConfigLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'modular' | 'logs'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'users' | 'modular' | 'logs'>(initialTab);
+
+  // --- User Management State ---
+  const [userRolesList, setUserRolesList] = useState<UserRoleItem[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSaving, setUserSaving] = useState(false);
+  const [userError, setUserError] = useState<string | null>(null);
+  const [userSuccess, setUserSuccess] = useState<string | null>(null);
+  const [userEmailInput, setUserEmailInput] = useState('');
+  const [userSelectedRole, setUserSelectedRole] = useState<'superadmin' | 'editor'>('editor');
+  const [userSelectedHotels, setUserSelectedHotels] = useState<string[]>([]);
+  const [userEditing, setUserEditing] = useState(false);
+
+  const fetchUsersList = async () => {
+    setUsersLoading(true);
+    try {
+      const data = await getAllUserRoles();
+      const sorted = [...data].sort((a, b) => a.email.localeCompare(b.email));
+      setUserRolesList(sorted);
+    } catch (e) {
+      console.error("Failed to load user roles", e);
+      setUserError("Kullanıcı rolleri yüklenirken bir hata oluştu.");
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   useEffect(() => {
     setSelectedModel(currentModel);
@@ -92,6 +136,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
            console.error("Config fetch failed", err);
            setConfigLoading(false);
          });
+
+         // Also fetch user roles if superadmin
+         fetchUsersList();
        }
     }
 
@@ -100,6 +147,62 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       unsubModel();
     };
   }, [isOpen, isSuperAdmin]);
+
+  const resetUserForm = () => {
+    setUserEmailInput('');
+    setUserSelectedRole('editor');
+    setUserSelectedHotels([]);
+    setUserEditing(false);
+    setUserError(null);
+    setUserSuccess(null);
+  };
+
+  const handleToggleUserHotel = (hotelId: string) => {
+    setUserSelectedHotels(prev => 
+      prev.includes(hotelId)
+        ? prev.filter(id => id !== hotelId)
+        : [...prev, hotelId]
+    );
+  };
+
+  const handleEditUserRole = (user: UserRoleItem) => {
+    setUserEmailInput(user.email);
+    setUserSelectedRole(user.role);
+    setUserSelectedHotels(user.allowedHotels);
+    setUserEditing(true);
+    setUserError(null);
+    setUserSuccess(null);
+  };
+
+  const handleSaveUserRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userEmailInput) {
+      setUserError('Lütfen geçerli bir e-posta adresi girin.');
+      return;
+    }
+
+    const emailClean = userEmailInput.trim().toLowerCase();
+    if (emailClean === 'alper28072011@gmail.com') {
+      setUserError('Bu superadmin kullanıcısının yetkileri değiştirilemez.');
+      return;
+    }
+
+    setUserSaving(true);
+    setUserError(null);
+    setUserSuccess(null);
+
+    try {
+      await saveUserRole(emailClean, userSelectedRole, userSelectedRole === 'superadmin' ? [] : userSelectedHotels);
+      setUserSuccess(userEditing ? 'Kullanıcı yetkileri güncellendi.' : 'Yeni kullanıcı yetkileri kaydedildi.');
+      resetUserForm();
+      await fetchUsersList();
+    } catch (e: any) {
+      console.error(e);
+      setUserError('Kaydedilirken bir hata oluştu: ' + (e.message || 'Bilinmeyen hata'));
+    } finally {
+      setUserSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -150,18 +253,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="w-full max-w-3xl bg-white shadow-2xl rounded-2xl flex flex-col max-h-[90vh] border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="w-full max-w-4xl bg-white shadow-2xl rounded-2xl flex flex-col h-[680px] max-h-[90vh] border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50">
+        {/* Header - Fixed Height */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
           <div className="flex items-center gap-3">
-             <div className="flex items-center justify-center w-10 h-10 bg-indigo-100 text-indigo-700 rounded-xl">
-                <Cpu size={20} />
+             <div className="flex items-center justify-center w-10 h-10 bg-indigo-100 text-indigo-700 rounded-xl shrink-0">
+                <Settings size={20} />
              </div>
              <div>
-                <h3 className="text-xl font-bold text-slate-900">Uygulama & Yapay Zeka Ayarları</h3>
-                <p className="text-sm text-slate-500">
-                  {isSuperAdmin ? "Yapay zeka erişim, API anahtarı ve modüler model yetkilendirmesini yönetin." : "Gemini yapay zeka modellerini ve sistem özelliklerini inceleyin."}
+                <h3 className="text-lg font-bold text-slate-900">Ayarlar ve Kullanıcı Yönetimi</h3>
+                <p className="text-xs text-slate-500">
+                  {isSuperAdmin ? "Uygulama ayarlarını, yapay zeka modellerini ve kullanıcı yetkilerini yönetin." : "Gemini yapay zeka modellerini ve sistem ayarlarını inceleyin."}
                 </p>
              </div>
           </div>
@@ -173,45 +276,57 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Super Admin Navigation Tabs */}
-        {isSuperAdmin && (
-          <div className="flex border-b border-slate-100 bg-slate-50/50 px-4">
+        {/* Navigation Tabs - Fixed Height */}
+        <div className="flex border-b border-slate-200 bg-slate-50/50 px-4 shrink-0 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('general')}
+            className={`px-4 py-3 text-xs md:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'general' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+          >
+            <ShieldCheck size={16} />
+            Genel & API Anahtarı
+          </button>
+          
+          {isSuperAdmin && (
             <button
-              onClick={() => setActiveTab('general')}
-              className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'general' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setActiveTab('users')}
+              className={`px-4 py-3 text-xs md:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
             >
-              <ShieldCheck size={16} />
-              Genel Yetki ve API Anahtarı
+              <Users size={16} />
+              Kullanıcı Yönetimi
             </button>
+          )}
+
+          {isSuperAdmin && (
             <button
               onClick={() => setActiveTab('modular')}
-              className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'modular' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+              className={`px-4 py-3 text-xs md:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'modular' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
             >
               <Layers size={16} />
-              Modüler Model Seçimi
+              Modüler Modeller
             </button>
-            <button
-              onClick={() => setActiveTab('logs')}
-              className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'logs' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-            >
-              <CalendarClock size={16} />
-              Token Tüketim Analizleri
-            </button>
-          </div>
-        )}
+          )}
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`px-4 py-3 text-xs md:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'logs' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+          >
+            <CalendarClock size={16} />
+            Token Analizleri
+          </button>
+        </div>
+
+        {/* Tab Content Container - Fills exact remaining height without resizing */}
+        <div className="flex-1 overflow-hidden relative">
           {configLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 space-y-3">
+            <div className="flex flex-col items-center justify-center h-full space-y-3">
               <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
               <p className="text-sm text-slate-500 font-medium">Sistem ayarları yükleniyor...</p>
             </div>
           ) : (
             <>
               {/* --- TAB 1: GENERAL & ACCESS --- */}
-              {(!isSuperAdmin || activeTab === 'general') && (
-                <div className="space-y-6">
+              {activeTab === 'general' && (
+                <div className="h-full overflow-y-auto p-6 space-y-6">
                   {/* Super Admin API Key Entry */}
                   {isSuperAdmin ? (
                     <div className="space-y-3">
@@ -301,9 +416,180 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 </div>
               )}
 
-              {/* --- TAB 2: MODULAR MODEL SELECTION --- */}
+              {/* --- TAB 2: USER MANAGEMENT --- */}
+              {isSuperAdmin && activeTab === 'users' && (
+                <div className="h-full flex flex-col md:grid md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-slate-200 overflow-hidden">
+                  
+                  {/* Left Column: Form */}
+                  <div className="p-5 md:col-span-2 overflow-y-auto space-y-4">
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      {userEditing ? 'Yetki Düzenle' : 'Yeni Kullanıcı Yetkilendir'}
+                    </h4>
+
+                    {userError && (
+                      <div className="bg-red-50 border border-red-100 text-red-700 p-3 rounded-lg text-xs font-medium">
+                        {userError}
+                      </div>
+                    )}
+
+                    {userSuccess && (
+                      <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 p-3 rounded-lg text-xs font-medium">
+                        {userSuccess}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSaveUserRole} className="space-y-3.5">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Kullanıcı E-posta</label>
+                        <input
+                          type="email"
+                          required
+                          disabled={userEditing}
+                          className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100 bg-white"
+                          placeholder="user@example.com"
+                          value={userEmailInput}
+                          onChange={(e) => setUserEmailInput(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Sistem Rolü</label>
+                        <select
+                          className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                          value={userSelectedRole}
+                          onChange={(e) => setUserSelectedRole(e.target.value as 'superadmin' | 'editor')}
+                        >
+                          <option value="editor">Editor (Otel Seviyesinde Kısıtlı)</option>
+                          <option value="superadmin">Superadmin (Tam Yetkili)</option>
+                        </select>
+                      </div>
+
+                      {userSelectedRole === 'editor' && (
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-semibold text-slate-700">Yetkili Oteller</label>
+                          <div className="border border-slate-200 rounded-lg p-2.5 max-h-[160px] overflow-y-auto space-y-1.5 bg-slate-50/50">
+                            {hotelsList.length === 0 ? (
+                              <p className="text-xs text-slate-400">Sistemde henüz kayıtlı otel bulunmamaktadır.</p>
+                            ) : (
+                              hotelsList.map(hotel => (
+                                <label key={hotel.id} className="flex items-center gap-2 text-xs text-slate-700 font-medium cursor-pointer p-1 rounded hover:bg-white transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                                    checked={userSelectedHotels.includes(hotel.id)}
+                                    onChange={() => handleToggleUserHotel(hotel.id)}
+                                  />
+                                  <span className="truncate">{hotel.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500">
+                            Editor sadece yukarıda seçilen oteller üzerinde düzenleme yapabilir.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="pt-1 flex gap-2">
+                        {userEditing && (
+                          <button
+                            type="button"
+                            onClick={resetUserForm}
+                            className="flex-1 text-xs border border-slate-300 hover:bg-slate-100 rounded-lg py-2 transition-colors font-medium text-slate-700"
+                          >
+                            Vazgeç
+                          </button>
+                        )}
+                        <button
+                          type="submit"
+                          disabled={userSaving}
+                          className="flex-1 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold rounded-lg py-2 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                        >
+                          {userSaving ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Save size={14} />
+                          )}
+                          {userEditing ? 'Güncelle' : 'Kaydet'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Right Column: User Permissions List */}
+                  <div className="p-5 md:col-span-3 flex flex-col overflow-hidden bg-slate-50/30">
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">
+                      Kayıtlı Kullanıcı İzinleri
+                    </h4>
+
+                    <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm">
+                      {usersLoading ? (
+                        <div className="flex flex-col items-center justify-center h-full py-12 text-slate-400 gap-2">
+                          <Loader2 size={24} className="animate-spin text-indigo-500" />
+                          <span className="text-xs">Kullanıcılar yükleniyor...</span>
+                        </div>
+                      ) : userRolesList.length === 0 ? (
+                        <div className="text-center py-12 text-slate-400 text-xs font-medium">
+                          Veritabanında kayıtlı özel yetkilendirme bulunmuyor.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {/* Hardcoded alper user display for informational purpose */}
+                          <div className="p-3.5 flex items-center justify-between hover:bg-slate-50/50">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-slate-900">alper28072011@gmail.com</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800">
+                                  <Shield size={10} className="mr-1" /> superadmin
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500">Sistem Kurucusu & Tam Yetkili</p>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-medium">Varsayılan</span>
+                          </div>
+
+                          {userRolesList.map(u => (
+                            <div key={u.email} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                              <div className="space-y-0.5 min-w-0 pr-3">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-xs text-slate-800 truncate">{u.email}</span>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    u.role === 'superadmin' 
+                                      ? 'bg-indigo-100 text-indigo-800' 
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}>
+                                    <Shield size={10} className="mr-1" /> {u.role}
+                                  </span>
+                                </div>
+                                {u.role === 'editor' && (
+                                  <p className="text-[10px] text-slate-500">
+                                    Yetkili Otel Sayısı: <span className="font-bold text-slate-700">{u.allowedHotels.length}</span>
+                                    {u.allowedHotels.length > 0 && (
+                                      <span className="truncate block mt-0.5 text-slate-400">
+                                        ({u.allowedHotels.map(id => hotelsList.find(h => h.id === id)?.name || id).join(', ')})
+                                      </span>
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleEditUserRole(u)}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline font-bold shrink-0"
+                              >
+                                Düzenle
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* --- TAB 3: MODULAR MODEL SELECTION --- */}
               {isSuperAdmin && activeTab === 'modular' && (
-                <div className="space-y-6">
+                <div className="h-full overflow-y-auto p-6 space-y-6">
                   <div className="p-4 bg-indigo-50/50 border border-indigo-100/80 rounded-xl">
                     <p className="text-xs text-indigo-700 leading-relaxed font-medium flex items-center gap-2">
                       <Layers size={14} />
@@ -380,7 +666,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                       </span>
                     </div>
 
-                    {/* Data Coach & Simulation Model Separated */}
+                    {/* Data Coach & Simulation Model */}
                     <div className="p-4 bg-white border border-slate-200/80 rounded-xl shadow-sm space-y-2">
                       <span className="block text-xs font-bold text-slate-500 tracking-wider uppercase">Veri Koçu</span>
                       <select
@@ -416,9 +702,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 </div>
               )}
 
-              {/* --- TAB 3: TOKEN LOGS --- */}
-              {(!isSuperAdmin || activeTab === 'logs') && (
-                <div className="space-y-4">
+              {/* --- TAB 4: TOKEN LOGS --- */}
+              {activeTab === 'logs' && (
+                <div className="h-full overflow-y-auto p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-semibold text-slate-800">Veritabanı Kayıtlı Token Tüketimi</label>
                     <span className="text-xs font-medium text-slate-500 font-mono bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200/50">
@@ -427,7 +713,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                   </div>
                   
                   <div className="border border-slate-200/80 rounded-xl overflow-hidden shadow-sm">
-                    <div className="max-h-[300px] overflow-y-auto">
+                    <div className="max-h-[320px] overflow-y-auto">
                       <table className="w-full text-left text-sm text-slate-600">
                         <thead className="bg-slate-50 border-b border-slate-200/80 text-xs uppercase font-bold text-slate-500 sticky top-0 z-10">
                           <tr>
@@ -472,32 +758,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex items-center justify-end gap-3 shrink-0">
+        {/* Footer - Fixed Height */}
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex items-center justify-end gap-3 shrink-0">
           <button 
             disabled={saveLoading}
             onClick={onClose}
             className="px-4 py-2 text-slate-700 font-semibold hover:bg-slate-200/60 rounded-lg transition-colors text-sm disabled:opacity-50"
           >
-            İptal
+            {activeTab === 'users' ? 'Kapat' : 'İptal'}
           </button>
-          <button 
-            disabled={saveLoading || configLoading}
-            onClick={handleSave}
-            className="px-5 py-2 flex items-center gap-2 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-lg transition-colors shadow-sm text-sm disabled:opacity-50"
-          >
-            {saveLoading ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Kaydediliyor...
-              </>
-            ) : (
-              <>
-                <Save size={16} />
-                Kaydet
-              </>
-            )}
-          </button>
+          {activeTab !== 'users' && (
+            <button 
+              disabled={saveLoading || configLoading}
+              onClick={handleSave}
+              className="px-5 py-2 flex items-center gap-2 bg-indigo-600 text-white font-bold hover:bg-indigo-700 rounded-lg transition-colors shadow-sm text-sm disabled:opacity-50"
+            >
+              {saveLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Kaydediliyor...
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  Kaydet
+                </>
+              )}
+            </button>
+          )}
         </div>
 
       </div>

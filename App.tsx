@@ -24,6 +24,7 @@ import { useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import UserManagementModal from './components/UserManagementModal';
 import TokenStatsModal from './components/TokenStatsModal';
+import ComparisonView from './components/ComparisonView';
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
@@ -93,8 +94,40 @@ const App: React.FC = () => {
   const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false); // NEW
   const [isExportModalOpen, setIsExportModalOpen] = useState(false); // NEW
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false); // NEW
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'users' | 'modular' | 'logs'>('general');
+
+  const openSettings = (tab: 'general' | 'users' | 'modular' | 'logs' = 'general') => {
+    setSettingsInitialTab(tab);
+    setIsSettingsModalOpen(true);
+  };
   
-  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false); // Deprecated but kept to avoid break if referenced elsewhere, though we will remove usage
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false); // Deprecated
+  const [viewMode, setViewMode] = useState<'editor' | 'comparison'>('editor');
+
+  useEffect(() => {
+    if (window.location.pathname === '/comparison' || window.location.hash === '#comparison') {
+      setViewMode('comparison');
+    }
+    const handlePopState = () => {
+      if (window.location.pathname === '/comparison' || window.location.hash === '#comparison') {
+        setViewMode('comparison');
+      } else {
+        setViewMode('editor');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleSetViewMode = (mode: 'editor' | 'comparison') => {
+    setViewMode(mode);
+    if (mode === 'comparison') {
+      window.history.pushState(null, '', '/comparison');
+    } else {
+      window.history.pushState(null, '', '/');
+    }
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   
   const [exportProgress, setExportProgress] = useState<number | null>(null);
@@ -456,7 +489,6 @@ const App: React.FC = () => {
           progress={exportProgress || 0}
       />
 
-      <UserManagementModal isOpen={isUserManagementOpen} onClose={() => setIsUserManagementOpen(false)} hotelsList={hotelsList} />
       <TokenStatsModal isOpen={isTokenStatsOpen} onClose={() => setIsTokenStatsOpen(false)} />
 
       <header className="h-20 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-30 shrink-0 shadow-sm relative">
@@ -524,6 +556,35 @@ const App: React.FC = () => {
              )}
 
              {/* TOKEN AND STATS TOGGLE */}
+             <div className="hidden sm:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-sm">
+                <button
+                  onClick={() => handleSetViewMode('editor')}
+                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                    viewMode === 'editor' 
+                      ? 'bg-white text-indigo-700 shadow-sm' 
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Layout size={14} />
+                  <span>Ağaç Düzenleyici</span>
+                </button>
+                <button
+                  onClick={() => handleSetViewMode('comparison')}
+                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                    viewMode === 'comparison' 
+                      ? 'bg-white text-indigo-700 shadow-sm' 
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Scale size={14} />
+                  <span>Tesis Karşılaştırma</span>
+                  <span className="bg-indigo-100 text-indigo-800 text-[10px] font-black px-1.5 py-0.2 rounded-full ml-0.5">
+                    {hotelsList.length}
+                  </span>
+                </button>
+             </div>
+
+             {/* TOKEN AND STATS TOGGLE */}
              <div className="flex items-center bg-indigo-50 rounded-lg border border-indigo-100 divide-x divide-indigo-200 shadow-sm">
                 <button 
                    onClick={() => setIsTokenStatsOpen(true)}
@@ -537,9 +598,9 @@ const App: React.FC = () => {
                    </div>
                 </button>
                 <button 
-                   onClick={() => setIsSettingsModalOpen(true)}
+                   onClick={() => openSettings('general')}
                    className="p-2 hover:bg-indigo-100 text-indigo-700 rounded-r-lg transition-colors"
-                   title="Model Değiştir"
+                   title="Ayarlar & Model Değiştir"
                 >
                    <Settings size={16} />
                 </button>
@@ -575,16 +636,6 @@ const App: React.FC = () => {
 
         <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center">
-              {userRole === 'superadmin' && (
-                <button 
-                  onClick={() => setIsUserManagementOpen(true)} 
-                  className="flex items-center px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200 mr-2"
-                  title="Kullanıcı Rol ve Yetki Yönetimi"
-                >
-                  <Users size={14} className="mr-1.5 text-slate-500" />
-                  Kullanıcılar
-                </button>
-              )}
               <button onClick={() => setIsTemplateManagerOpen(true)} className="flex items-center px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-100 rounded hover:bg-indigo-200 mr-2"><LayoutTemplate size={14} className="mr-1.5" /> Şablonlar</button>
               <button onClick={() => checkGeminiPermissionAndRun(() => setIsHealthModalOpen(true))} className="flex items-center px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 rounded hover:bg-emerald-200 mr-2"><Activity size={14} className="mr-1.5" /> Sağlık Raporu</button>
               {canEdit && (
@@ -627,9 +678,6 @@ const App: React.FC = () => {
                <button onClick={() => setMobileToolsOpen(!mobileToolsOpen)} className="p-2 text-slate-600"><Wrench size={20} /></button>
                {mobileToolsOpen && (
                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-2">
-                    {userRole === 'superadmin' && (
-                      <button onClick={() => { setIsUserManagementOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-slate-700 hover:bg-slate-50 font-medium"><Users size={16} /> Kullanıcılar</button>
-                    )}
                     <button onClick={() => { setIsTemplateManagerOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><LayoutTemplate size={16} /> Şablonlar</button>
                     {canEdit && <button onClick={() => { checkGeminiPermissionAndRun(() => setIsArchitectOpen(true)); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>}
                     {canEdit && <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>}
@@ -640,55 +688,69 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex-1 grid grid-cols-12 overflow-hidden relative">
-        <div className={`absolute inset-0 z-20 bg-slate-50 border-r border-slate-200 transition-transform duration-300 lg:static lg:translate-x-0 lg:col-span-2 lg:block lg:h-full lg:min-h-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-            <div className="h-full flex flex-col">
-                <div className="p-3 border-b border-slate-100 bg-white sticky top-0 z-10">
-                   <div className="relative">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Ara..." className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"/>
-                      {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X size={12} /></button>}
-                   </div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-2 min-h-0 pb-20 lg:min-h-0">
-                    <TreeViewNode 
-                        node={filteredData} 
-                        selectedId={selectedNodeId}
-                        onSelect={(id) => { setSelectedNodeId(id); setMobileMenuOpen(false); }}
-                        onAddChild={(parentId) => addChild(parentId)} 
-                        forceExpand={!!searchQuery}
-                        onDragStart={handleDragStart}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                        canEdit={canEdit}
-                    />
-                </div>
-            </div>
+      {viewMode === 'comparison' ? (
+        <div className="flex-1 overflow-hidden relative">
+          <ComparisonView onSwitchToEditor={(hId) => {
+            if (hId) handleSwitchHotel(hId);
+            handleSetViewMode('editor');
+          }} />
         </div>
+      ) : (
+        <div className="flex-1 grid grid-cols-12 overflow-hidden relative">
+          <div className={`absolute inset-0 z-20 bg-slate-50 border-r border-slate-200 transition-transform duration-300 lg:static lg:translate-x-0 lg:col-span-2 lg:block lg:h-full lg:min-h-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+              <div className="h-full flex flex-col">
+                  <div className="p-3 border-b border-slate-100 bg-white sticky top-0 z-10">
+                     <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Ara..." className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                        {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X size={12} /></button>}
+                     </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 min-h-0 pb-20 lg:min-h-0">
+                      <TreeViewNode 
+                          node={filteredData} 
+                          selectedId={selectedNodeId}
+                          onSelect={(id) => { setSelectedNodeId(id); setMobileMenuOpen(false); }}
+                          onAddChild={(parentId) => addChild(parentId)} 
+                          forceExpand={!!searchQuery}
+                          onDragStart={handleDragStart}
+                          onDragOver={handleDragOver}
+                          onDrop={handleDrop}
+                          canEdit={canEdit}
+                      />
+                  </div>
+              </div>
+          </div>
 
-        <div className="col-span-12 lg:col-span-7 bg-white h-full relative z-0 overflow-hidden min-h-0">
-             <NodeEditor 
-                node={selectedNode} 
-                root={hotelData}
-                onUpdate={updateNode} 
-                onDelete={handleDeleteNodeWrapper}
-                onNodeSelect={setSelectedNodeId}
-                canEdit={canEdit}
-                isAiAllowed={canUseGemini}
-             />
+          <div className="col-span-12 lg:col-span-7 bg-white h-full relative z-0 overflow-hidden min-h-0">
+               <NodeEditor 
+                  node={selectedNode} 
+                  root={hotelData}
+                  onUpdate={updateNode} 
+                  onDelete={handleDeleteNodeWrapper}
+                  onNodeSelect={setSelectedNodeId}
+                  canEdit={canEdit}
+                  isAiAllowed={canUseGemini}
+               />
+          </div>
+
+          <div className={`absolute inset-0 z-20 bg-white transition-transform duration-300 lg:static lg:translate-x-0 lg:col-span-3 lg:block lg:h-full lg:min-h-0 ${mobileChatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+               <ChatBot 
+                  key={hotelId || 'default'} 
+                  data={hotelData} 
+                  onOpenPersonaModal={handleOpenPersonaModal}
+                  isAiAllowed={canUseGemini}
+               />
+          </div>
         </div>
+      )}
 
-        <div className={`absolute inset-0 z-20 bg-white transition-transform duration-300 lg:static lg:translate-x-0 lg:col-span-3 lg:block lg:h-full lg:min-h-0 ${mobileChatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-             <ChatBot 
-                key={hotelId || 'default'} 
-                data={hotelData} 
-                onOpenPersonaModal={handleOpenPersonaModal}
-                isAiAllowed={canUseGemini}
-             />
-        </div>
-      </div>
-
-      <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
+      <SettingsModal 
+        isOpen={isSettingsModalOpen} 
+        onClose={() => setIsSettingsModalOpen(false)} 
+        hotelsList={hotelsList}
+        initialTab={settingsInitialTab}
+      />
 
       <footer className="bg-slate-50 border-t border-slate-200 text-xs text-slate-600 relative z-30 shrink-0">
         {/* Footer content same as before */}
