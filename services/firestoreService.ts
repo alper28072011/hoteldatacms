@@ -659,51 +659,141 @@ export const getTokenUsageLogs = async () => {
 };
 
 // --- USER & ROLE MANAGEMENT (RBAC) ---
-export const getUserRole = async (email: string): Promise<{ role: 'superadmin' | 'editor'; allowedHotels: string[] }> => {
-  if (!email) return { role: 'editor', allowedHotels: [] };
-  if (email.toLowerCase() === 'alper28072011@gmail.com') {
-    return { role: 'superadmin', allowedHotels: [] };
-  }
+export interface UserProfileData {
+  displayName?: string;
+  title?: string;
+  phone?: string;
+  department?: string;
+  notes?: string;
+}
+
+export interface UserRoleResult {
+  role: 'superadmin' | 'editor';
+  allowedHotels: string[];
+  isAuthorized: boolean;
+  profile?: UserProfileData;
+}
+
+export const getUserRole = async (email: string): Promise<UserRoleResult> => {
+  if (!email) return { role: 'editor', allowedHotels: [], isAuthorized: false };
+  const cleanEmail = email.toLowerCase().trim();
+  
   try {
-    const docRef = doc(db, 'user_roles', email.toLowerCase().trim());
+    const docRef = doc(db, 'user_roles', cleanEmail);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
+      const profile: UserProfileData = {
+        displayName: data.displayName || '',
+        title: data.title || '',
+        phone: data.phone || '',
+        department: data.department || '',
+        notes: data.notes || '',
+      };
+      if (cleanEmail === 'alper28072011@gmail.com') {
+        return { role: 'superadmin', allowedHotels: [], isAuthorized: true, profile };
+      }
       return {
         role: data.role || 'editor',
-        allowedHotels: data.allowedHotels || []
+        allowedHotels: data.allowedHotels || [],
+        isAuthorized: true,
+        profile
       };
     }
   } catch (error) {
     console.error("getUserRole error", error);
   }
-  return { role: 'editor', allowedHotels: [] };
+
+  if (cleanEmail === 'alper28072011@gmail.com') {
+    return { 
+      role: 'superadmin', 
+      allowedHotels: [], 
+      isAuthorized: true,
+      profile: {
+        displayName: 'Alper',
+        title: 'Super Admin',
+      }
+    };
+  }
+
+  return { role: 'editor', allowedHotels: [], isAuthorized: false };
 };
 
-export const getAllUserRoles = async (): Promise<{ email: string; role: 'superadmin' | 'editor'; allowedHotels: string[] }[]> => {
+export const checkUserAuthorization = async (email: string): Promise<UserRoleResult> => {
+  return getUserRole(email);
+};
+
+export const getAllUserRoles = async (): Promise<{ 
+  email: string; 
+  role: 'superadmin' | 'editor'; 
+  allowedHotels: string[];
+  displayName?: string;
+  title?: string;
+  phone?: string;
+}[]> => {
   try {
     const snapshot = await getDocs(collection(db, 'user_roles'));
-    return snapshot.docs.map(doc => ({
-      email: doc.id,
-      role: doc.data().role || 'editor',
-      allowedHotels: doc.data().allowedHotels || []
-    }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        email: doc.id,
+        role: data.role || 'editor',
+        allowedHotels: data.allowedHotels || [],
+        displayName: data.displayName || '',
+        title: data.title || '',
+        phone: data.phone || ''
+      };
+    });
   } catch (error) {
     console.error("getAllUserRoles error", error);
     return [];
   }
 };
 
-export const saveUserRole = async (email: string, role: 'superadmin' | 'editor', allowedHotels: string[]) => {
+export const saveUserRole = async (
+  email: string, 
+  role: 'superadmin' | 'editor', 
+  allowedHotels: string[],
+  extra?: { displayName?: string; title?: string; phone?: string }
+) => {
   try {
     const docRef = doc(db, 'user_roles', email.toLowerCase().trim());
-    await setDoc(docRef, {
+    const payload: any = {
       role,
       allowedHotels,
       updatedAt: new Date()
-    }, { merge: true });
+    };
+    if (extra?.displayName !== undefined) payload.displayName = extra.displayName;
+    if (extra?.title !== undefined) payload.title = extra.title;
+    if (extra?.phone !== undefined) payload.phone = extra.phone;
+
+    await setDoc(docRef, payload, { merge: true });
   } catch (error) {
     console.error("saveUserRole error", error);
+    throw error;
+  }
+};
+
+export const updateUserProfile = async (email: string, profile: UserProfileData) => {
+  const cleanEmail = email.toLowerCase().trim();
+  try {
+    const docRef = doc(db, 'user_roles', cleanEmail);
+    await setDoc(docRef, {
+      ...profile,
+      updatedAt: new Date()
+    }, { merge: true });
+  } catch (error) {
+    console.error("updateUserProfile error", error);
+    throw error;
+  }
+};
+
+export const deleteUserRole = async (email: string) => {
+  try {
+    const docRef = doc(db, 'user_roles', email.toLowerCase().trim());
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error("deleteUserRole error", error);
     throw error;
   }
 };

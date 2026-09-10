@@ -1,5 +1,6 @@
 {
   "name": "Hotel Data CMS",
   "description": "A hierarchical, recursive content management system for structuring complex hotel data, powered by Gemini AI for content analysis and optimization.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -4,7 +4,7 @@ import { getAuth } from 'firebase/auth';
 
 // LÜTFEN BU ALANI KENDİ FIREBASE PROJE BİLGİLERİNİZLE GÜNCELLEYİN
 // PLEASE UPDATE THIS AREA WITH YOUR FIREBASE PROJECT CONFIGURATION
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyAD8CTZcRBu9EhD5FhPbGyqv9zYKL8Y0Xc",
   authDomain: "hotel-data-cms.firebaseapp.com",
   projectId: "hotel-data-cms",

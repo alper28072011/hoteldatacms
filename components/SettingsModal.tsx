@@ -1,5 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { X, Cpu, Database, Save, RotateCcw, CalendarClock, Key, Eye, EyeOff, ShieldCheck, Layers, Settings, Loader2, Users, Shield } from 'lucide-react';
+import { 
+  X, 
+  Cpu, 
+  Database, 
+  Save, 
+  RotateCcw, 
+  CalendarClock, 
+  Key, 
+  Eye, 
+  EyeOff, 
+  ShieldCheck, 
+  Layers, 
+  Settings, 
+  Loader2, 
+  Users, 
+  Shield, 
+  Trash2, 
+  MailCheck,
+  KeyRound,
+  Sparkles,
+  Copy,
+  Check,
+  Send,
+  Lock,
+  Share2
+} from 'lucide-react';
 import { 
   availableModels, 
   currentModel, 
@@ -10,7 +35,12 @@ import {
   activeConfig,
   updateActiveGeminiConfig
 } from '../services/geminiService';
-import { getTokenUsageLogs, getGeminiConfig, saveGeminiConfig, getAllUserRoles, saveUserRole } from '../services/firestoreService';
+import { getTokenUsageLogs, getGeminiConfig, saveGeminiConfig, getAllUserRoles, saveUserRole, deleteUserRole } from '../services/firestoreService';
+import { 
+  adminCreateUserAccount, 
+  sendUserPasswordReset, 
+  generateRandomPassword 
+} from '../services/adminAuthService';
 import { useAuth } from '../contexts/AuthContext';
 import { GeminiConfig } from '../types';
 
@@ -66,9 +96,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [userError, setUserError] = useState<string | null>(null);
   const [userSuccess, setUserSuccess] = useState<string | null>(null);
   const [userEmailInput, setUserEmailInput] = useState('');
+  const [userPasswordInput, setUserPasswordInput] = useState('');
+  const [userShowPassword, setUserShowPassword] = useState(false);
   const [userSelectedRole, setUserSelectedRole] = useState<'superadmin' | 'editor'>('editor');
   const [userSelectedHotels, setUserSelectedHotels] = useState<string[]>([]);
   const [userEditing, setUserEditing] = useState(false);
+  const [resettingUserEmail, setResettingUserEmail] = useState<string | null>(null);
+  const [userCreatedSummary, setUserCreatedSummary] = useState<{
+    email: string;
+    password?: string;
+    role: string;
+    hotels: string[];
+  } | null>(null);
+  const [userCopiedSummary, setUserCopiedSummary] = useState(false);
 
   const fetchUsersList = async () => {
     setUsersLoading(true);
@@ -150,6 +190,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const resetUserForm = () => {
     setUserEmailInput('');
+    setUserPasswordInput('');
+    setUserShowPassword(false);
     setUserSelectedRole('editor');
     setUserSelectedHotels([]);
     setUserEditing(false);
@@ -167,11 +209,72 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleEditUserRole = (user: UserRoleItem) => {
     setUserEmailInput(user.email);
+    setUserPasswordInput('');
     setUserSelectedRole(user.role);
     setUserSelectedHotels(user.allowedHotels);
     setUserEditing(true);
+    setUserCreatedSummary(null);
     setUserError(null);
     setUserSuccess(null);
+  };
+
+  const [deletingUserEmail, setDeletingUserEmail] = useState<string | null>(null);
+
+  const handleDeleteUserRole = async (emailToDelete: string) => {
+    if (!window.confirm(`"${emailToDelete}" kullanıcısının yetkisini silmek istediğinize emin misiniz? Bu kullanıcı artık sisteme giriş yapamayacaktır.`)) {
+      return;
+    }
+    setDeletingUserEmail(emailToDelete);
+    setUserError(null);
+    setUserSuccess(null);
+    try {
+      await deleteUserRole(emailToDelete);
+      setUserSuccess(`"${emailToDelete}" kullanıcısının yetkisi kaldırıldı.`);
+      if (userEmailInput.toLowerCase().trim() === emailToDelete.toLowerCase().trim()) {
+        resetUserForm();
+      }
+      await fetchUsersList();
+    } catch (e: any) {
+      console.error(e);
+      setUserError('Kullanıcı silinirken bir hata oluştu: ' + (e.message || 'Bilinmeyen hata'));
+    } finally {
+      setDeletingUserEmail(null);
+    }
+  };
+
+  const handleSendResetToUser = async (email: string) => {
+    setResettingUserEmail(email);
+    setUserError(null);
+    setUserSuccess(null);
+    try {
+      await sendUserPasswordReset(email);
+      setUserSuccess(`"${email}" adresine şifre sıfırlama bağlantısı gönderildi.`);
+    } catch (e: any) {
+      setUserError('Şifre sıfırlama e-postası gönderilemedi: ' + (e.message || 'Bilinmeyen hata'));
+    } finally {
+      setResettingUserEmail(null);
+    }
+  };
+
+  const copyCredentialsText = () => {
+    if (!userCreatedSummary) return;
+    const loginUrl = window.location.origin;
+    const hotelText = userCreatedSummary.hotels.length > 0 
+      ? userCreatedSummary.hotels.join(', ') 
+      : 'Tüm Oteller';
+
+    const text = `🏨 Otel Veri Yönetim Sistemi Giriş Bilgileriniz:
+• Giriş Bağlantısı: ${loginUrl}
+• E-posta: ${userCreatedSummary.email}
+• Şifreniz: ${userCreatedSummary.password}
+• Sistem Rolü: ${userCreatedSummary.role}
+• Yetkili Oteller: ${hotelText}
+
+* Sisteme giriş yaptıktan sonra şifrenizi dilediğiniz zaman profil menünüzden değiştirebilirsiniz.`;
+
+    navigator.clipboard.writeText(text);
+    setUserCopiedSummary(true);
+    setTimeout(() => setUserCopiedSummary(false), 3000);
   };
 
   const handleSaveUserRole = async (e: React.FormEvent) => {
@@ -187,13 +290,44 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       return;
     }
 
+    if (!userEditing && (!userPasswordInput || userPasswordInput.length < 6)) {
+      setUserError('Lütfen yeni kullanıcı için en az 6 karakterli bir şifre giriniz veya "Şifre Üret" butonuna basınız.');
+      return;
+    }
+
     setUserSaving(true);
     setUserError(null);
     setUserSuccess(null);
+    setUserCreatedSummary(null);
 
     try {
-      await saveUserRole(emailClean, userSelectedRole, userSelectedRole === 'superadmin' ? [] : userSelectedHotels);
-      setUserSuccess(userEditing ? 'Kullanıcı yetkileri güncellendi.' : 'Yeni kullanıcı yetkileri kaydedildi.');
+      const activePassword = userPasswordInput.trim() || generateRandomPassword();
+
+      const result = await adminCreateUserAccount(
+        emailClean,
+        activePassword,
+        userSelectedRole,
+        userSelectedRole === 'superadmin' ? [] : userSelectedHotels
+      );
+
+      const hotelNames = userSelectedHotels.map(id => hotelsList.find(h => h.id === id)?.name || id);
+
+      if (userEditing) {
+        setUserSuccess(`"${emailClean}" kullanıcısının yetkileri güncellendi.`);
+      } else {
+        setUserCreatedSummary({
+          email: emailClean,
+          password: activePassword,
+          role: userSelectedRole === 'superadmin' ? 'Superadmin' : 'Ön Büro Müdürü / Editör',
+          hotels: hotelNames
+        });
+        setUserSuccess(
+          result.alreadyExistsInAuth
+            ? `"${emailClean}" yetkilendirildi. Kullanıcı hesabı sistemde mevcuttur.`
+            : `"${emailClean}" kullanıcısı ve şifresi başarıyla tanımlandı! Lütfen şifreyi kullanıcıya iletiniz.`
+        );
+      }
+
       resetUserForm();
       await fetchUsersList();
     } catch (e: any) {
@@ -423,8 +557,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Left Column: Form */}
                   <div className="p-5 md:col-span-2 overflow-y-auto space-y-4">
                     <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                      {userEditing ? 'Yetki Düzenle' : 'Yeni Kullanıcı Yetkilendir'}
+                      {userEditing ? 'Yetki Düzenle' : 'Yeni Kullanıcı & Şifre Tanımla'}
                     </h4>
+
+                    {/* Password Access Info Box */}
+                    <div className="p-3 bg-indigo-50/80 border border-indigo-200/80 rounded-xl flex items-start gap-2 text-indigo-900 text-[11px] leading-relaxed">
+                      <KeyRound size={16} className="shrink-0 mt-0.5 text-indigo-600" />
+                      <p>
+                        <span className="font-bold">Şifreli Erişim:</span> Kullanıcıların e-posta ve şifresini belirleyip kendilerine iletiniz. Kullanıcı dilediğinde şifresini kendi profilinden değiştirebilir.
+                      </p>
+                    </div>
 
                     {userError && (
                       <div className="bg-red-50 border border-red-100 text-red-700 p-3 rounded-lg text-xs font-medium">
@@ -438,6 +580,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     )}
 
+                    {/* Created Credentials Summary */}
+                    {userCreatedSummary && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-2.5 text-xs text-amber-950 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-amber-900 flex items-center gap-1.5 text-[11px]">
+                            <Share2 size={13} /> Kullanıcıya İletilecek Bilgiler
+                          </span>
+                          <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-bold">Yeni</span>
+                        </div>
+                        <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200/80 space-y-1 text-[11px]">
+                          <div><span className="text-slate-500">E-posta:</span> <strong className="font-mono">{userCreatedSummary.email}</strong></div>
+                          <div><span className="text-slate-500">Şifre:</span> <strong className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">{userCreatedSummary.password}</strong></div>
+                          <div><span className="text-slate-500">Rol:</span> <span>{userCreatedSummary.role}</span></div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={copyCredentialsText}
+                          className="w-full py-1.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          {userCopiedSummary ? <Check size={13} /> : <Copy size={13} />}
+                          {userCopiedSummary ? 'Kopyalandı!' : 'Bilgileri Kopyala'}
+                        </button>
+                      </div>
+                    )}
+
                     <form onSubmit={handleSaveUserRole} className="space-y-3.5">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">Kullanıcı E-posta</label>
@@ -446,10 +613,49 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           required
                           disabled={userEditing}
                           className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100 bg-white"
-                          placeholder="user@example.com"
+                          placeholder="onburo@otel.com"
                           value={userEmailInput}
                           onChange={(e) => setUserEmailInput(e.target.value)}
                         />
+                      </div>
+
+                      {/* Password Input */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-slate-700">
+                            {userEditing ? 'Şifre (Değiştirmek istemiyorsanız boş bırakın)' : 'İlk Giriş Şifresi'}
+                          </label>
+                          {!userEditing && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUserPasswordInput(generateRandomPassword());
+                                setUserShowPassword(true);
+                              }}
+                              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                            >
+                              <Sparkles size={11} /> Şifre Üret
+                            </button>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <input
+                            type={userShowPassword ? 'text' : 'password'}
+                            required={!userEditing}
+                            minLength={6}
+                            className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 pr-9 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"
+                            placeholder={userEditing ? 'Mevcut şifre korunur...' : 'En az 6 karakter'}
+                            value={userPasswordInput}
+                            onChange={(e) => setUserPasswordInput(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setUserShowPassword(!userShowPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            {userShowPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
                       </div>
 
                       <div>
@@ -459,7 +665,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           value={userSelectedRole}
                           onChange={(e) => setUserSelectedRole(e.target.value as 'superadmin' | 'editor')}
                         >
-                          <option value="editor">Editor (Otel Seviyesinde Kısıtlı)</option>
+                          <option value="editor">Ön Büro Müdürü / Editör (Otel Seviyesinde Kısıtlı)</option>
                           <option value="superadmin">Superadmin (Tam Yetkili)</option>
                         </select>
                       </div>
@@ -518,19 +724,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   {/* Right Column: User Permissions List */}
                   <div className="p-5 md:col-span-3 flex flex-col overflow-hidden bg-slate-50/30">
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">
-                      Kayıtlı Kullanıcı İzinleri
-                    </h4>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Kayıtlı Kullanıcı İzinleri ({userRolesList.length + 1})
+                      </h4>
+                      <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold border border-emerald-100 flex items-center gap-1">
+                        <Lock size={10} /> Şifreli Giriş
+                      </span>
+                    </div>
 
                     <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm">
                       {usersLoading ? (
                         <div className="flex flex-col items-center justify-center h-full py-12 text-slate-400 gap-2">
                           <Loader2 size={24} className="animate-spin text-indigo-500" />
                           <span className="text-xs">Kullanıcılar yükleniyor...</span>
-                        </div>
-                      ) : userRolesList.length === 0 ? (
-                        <div className="text-center py-12 text-slate-400 text-xs font-medium">
-                          Veritabanında kayıtlı özel yetkilendirme bulunmuyor.
                         </div>
                       ) : (
                         <div className="divide-y divide-slate-100">
@@ -558,7 +765,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                       ? 'bg-indigo-100 text-indigo-800' 
                                       : 'bg-emerald-100 text-emerald-800'
                                   }`}>
-                                    <Shield size={10} className="mr-1" /> {u.role}
+                                    <Shield size={10} className="mr-1" /> {u.role === 'editor' ? 'Ön Büro / Editör' : u.role}
                                   </span>
                                 </div>
                                 {u.role === 'editor' && (
@@ -572,12 +779,40 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                   </p>
                                 )}
                               </div>
-                              <button
-                                onClick={() => handleEditUserRole(u)}
-                                className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline font-bold shrink-0"
-                              >
-                                Düzenle
-                              </button>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleSendResetToUser(u.email)}
+                                  disabled={resettingUserEmail === u.email}
+                                  className="text-[10px] text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded font-semibold flex items-center gap-1 transition-colors"
+                                  title="Şifre sıfırlama bağlantısı gönder"
+                                >
+                                  {resettingUserEmail === u.email ? (
+                                    <Loader2 size={10} className="animate-spin" />
+                                  ) : (
+                                    <Send size={10} />
+                                  )}
+                                  Sıfırla
+                                </button>
+                                <button
+                                  onClick={() => handleEditUserRole(u)}
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline font-bold"
+                                >
+                                  Düzenle
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUserRole(u.email)}
+                                  disabled={deletingUserEmail === u.email}
+                                  className="text-xs text-red-500 hover:text-red-700 hover:underline font-bold flex items-center gap-0.5"
+                                  title="Yetkiyi Kaldır"
+                                >
+                                  {deletingUserEmail === u.email ? (
+                                    <Loader2 size={11} className="animate-spin" />
+                                  ) : (
+                                    <Trash2 size={11} />
+                                  )}
+                                  Sil
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>

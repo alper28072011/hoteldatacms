@@ -23,13 +23,15 @@ import { useHotel } from './contexts/HotelContext';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import UserManagementModal from './components/UserManagementModal';
+import ChangePasswordModal from './components/ChangePasswordModal';
+import AccountModal from './components/AccountModal';
 import TokenStatsModal from './components/TokenStatsModal';
 import ComparisonView from './components/ComparisonView';
 import { 
   Download, Upload, Sparkles, Layout, Menu, MessageSquare, X, Loader2, 
   Wifi, WifiOff, CircleCheck, CircleAlert, Building2, CirclePlus, 
   ChevronDown, LayoutTemplate, Activity, Database, Clock, Save, 
-  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages, Settings, Cpu, LogOut, Users
+  FileJson, FileSpreadsheet, FileText, Braces, Scale, ChevronUp, TriangleAlert, Search, Wrench, Languages, Settings, Cpu, LogOut, Users, KeyRound, User as UserIcon
 } from 'lucide-react';
 import { ExportConfig } from './types';
 import { generatePDF, filterHotelData } from './utils/treeUtils';
@@ -66,8 +68,10 @@ const App: React.FC = () => {
     setDisplayLanguage
   } = useHotel();
 
-  const { currentUser, userRole, allowedHotels, loading: authLoading, logout } = useAuth();
+  const { currentUser, userRole, allowedHotels, userProfile, loading: authLoading, logout } = useAuth();
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isTokenStatsOpen, setIsTokenStatsOpen] = useState(false);
 
   const canEdit = useMemo(() => {
@@ -656,12 +660,44 @@ const App: React.FC = () => {
               <button onClick={() => setIsExportModalOpen(true)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded" title="Dışa Aktar"><Download size={18} /></button>
             </div>
 
-            {/* USER PROFILE INFO */}
+            {/* USER PROFILE & AUTH CONTROLS */}
             {currentUser && (
-              <div className="flex items-center gap-2 pl-3 border-l border-slate-200 ml-1">
-                <span className="text-xs text-slate-500 font-semibold hidden xl:inline truncate max-w-[150px]" title={currentUser.email || ''}>
-                  {currentUser.email}
-                </span>
+              <div className="flex items-center gap-1.5 pl-3 border-l border-slate-200 ml-1">
+                {/* Unified Account & Profile Button */}
+                <button 
+                  onClick={() => setIsAccountModalOpen(true)}
+                  className="flex items-center gap-2 p-1.5 pl-2 pr-3 rounded-xl hover:bg-slate-100 border border-slate-200/80 bg-white hover:border-slate-300 transition-all shadow-xs group text-left"
+                  title="Hesabım & Profil Yönetimi (Şifre, Profil, Yetkiler)"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-indigo-700 text-white font-black text-xs flex items-center justify-center shadow-xs">
+                    {userProfile?.displayName ? userProfile.displayName.charAt(0).toUpperCase() : currentUser.email?.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="hidden sm:flex flex-col">
+                    <span className="text-xs text-slate-800 font-bold leading-tight group-hover:text-indigo-600 transition-colors truncate max-w-[130px]">
+                      {userProfile?.displayName || currentUser.email?.split('@')[0]}
+                    </span>
+                    <span className={`text-[10px] font-bold leading-none ${
+                      userRole === 'superadmin' ? 'text-indigo-600' : 'text-emerald-600'
+                    }`}>
+                      {userRole === 'superadmin' ? 'Superadmin' : (userProfile?.title || 'Ön Büro')}
+                    </span>
+                  </div>
+                  <span className="text-slate-400 group-hover:text-indigo-600 ml-0.5">
+                    <UserIcon size={14} />
+                  </span>
+                </button>
+
+                {userRole === 'superadmin' && (
+                  <button 
+                    onClick={() => setIsUserManagementOpen(true)}
+                    className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                    title="Kullanıcı & Şifre Yönetimi"
+                  >
+                    <Users size={16} />
+                    <span className="hidden lg:inline">Kullanıcılar</span>
+                  </button>
+                )}
+
                 <button 
                   onClick={logout} 
                   className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -678,9 +714,14 @@ const App: React.FC = () => {
                <button onClick={() => setMobileToolsOpen(!mobileToolsOpen)} className="p-2 text-slate-600"><Wrench size={20} /></button>
                {mobileToolsOpen && (
                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-2">
+                    <button onClick={() => { setIsAccountModalOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><UserIcon size={16} /> Hesabım & Profil</button>
+                    {userRole === 'superadmin' && (
+                      <button onClick={() => { setIsUserManagementOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-slate-700 hover:bg-slate-50 font-medium"><Users size={16} /> Kullanıcı Yönetimi</button>
+                    )}
                     <button onClick={() => { setIsTemplateManagerOpen(true); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-indigo-600 hover:bg-indigo-50 font-medium"><LayoutTemplate size={16} /> Şablonlar</button>
                     {canEdit && <button onClick={() => { checkGeminiPermissionAndRun(() => setIsArchitectOpen(true)); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-violet-600 hover:bg-violet-50 font-medium"><Sparkles size={16} /> AI Mimar</button>}
                     {canEdit && <button onClick={handleManualSave} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-blue-600 hover:bg-blue-50 font-medium"><Save size={16} /> Kaydet</button>}
+                    <button onClick={() => { logout(); setMobileToolsOpen(false); }} className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-red-600 hover:bg-red-50 font-medium"><LogOut size={16} /> Çıkış Yap</button>
                  </div>
                )}
             </div>
@@ -750,6 +791,23 @@ const App: React.FC = () => {
         onClose={() => setIsSettingsModalOpen(false)} 
         hotelsList={hotelsList}
         initialTab={settingsInitialTab}
+      />
+
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        hotelsList={hotelsList}
+      />
+
+      <UserManagementModal
+        isOpen={isUserManagementOpen}
+        onClose={() => setIsUserManagementOpen(false)}
+        hotelsList={hotelsList}
+      />
+
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
       />
 
       <footer className="bg-slate-50 border-t border-slate-200 text-xs text-slate-600 relative z-30 shrink-0">

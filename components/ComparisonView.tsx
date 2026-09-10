@@ -40,6 +40,7 @@ import {
   Check, 
   ChevronRight, 
   ChevronDown, 
+  ChevronUp, 
   Globe, 
   Layers, 
   Zap, 
@@ -119,6 +120,7 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
   const [searchQuery, setSearchQuery] = useState('');
   const [diffOnly, setDiffOnly] = useState(false);
   const [benchmarkHotelId, setBenchmarkHotelId] = useState<string>('');
+  const [isFilterCollapsed, setIsFilterCollapsed] = useState(false);
   
   // Expanded rows in matrix
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -1044,54 +1046,71 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
       </div>
 
       {/* FILTER & HOTEL SELECTION BAR */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
             <Building2 size={16} className="text-slate-400" />
-            <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Kıyaslanacak Tesisler ({selectedHotelIds.length}/{hotelsList.length}):</span>
+            <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+              Kıyaslanacak Tesisler ({selectedHotelIds.length}/{hotelsList.length}):
+            </span>
           </div>
 
-          {/* Benchmark Hotel Dropdown */}
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-            <span>Referans Tesis (Benchmark):</span>
-            <select
-              value={benchmarkHotelId}
-              onChange={(e) => setBenchmarkHotelId(e.target.value)}
-              className="bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {hotelsList.map(h => (
-                <option key={h.id} value={h.id}>{h.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Hotel Checkbox Pills */}
-        <div className="flex flex-wrap items-center gap-2">
-          {hotelsList.map(h => {
-            const isSelected = selectedHotelIds.includes(h.id);
-            const isBenchmark = h.id === benchmarkHotelId;
-
-            return (
-              <button
-                key={h.id}
-                onClick={() => handleToggleHotelSelection(h.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
-                  isSelected 
-                    ? isBenchmark 
-                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm' 
-                      : 'bg-indigo-50 text-indigo-900 border-indigo-200'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
-                }`}
+          <div className="flex items-center gap-3">
+            {/* Benchmark Hotel Dropdown */}
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+              <span className="hidden sm:inline">Referans Tesis (Benchmark):</span>
+              <span className="sm:hidden">Ref:</span>
+              <select
+                value={benchmarkHotelId}
+                onChange={(e) => setBenchmarkHotelId(e.target.value)}
+                className="bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <CheckSquare size={13} className={isSelected ? (isBenchmark ? 'text-amber-300' : 'text-indigo-600') : 'text-slate-300'} />
-                <span>{h.name}</span>
-                {isBenchmark && <span className="bg-amber-400 text-slate-950 text-[9px] font-black px-1 rounded-sm">BENCHMARK</span>}
-              </button>
-            );
-          })}
+                {hotelsList.map(h => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter Toggle Button to give more screen height to the table */}
+            <button
+              onClick={() => setIsFilterCollapsed(!isFilterCollapsed)}
+              className="text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 font-bold transition-colors flex items-center gap-1 cursor-pointer"
+              title={isFilterCollapsed ? 'Tesis seçim kutularını göster' : 'Tabloya daha fazla yer açmak için filtreleri daralt'}
+            >
+              {isFilterCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              <span className="hidden sm:inline">{isFilterCollapsed ? 'Tesisleri Göster' : 'Filtreleri Daralt'}</span>
+            </button>
+          </div>
         </div>
+
+        {/* Hotel Checkbox Pills - Collapsible for maximum table space */}
+        {!isFilterCollapsed && (
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            {hotelsList.map(h => {
+              const isSelected = selectedHotelIds.includes(h.id);
+              const isBenchmark = h.id === benchmarkHotelId;
+
+              return (
+                <button
+                  key={h.id}
+                  onClick={() => handleToggleHotelSelection(h.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                    isSelected 
+                      ? isBenchmark 
+                        ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm' 
+                        : 'bg-indigo-50 text-indigo-900 border-indigo-200'
+                      : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <CheckSquare size={13} className={isSelected ? (isBenchmark ? 'text-amber-300' : 'text-indigo-600') : 'text-slate-300'} />
+                  <span>{h.name}</span>
+                  {isBenchmark && <span className="bg-amber-400 text-slate-950 text-[9px] font-black px-1 rounded-sm">BENCHMARK</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Search & Filters */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
@@ -1126,7 +1145,7 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
               <button
                 onClick={handleAlignCategoryOrders}
                 disabled={!!savingHotelId}
-                className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors flex items-center gap-1.5 border border-indigo-200"
+                className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors flex items-center gap-1.5 border border-indigo-200 cursor-pointer"
               >
                 <ArrowUpDown size={13} />
                 Sıralamayı Eşitle
@@ -1144,26 +1163,80 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
         {activeTab === 'matrix' && (
           <div className="space-y-4">
             
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+              {/* Scrollable Matrix Table Container with Sticky Column & Row Headers */}
+              <div className={`overflow-auto relative focus:outline-none ${
+                isFilterCollapsed 
+                  ? 'max-h-[calc(100vh-210px)] min-h-[500px]' 
+                  : 'max-h-[calc(100vh-310px)] sm:max-h-[calc(100vh-290px)] min-h-[440px]'
+              }`}>
+                <table className="w-full text-left border-separate border-spacing-0">
                   
-                  {/* Header Row */}
-                  <thead>
-                    <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-extrabold text-slate-700 uppercase tracking-wider">
-                      <th className="p-4 min-w-[280px] sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
-                        Kategori / Yapı Ögesi
+                  {/* Header Row - STICKY TOP */}
+                  <thead className="sticky top-0 z-30 shadow-[0_3px_6px_rgba(0,0,0,0.04)]">
+                    <tr className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                      
+                      {/* Top-Left Corner Cell: Sticky Top & Left */}
+                      <th className="p-3.5 min-w-[280px] sticky top-0 left-0 z-40 bg-slate-100/95 backdrop-blur-xs border-r border-b-2 border-slate-300 shadow-[2px_2px_5px_rgba(0,0,0,0.05)] text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">
+                            Kategori / Yapı Ögesi
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
+                            {categoryMatrix.length} Kategori
+                          </span>
+                        </div>
                       </th>
+
+                      {/* Hotel Column Headers: Sticky Top */}
                       {selectedHotelIds.map(hId => {
                         const hInfo = hotelsList.find(h => h.id === hId);
                         const isBenchmark = hId === benchmarkHotelId;
+                        const hotelRoot = hotelsData[hId];
+                        const totalCategories = hotelRoot?.children?.length || 0;
+
                         return (
-                          <th key={hId} className={`p-4 min-w-[210px] border-r border-slate-200 text-center ${isBenchmark ? 'bg-indigo-50/50 text-indigo-900' : ''}`}>
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="font-bold text-xs truncate max-w-[180px]">{hInfo?.name || hId}</span>
-                              {isBenchmark && (
-                                <span className="text-[9px] text-indigo-700 font-extrabold uppercase tracking-tight bg-indigo-100 px-1.5 rounded">Referans Tesis</span>
-                              )}
+                          <th 
+                            key={hId} 
+                            className={`p-3 min-w-[210px] sticky top-0 z-30 border-r border-b-2 border-slate-300 text-center transition-colors shadow-[0_2px_4px_rgba(0,0,0,0.02)] ${
+                              isBenchmark 
+                                ? 'bg-indigo-100/95 text-indigo-950 border-b-indigo-400 font-black' 
+                                : 'bg-slate-100/95 text-slate-800'
+                            }`}
+                          >
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="flex items-center justify-center gap-1.5 w-full">
+                                <Building2 size={13} className={isBenchmark ? 'text-indigo-600 shrink-0' : 'text-slate-400 shrink-0'} />
+                                <span 
+                                  className="font-extrabold text-xs truncate max-w-[170px] text-slate-900" 
+                                  title={hInfo?.name || hId}
+                                >
+                                  {hInfo?.name || hId}
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                                {isBenchmark && (
+                                  <span className="text-[9px] text-indigo-700 font-extrabold uppercase tracking-tight bg-indigo-200/80 border border-indigo-300 px-1.5 py-0.2 rounded">
+                                    Referans Tesis
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-500 font-medium bg-white/90 px-1.5 py-0.2 rounded border border-slate-200/80">
+                                  {totalCategories} Kategori
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onSwitchToEditor(hId);
+                                  }}
+                                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-0.5 ml-0.5 cursor-pointer"
+                                  title={`${hInfo?.name || hId} düzenleme moduna geç`}
+                                >
+                                  <span>Düzenle</span>
+                                  <ArrowRight size={10} />
+                                </button>
+                              </div>
                             </div>
                           </th>
                         );
@@ -1172,10 +1245,10 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
                   </thead>
 
                   {/* Body Rows */}
-                  <tbody className="divide-y divide-slate-200 text-xs font-medium">
+                  <tbody className="text-xs font-medium bg-white">
                     {categoryMatrix.length === 0 ? (
                       <tr>
-                        <td colSpan={selectedHotelIds.length + 1} className="p-12 text-center text-slate-400 font-semibold">
+                        <td colSpan={selectedHotelIds.length + 1} className="p-12 text-center text-slate-400 font-semibold border-b border-slate-200">
                           Arama kriterlerine uygun kategori bulunamadı.
                         </td>
                       </tr>
@@ -1190,13 +1263,13 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
                             <tr className="hover:bg-slate-50/80 transition-colors group">
                               
                               {/* Left Column: Category Name & Actions */}
-                              <td className="p-4 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                              <td className="p-3.5 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-b border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 min-w-0">
                                     {hasSubRows ? (
                                       <button
                                         onClick={() => setExpandedRows(prev => ({ ...prev, [row.key]: !prev[row.key] }))}
-                                        className="p-1 hover:bg-slate-200 text-slate-500 rounded transition-colors"
+                                        className="p-1 hover:bg-slate-200 text-slate-500 rounded transition-colors cursor-pointer"
                                       >
                                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                       </button>
@@ -1225,7 +1298,7 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
                                         const validNode = (Object.values(row.presentInHotels) as (HotelNode | null)[]).find((n): n is HotelNode => n !== null);
                                         if (validNode) handlePropagateCategoryToAllHotels(validNode);
                                       }}
-                                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 shrink-0 cursor-pointer"
                                       title="Bu kategoriyi tüm eksik otellere kopyala"
                                     >
                                       <Copy size={13} />
@@ -1241,7 +1314,7 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
                                 const childCount = node?.children?.length || 0;
 
                                 return (
-                                  <td key={hId} className="p-3 border-r border-slate-200 text-center align-middle">
+                                  <td key={hId} className="p-2.5 border-r border-b border-slate-200 text-center align-middle bg-white group-hover:bg-slate-50/50">
                                     {isPresent ? (
                                       <button
                                         onClick={() => handleOpenNodeModal(hId, node)}
@@ -1280,7 +1353,7 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
                             {/* Sub-rows (Expanded) */}
                             {isExpanded && row.subRows?.map(subRow => (
                               <tr key={subRow.key} className="bg-slate-50/50 hover:bg-slate-100/60 transition-colors text-xs">
-                                <td className="py-2.5 pl-10 pr-4 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">
+                                <td className="py-2 pl-10 pr-4 sticky left-0 bg-slate-50 group-hover:bg-slate-100/80 z-10 border-r border-b border-slate-200">
                                   <div className="font-medium text-slate-700 truncate flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-slate-300" />
                                     <span>{subRow.trName}</span>
@@ -1293,18 +1366,18 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({ onSwitchToEditor
                                   const isSubPresent = !!subNode;
 
                                   return (
-                                    <td key={hId} className="py-2 px-3 border-r border-slate-200 text-center">
+                                    <td key={hId} className="py-2 px-3 border-r border-b border-slate-200 text-center bg-slate-50/40">
                                       {isSubPresent ? (
                                         <button
                                           onClick={() => handleOpenNodeModal(hId, subNode, row.key)}
-                                          className="inline-flex items-center gap-1 text-emerald-700 hover:text-indigo-700 font-bold text-[11px] hover:underline bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200"
+                                          className="inline-flex items-center gap-1 text-emerald-700 hover:text-indigo-700 font-bold text-[11px] hover:underline bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer"
                                         >
                                           <Check size={12} /> Var (Düzenle)
                                         </button>
                                       ) : (
                                         <button
                                           onClick={() => handleOpenTransferModal(hId, subRow.idSlug, subRow.trName, subRow.enName, true, row.key)}
-                                          className="text-red-500 hover:text-indigo-600 font-bold text-[11px] bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded border border-red-200 transition-colors"
+                                          className="text-red-500 hover:text-indigo-600 font-bold text-[11px] bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded border border-red-200 transition-colors cursor-pointer"
                                         >
                                           Yok (+ Ekle)
                                         </button>
