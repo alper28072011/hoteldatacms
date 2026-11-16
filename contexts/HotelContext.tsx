@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { HotelNode, AIPersona, NodeTemplate } from '../types';
+import { useAuth } from './AuthContext';
 import { getInitialData, updateNodeInTree, addChildToNode, deleteNodeFromTree, generateId, moveNode as moveNodeInTree, findNodeById, getSmartDefaultChildType, checkIdExists, duplicateNodeInTree } from '../utils/treeUtils';
 import { 
   updateHotelData, 
@@ -107,14 +108,16 @@ export const HotelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     loadSubCollections();
   }, [hotelId]);
 
-  // Load Global Templates on Mount
+  // Load Global Templates once signed in (Firestore rules deny anonymous reads)
+  const { currentUser } = useAuth();
   useEffect(() => {
+      if (!currentUser) return;
       const loadGlobalTemplates = async () => {
           const tList = await getNodeTemplates();
           setNodeTemplates(tList);
       };
       loadGlobalTemplates();
-  }, []);
+  }, [currentUser?.uid]);
 
   // --- ACTIONS (Wrapped in useCallback to prevent re-renders) ---
 

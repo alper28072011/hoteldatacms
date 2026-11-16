@@ -191,7 +191,15 @@ const App: React.FC = () => {
     action();
   }, [canUseGemini]);
 
+  // Veriler yalnız oturum açıldıktan sonra yüklenir: Firestore kuralları oturumsuz
+  // okumayı reddeder; erken istek, tarayıcıdaki eski kopyaya düşüp güncel veriyi
+  // ezme riskini doğururdu.
   useEffect(() => {
+    if (!currentUser) {
+      if (!authLoading) setIsInitializing(false);
+      return;
+    }
+    setIsInitializing(true);
     const initApp = async () => {
       try {
         const list = await getHotelsList();
@@ -209,7 +217,8 @@ const App: React.FC = () => {
       }
     };
     initApp();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.uid, authLoading]);
 
   const loadHotelData = async (id: string) => {
     try {
