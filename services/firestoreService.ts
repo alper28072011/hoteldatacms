@@ -681,7 +681,18 @@ export const getUserRole = async (email: string): Promise<UserRoleResult> => {
   
   try {
     const docRef = doc(db, 'user_roles', cleanEmail);
-    const docSnap = await getDoc(docRef);
+    // Girişten hemen sonra Firestore oturum jetonunu henüz almamış olabilir;
+    // kurallar bu ilk isteği reddeder. Yetki hatasında kısa aralıklarla yeniden dene.
+    let docSnap;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        docSnap = await getDoc(docRef);
+        break;
+      } catch (err: any) {
+        if (err?.code !== 'permission-denied' || attempt >= 4) throw err;
+        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+      }
+    }
     if (docSnap.exists()) {
       const data = docSnap.data();
       const profile: UserProfileData = {
