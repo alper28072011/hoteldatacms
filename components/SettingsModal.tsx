@@ -73,8 +73,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [loadingLogs, setLoadingLogs] = useState(false);
 
   // --- Super Admin State ---
-  const [customApiKey, setCustomApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
   const [allowedRoles, setAllowedRoles] = useState<string[]>(['superadmin', 'editor']);
   const [modularModels, setModularModels] = useState({
     translation: 'gemini-2.5-flash',
@@ -157,7 +155,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
          setConfigLoading(true);
          getGeminiConfig().then(config => {
            if (config) {
-             setCustomApiKey(config.apiKey || '');
+
              setAllowedRoles(config.allowedRoles || ['superadmin', 'editor']);
              if (config.models) {
                setModularModels({
@@ -343,7 +341,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setSaveLoading(true);
       if (isSuperAdmin) {
         const newConfig: GeminiConfig = {
-          apiKey: customApiKey.trim(),
+
           allowedRoles: allowedRoles,
           models: modularModels
         };
@@ -468,25 +466,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         <Key size={16} className="text-indigo-600" />
                         Gemini Yapay Zeka API Anahtarı
                       </label>
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-3">
-                        <div className="relative rounded-md shadow-sm">
-                          <input
-                            type={showApiKey ? "text" : "password"}
-                            value={customApiKey}
-                            onChange={(e) => setCustomApiKey(e.target.value)}
-                            className="w-full pr-10 rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white text-slate-800 text-sm py-2 px-3"
-                            placeholder="AIzaSy..."
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
-                          >
-                            {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </button>
-                        </div>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-2">
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          API anahtarı artık <strong>yalnız sunucuda</strong> saklanır ve tarayıcıya hiç gönderilmez. Anahtarı değiştirmek için Hostinger'de <code>hoteldatacms-secrets.php</code> dosyasını güncelleyin.
+                        </p>
                         <p className="text-xs text-slate-500 leading-relaxed">
-                          Webde yayınlanan sürümün yapay zeka özelliklerini (otomatik tamamlama, koçluk, çeviri) kullanabilmesi için bir API anahtarı girin. Bu anahtar veritabanında <strong>güvenli bir şekilde</strong> şifreli saklanacak ve istemci tarafında doğrudan açığa çıkmayacaktır.
+                          Kaydet düğmesi, veritabanında eski sürümden kalmış bir anahtar varsa onu da siler.
                         </p>
                       </div>
                     </div>

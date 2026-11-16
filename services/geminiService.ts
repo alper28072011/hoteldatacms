@@ -2,30 +2,29 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { HotelNode, ArchitectResponse, HealthReport, DataComparisonReport, AIPersona, NodeAttribute, SimulationResponse, LocalizedOptions, GeminiConfig } from "../types";
 import { generateCleanAIJSON, generateAIText, getLocalizedValue } from "../utils/treeUtils";
 import { logTokenUsage } from "./firestoreService";
+import { auth } from "../firebaseConfig";
 
-// API anahtarını güvenli ve yedekli bir şekilde almak için
-const apiKey = (() => {
-  // 1. AI Studio'nun çalışma zamanı (runtime) enjeksiyonu
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
-      return process.env.GEMINI_API_KEY;
-    }
-  } catch (e) { /* ignore */ }
-  
-  // 2. Build zamanı (Vite) Secrets üzerinden gelen anahtar (VITE_ öneki zorunludur)
-  if ((import.meta as any).env && (import.meta as any).env.VITE_GEMINI_API_KEY) {
-    return (import.meta as any).env.VITE_GEMINI_API_KEY;
+// GÜVENLİK: Gemini API anahtarı tarayıcıda TUTULMAZ.
+// Tüm istekler sitedeki /api/gemini ara katmanına gider. Ara katman kullanıcının
+// Firebase oturum jetonunu doğrular, yetkisini kontrol eder ve gerçek anahtarı
+// sunucu tarafında ekler. Burada "apiKey" yerine gönderilen değer oturum jetonudur.
+const GEMINI_PROXY_BASE_URL =
+  (import.meta as any).env?.VITE_GEMINI_PROXY_URL || `${window.location.origin}/api/gemini`;
+
+let aiClient: GoogleGenAI | null = null;
+let aiClientToken: string | null = null;
+
+/** Geçerli oturum jetonuyla (gerekirse yenileyerek) Gemini istemcisini döndürür. */
+const getAi = async (): Promise<GoogleGenAI> => {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Gemini için oturum açmanız gerekir.");
+  const token = await user.getIdToken(); // süresi dolmak üzereyse kendiliğinden yenilenir
+  if (!aiClient || token !== aiClientToken) {
+    aiClient = new GoogleGenAI({ apiKey: token, httpOptions: { baseUrl: GEMINI_PROXY_BASE_URL } });
+    aiClientToken = token;
   }
-  
-  // 3. Geçici Fallback
-  return "AIzaSyDQcZuiQdM5WAGEW9-KeeCSCAd5QUtsGAs";
-})();
-
-// TAMAMEN STANDART BAŞLATMA:
-// Kullanıcının belirttiği gibi ek bir proxy veya base_url YAPILANDIRMASI YOKTUR.
-// Yalnızca apiKey parametresi gönderilmektedir.
-let activeApiKey = apiKey;
-export let ai = new GoogleGenAI({ apiKey: activeApiKey });
+  return aiClient;
+};
 
 // Load initial config from localStorage cache if available
 const getCachedConfig = (): GeminiConfig => {
@@ -34,6 +33,11 @@ const getCachedConfig = (): GeminiConfig => {
     if (cached) {
       const parsed = JSON.parse(cached);
       if (parsed && parsed.models) {
+        // Eski sürümlerin tarayıcıya yazdığı anahtarı temizle
+        if (parsed.apiKey) {
+          delete parsed.apiKey;
+          localStorage.setItem('gemini_custom_config', JSON.stringify(parsed));
+        }
         if (!parsed.models.coach) parsed.models.coach = parsed.models.chat || 'gemini-2.5-flash';
         if (!parsed.models.simulator) parsed.models.simulator = parsed.models.chat || 'gemini-2.5-flash';
         return parsed;
@@ -69,22 +73,11 @@ const notifyConfigChange = (config: GeminiConfig) => {
 };
 
 export const updateActiveGeminiConfig = (config: GeminiConfig) => {
-  activeConfig = config;
-  localStorage.setItem('gemini_custom_config', JSON.stringify(config));
-  
-  const resolvedKey = config.apiKey || apiKey;
-  if (resolvedKey !== activeApiKey) {
-    activeApiKey = resolvedKey;
-    ai = new GoogleGenAI({ apiKey: resolvedKey });
-  }
-  notifyConfigChange(config);
+  const { apiKey: _ignored, ...safeConfig } = config;
+  activeConfig = safeConfig;
+  localStorage.setItem('gemini_custom_config', JSON.stringify(safeConfig));
+  notifyConfigChange(safeConfig);
 };
-
-// Initialize with custom key if already cached
-if (activeConfig.apiKey) {
-  activeApiKey = activeConfig.apiKey;
-  ai = new GoogleGenAI({ apiKey: activeApiKey });
-}
 
 export const isUserAllowedGemini = (role: 'superadmin' | 'editor' | null): boolean => {
   if (!role) return false;
@@ -162,7 +155,7 @@ export interface AutoFixAction {
 
 const wrappedGenerateContent = async (req: any, category: keyof GeminiConfig['models'] = 'optimization') => {
   const modelToUse = activeConfig.models[category] || currentModel;
-  const result = await ai.models.generateContent({
+  const result = await (await getAi()).models.generateContent({
     ...req,
     model: modelToUse
   });
@@ -449,7 +442,7 @@ export const chatWithData = async (
     }
     `;
 
-    const chat = ai.chats.create({
+    const chat = (await getAi()).chats.create({
       model: activeConfig.models.simulator || activeConfig.models.chat || currentModel,
       config: { 
           systemInstruction,
@@ -795,7 +788,7 @@ export const askDataCoach = async (data: HotelNode, userQuestion: string, histor
         Sadece tavsiye ve yönlendirme yap. Kod yazma, sadece mantığı ve yapıyı anlat.
         `;
 
-        const chat = ai.chats.create({
+        const chat = (await getAi()).chats.create({
             model: activeConfig.models.coach || activeConfig.models.chat || currentModel,
             config: {
                 systemInstruction,

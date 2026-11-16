@@ -10,7 +10,8 @@ import {
   deleteDoc, 
   writeBatch,
   query,
-  increment
+  increment,
+  deleteField
 } from 'firebase/firestore';
 import { HotelNode, HotelSummary, HotelTemplate, AIPersona, NodeTemplate, GeminiConfig } from '../types';
 import { getLocalizedValue } from '../utils/treeUtils';
@@ -815,7 +816,9 @@ export const getGeminiConfig = async (): Promise<GeminiConfig | null> => {
 export const saveGeminiConfig = async (config: GeminiConfig) => {
   try {
     const docRef = doc(db, 'system_settings', 'gemini');
-    await setDoc(docRef, sanitizeForFirestore(config), { merge: true });
+    // Anahtar artık yalnız sunucuda tutulur; eski sürümden kalan anahtarı sil.
+    const { apiKey: _ignored, ...safeConfig } = config;
+    await setDoc(docRef, { ...sanitizeForFirestore(safeConfig), apiKey: deleteField() }, { merge: true });
   } catch (error) {
     console.error("saveGeminiConfig error", error);
     throw error;

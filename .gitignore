@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sunucu anahtar dosyası asla depoya girmez
+secrets.php
+hoteldatacms-secrets.php
+.env

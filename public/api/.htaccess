@@ -1,0 +1,10 @@
+# Anahtar dosyası dışarıdan okunamaz
+<Files "secrets.php">
+  Require all denied
+</Files>
+
+Options -Indexes
+
+# /api/gemini/v1beta/models/...:generateContent  →  gemini.php?p=...
+RewriteEngine On
+RewriteRule ^gemini/(.*)$ gemini.php?p=$1 [QSA,L]

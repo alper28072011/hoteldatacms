@@ -1,0 +1,117 @@
+rules_version = '2';
+
+// Hotel Data CMS — Firestore güvenlik kuralları
+//
+// Temel ilke: giriş yapmamış biri hiçbir şey okuyamaz ve yazamaz.
+// Giriş yapmış ama user_roles koleksiyonunda kaydı olmayan biri de (ör. kendi
+// kendine hesap açan biri) hiçbir şeye erişemez.
+//
+// Roller user_roles/{e-posta} belgesinden okunur:
+//   superadmin → her şey
+//   editor     → tüm otelleri okur, yalnız allowedHotels içindeki otelleri yazar;
+//                "ORTAK" (isShared) düğümleri diğer otellere yayabilir.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Yardımcılar ----------
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function roleDocPath() {
+      return /databases/$(database)/documents/user_roles/$(myEmail());
+    }
+
+    function isOwner() {
+      // Sistemin kurucusu: rol belgesi silinse bile kilitlenmesin.
+      return signedIn()
+        && myEmail() == 'alper28072011@gmail.com'
+        && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+
+    function isMember() {
+      return signedIn() && (isOwner() || exists(roleDocPath()));
+    }
+
+    function isSuperAdmin() {
+      return isOwner()
+        || (signedIn() && exists(roleDocPath()) && get(roleDocPath()).data.role == 'superadmin');
+    }
+
+    function canEditHotel(hotelId) {
+      return isSuperAdmin()
+        || (isMember() && get(roleDocPath()).data.allowedHotels.hasAny([hotelId]));
+    }
+
+    // ---------- Kullanıcılar ve roller ----------
+    match /user_roles/{email} {
+      allow read: if isSuperAdmin() || (signedIn() && myEmail() == email);
+      allow create, delete: if isSuperAdmin();
+      // Superadmin her şeyi değiştirir; kişi kendi belgesinde yalnız profil
+      // alanlarını değiştirebilir (rolünü veya otel yetkisini değil).
+      allow update: if isSuperAdmin()
+        || (signedIn() && myEmail() == email
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['displayName', 'title', 'phone', 'department', 'notes', 'updatedAt']));
+    }
+
+    // ---------- Oteller ----------
+    match /hotels/{hotelId} {
+      allow read: if isMember();
+      allow create, delete: if isSuperAdmin();
+      // Başka bir otelin editörü, ORTAK düğüm yayarken yalnız sıralamayı değiştirebilir.
+      allow update: if canEditHotel(hotelId)
+        || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['categoryOrder']));
+
+      match /structure/{nodeId} {
+        allow read: if isMember();
+        allow write: if canEditHotel(hotelId);
+        // ORTAK düğüm yayılımı: başka otelde yalnız ORTAK işaretli düğüm
+        // oluşturulabilir, yalnız zaten ORTAK olan düğüm güncellenip silinebilir.
+        allow create: if isMember() && request.resource.data.isShared == true;
+        allow update: if isMember() && resource.data.isShared == true && request.resource.data.isShared == true;
+        allow delete: if isMember() && resource.data.isShared == true;
+      }
+
+      match /personas/{personaId} {
+        allow read: if isMember();
+        allow write: if canEditHotel(hotelId);
+      }
+
+      // Eski (artık kullanılmayan) alt koleksiyon: yalnız taşıma için okunur.
+      match /node_templates/{templateId} {
+        allow read: if isMember();
+        allow write: if isSuperAdmin();
+      }
+    }
+
+    // ---------- Ortak şablonlar ----------
+    match /global_node_templates/{templateId} {
+      allow read, write: if isMember();
+    }
+
+    match /templates/{templateId} {
+      allow read, write: if isMember();
+    }
+
+    // ---------- Token kullanımı ----------
+    match /token_usage/{docId} {
+      allow read: if isMember();
+      allow create, update: if isMember();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ---------- Sistem ayarları ----------
+    match /system_settings/{settingId} {
+      allow read: if isMember();
+      allow write: if isSuperAdmin();
+    }
+
+    // Tanımlanmamış her yol kapalıdır.
+  }
+}
